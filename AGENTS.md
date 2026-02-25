@@ -27,7 +27,7 @@ A `.env` file with `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_JW
 The app connects to a hosted Supabase instance. Required env vars (set via Cursor Secrets):
 - `SUPABASE_URL` — project URL
 - `SUPABASE_SERVICE_ROLE_KEY` — service role key (bypasses RLS, used by backend)
-- `SUPABASE_JWT_SECRET` — needed for the API to verify auth tokens (not currently in secrets; without it the dev server starts but JWT-protected endpoints return 401)
+- `SUPABASE_JWT_SECRET` — needed for the API to verify auth tokens
 
 The `trips` table has a foreign key `user_id` referencing Supabase Auth users (`auth.users`), so you cannot insert trips for arbitrary UUIDs. Use an existing user ID from the database.
 
