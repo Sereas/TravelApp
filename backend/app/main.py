@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI
 
-from backend.app.routers import infra, trips
+from backend.app.routers import infra, trip_locations, trips
 
 app = FastAPI(
     title="Travel App API",
@@ -11,3 +11,4 @@ app = FastAPI(
 
 app.include_router(infra.router)
 app.include_router(trips.router, prefix="/api")
+app.include_router(trip_locations.router, prefix="/api")
