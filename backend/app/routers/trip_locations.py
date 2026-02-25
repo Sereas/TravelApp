@@ -31,10 +31,7 @@ async def add_location(
     Trip must exist and be owned by the authenticated user; else 404.
     """
     trip_result = (
-        supabase.table("trips")
-        .select("trip_id, user_id")
-        .eq("trip_id", str(trip_id))
-        .execute()
+        supabase.table("trips").select("trip_id, user_id").eq("trip_id", str(trip_id)).execute()
     )
     if not trip_result.data or len(trip_result.data) == 0:
         raise HTTPException(
@@ -82,10 +79,7 @@ async def list_locations(
     Returns 200 with array of locations; empty array if trip has no locations.
     """
     trip_result = (
-        supabase.table("trips")
-        .select("trip_id, user_id")
-        .eq("trip_id", str(trip_id))
-        .execute()
+        supabase.table("trips").select("trip_id, user_id").eq("trip_id", str(trip_id)).execute()
     )
     if not trip_result.data or len(trip_result.data) == 0:
         raise HTTPException(
@@ -139,10 +133,7 @@ async def batch_add_locations(
             detail="At least one location required",
         )
     trip_result = (
-        supabase.table("trips")
-        .select("trip_id, user_id")
-        .eq("trip_id", str(trip_id))
-        .execute()
+        supabase.table("trips").select("trip_id, user_id").eq("trip_id", str(trip_id)).execute()
     )
     if not trip_result.data or len(trip_result.data) == 0:
         raise HTTPException(
@@ -198,10 +189,7 @@ async def update_location(
     """
     # Trip ownership check
     trip_result = (
-        supabase.table("trips")
-        .select("trip_id, user_id")
-        .eq("trip_id", str(trip_id))
-        .execute()
+        supabase.table("trips").select("trip_id, user_id").eq("trip_id", str(trip_id)).execute()
     )
     if not trip_result.data or len(trip_result.data) == 0:
         raise HTTPException(
@@ -268,4 +256,3 @@ async def update_location(
         google_link=loc.get("google_link"),
         note=loc.get("note"),
     )
-
