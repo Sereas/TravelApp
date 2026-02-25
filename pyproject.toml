@@ -3,6 +3,9 @@ name = "travelapp"
 version = "0.1.0"
 description = "Backend-driven travel planning app"
 requires-python = ">=3.12"
+dependencies = [
+    "structlog>=24.1.0",
+]
 
 [tool.ruff]
 target-version = "py312"
@@ -28,3 +31,7 @@ known-first-party = ["backend"]
 
 [tool.pytest.ini_options]
 testpaths = ["backend/tests"]
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
