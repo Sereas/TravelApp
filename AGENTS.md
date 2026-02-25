@@ -4,15 +4,23 @@
 
 ### Project overview
 
-TravelApp is a Python/FastAPI backend API for travel planning (trips + locations CRUD). It uses Supabase as its database/auth backend. There is no frontend.
+TravelApp is a Python/FastAPI backend API and a Next.js Web frontend for travel planning (trips + locations CRUD). It uses Supabase as its database/auth backend. The frontend lives in `frontend/`.
 
 ### Running tests
 
+**Backend:**
 ```bash
 python3 -m pytest -v
 ```
-
 All tests mock Supabase entirely — no real Supabase instance is needed to run the test suite (61 tests pass, 1 RLS integration test skipped by default).
+
+**Frontend:** From repo root, `cd frontend` then:
+```bash
+npm run typecheck   # tsc --noEmit
+npm run lint        # ESLint + Prettier check
+npm run test        # Vitest
+npm run build       # Next.js production build
+```
 
 ### Running the dev server
 

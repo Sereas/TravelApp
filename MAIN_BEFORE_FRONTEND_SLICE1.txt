@@ -1,0 +1,9 @@
+# Restore main to this state (before frontend Slice 1)
+
+To restore the repo to main as it was before the frontend scaffold branch:
+
+  git checkout main
+  git reset --hard d76bdde39e0d7bfcc8bd216f3c720d1e52b39b43
+
+Branch: main
+Commit: d76bdde39e0d7bfcc8bd216f3c720d1e52b39b43
