@@ -3,11 +3,14 @@
 from datetime import date
 from uuid import UUID
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from backend.app.db.supabase import get_supabase_client
 from backend.app.dependencies import get_current_user_id
 from backend.app.models.schemas import CreateTripBody, TripResponse, UpdateTripBody
+
+logger: structlog.stdlib.BoundLogger = structlog.get_logger("trips")
 
 router = APIRouter(prefix="/trips", tags=["trips"])
 
@@ -33,6 +36,7 @@ async def create_trip(
         raise RuntimeError("Insert did not return row")
     trip = result.data[0]
     trip_id = trip["trip_id"]
+    logger.info("trip_created", trip_id=str(trip_id), user_id=str(user_id), trip_name=body.name)
     return TripResponse(
         id=str(trip_id),
         name=trip.get("trip_name", body.name),
@@ -72,6 +76,7 @@ async def list_trips(
         .execute()
     )
     items = result.data if result.data else []
+    logger.info("trips_listed", user_id=str(user_id), count=len(items))
     return [_trip_row_to_response(t) for t in items]
 
 
@@ -98,10 +103,12 @@ async def get_trip(
         )
     trip = result.data[0]
     if trip.get("user_id") != str(user_id):
+        logger.warning("trip_access_denied", trip_id=str(trip_id), user_id=str(user_id))
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Trip not owned by user",
         )
+    logger.info("trip_retrieved", trip_id=str(trip_id), user_id=str(user_id))
     return _trip_row_to_response(trip)
 
 
@@ -162,4 +169,10 @@ async def update_trip(
     if not update_result.data or len(update_result.data) == 0:
         raise RuntimeError("Update did not return row")
     updated_trip = update_result.data[0]
+    logger.info(
+        "trip_updated",
+        trip_id=str(trip_id),
+        user_id=str(user_id),
+        fields=list(update_data.keys()),
+    )
     return _trip_row_to_response(updated_trip)

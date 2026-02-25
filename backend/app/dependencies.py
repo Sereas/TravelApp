@@ -2,11 +2,14 @@
 
 from uuid import UUID
 
+import structlog
 from fastapi import Depends, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 
 from backend.app.core.config import get_settings
+
+logger: structlog.stdlib.BoundLogger = structlog.get_logger("auth")
 
 _scheme = HTTPBearer(auto_error=False)
 
@@ -21,9 +24,11 @@ async def get_current_user_id(
     """
     settings = get_settings()
     if not settings.supabase_jwt_secret:
+        logger.error("auth_failed", reason="jwt_secret_not_configured")
         raise _auth_error("JWT secret not configured")
 
     if not credentials:
+        logger.info("auth_failed", reason="missing_authorization_header")
         raise _auth_error("Missing Authorization header")
 
     token = credentials.credentials
@@ -40,18 +45,22 @@ async def get_current_user_id(
             },
         )
     except JWTError:
+        logger.warning("auth_failed", reason="invalid_or_expired_token")
         raise _auth_error("Invalid or expired token") from None
 
     sub = payload.get("sub")
     if not sub:
+        logger.warning("auth_failed", reason="token_missing_subject")
         raise _auth_error("Token missing subject")
 
     try:
         user_id = UUID(sub)
     except (ValueError, TypeError):
+        logger.warning("auth_failed", reason="invalid_subject", sub=sub)
         raise _auth_error("Invalid subject in token") from None
 
     request.state.user_id = user_id
+    logger.debug("auth_success", user_id=str(user_id))
     return user_id
 
 
