@@ -24,7 +24,7 @@ Trip planning and in-trip assistance: collect locations, organize day-by-day iti
 ## Repository
 
 - **`backend/`** — FastAPI app; trips and locations under `/api/v1`; auth via Supabase JWT.
-- **`frontend/`** — Next.js 14 (App Router), TypeScript, Tailwind, shadcn/ui baseline; design tokens and layout in `src/app/globals.css` and `src/components/layout/`.
+- **`frontend/`** — Next.js 14 (App Router), TypeScript, Tailwind, shadcn/ui. Components: `layout/` (PageShell, SiteHeader), `ui/` (Button, Card, Input, Label), `trips/` (TripCard), `locations/` (LocationRow), `feedback/` (EmptyState, ErrorBanner, LoadingSpinner). Design system: [docs/design/design-system-web.md](docs/design/design-system-web.md); local overview: [frontend/README.md](frontend/README.md).
 - **`docs/`** — Specs, slice plans, design docs. See [docs/PROJECT_CONTEXT.md](docs/PROJECT_CONTEXT.md) for workflow and stack; [docs/design/design-system-web.md](docs/design/design-system-web.md) for Web design system.
 
 CI (GitHub Actions): backend lint + test; frontend typecheck, lint, test on push/PR to `main`.
