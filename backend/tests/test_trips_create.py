@@ -26,10 +26,10 @@ def test_create_trip_missing_name_returns_422(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         # No body
-        r = client.post("/api/trips", json={})
+        r = client.post("/api/v1/trips", json={})
         assert r.status_code == 422
         # Empty name
-        r = client.post("/api/trips", json={"name": ""})
+        r = client.post("/api/v1/trips", json={"name": ""})
         assert r.status_code == 422
     finally:
         app.dependency_overrides.clear()
@@ -49,7 +49,7 @@ def test_create_trip_with_name_and_mock_auth_returns_201(
     app.dependency_overrides[get_current_user_id] = override_user
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
-        r = client.post("/api/trips", json={"name": "Paris 2025"})
+        r = client.post("/api/v1/trips", json={"name": "Paris 2025"})
         assert r.status_code == 201
         data = r.json()
         assert "id" in data
@@ -73,7 +73,7 @@ def test_create_trip_valid_jwt_and_body_returns_201(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r = client.post(
-            "/api/trips",
+            "/api/v1/trips",
             json={
                 "name": "Rome 2026",
                 "start_date": "2026-06-01",
@@ -97,7 +97,7 @@ def test_create_trip_no_authorization_returns_401(client: TestClient, monkeypatc
     from backend.app.core.config import get_settings
 
     get_settings.cache_clear()
-    r = client.post("/api/trips", json={"name": "My Trip"})
+    r = client.post("/api/v1/trips", json={"name": "My Trip"})
     assert r.status_code == 401
 
 
@@ -108,7 +108,7 @@ def test_create_trip_invalid_token_returns_401(client: TestClient, monkeypatch):
 
     get_settings.cache_clear()
     r = client.post(
-        "/api/trips",
+        "/api/v1/trips",
         json={"name": "My Trip"},
         headers={"Authorization": "Bearer invalid-token"},
     )
@@ -130,7 +130,7 @@ def test_create_trip_then_verify_inserted_data(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r = client.post(
-            "/api/trips",
+            "/api/v1/trips",
             json={"name": "Verified Trip", "start_date": "2025-07-01"},
         )
         assert r.status_code == 201
@@ -165,7 +165,7 @@ def test_create_trip_only_accessible_by_owner(
     app.dependency_overrides[get_supabase_client] = lambda: client_a
     try:
         r = client.post(
-            "/api/trips",
+            "/api/v1/trips",
             json={"name": "User A Trip"},
         )
         assert r.status_code == 201

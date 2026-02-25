@@ -273,3 +273,55 @@ async def update_location(
         google_link=loc.get("google_link"),
         note=loc.get("note"),
     )
+
+
+@router.delete(
+    "/{trip_id}/locations/{location_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_location(
+    trip_id: UUID,
+    location_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+    supabase=Depends(get_supabase_client),
+):
+    """
+    Delete a location from a trip. Requires valid JWT.
+    Trip must exist and be owned by the authenticated user; location must
+    belong to the trip; else 404 with descriptive message.
+    Returns 204 No Content on success.
+    """
+    trip_result = (
+        supabase.table("trips").select("trip_id, user_id").eq("trip_id", str(trip_id)).execute()
+    )
+    if not trip_result.data or len(trip_result.data) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Trip not found",
+        )
+    trip = trip_result.data[0]
+    if trip.get("user_id") != str(user_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Trip not owned by user",
+        )
+
+    loc_result = (
+        supabase.table("locations")
+        .select("location_id")
+        .eq("location_id", str(location_id))
+        .eq("trip_id", str(trip_id))
+        .execute()
+    )
+    if not loc_result.data or len(loc_result.data) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Location not found",
+        )
+
+    supabase.table("locations").delete().eq("location_id", str(location_id)).execute()
+    logger.info(
+        "location_deleted",
+        location_id=str(location_id),
+        trip_id=str(trip_id),
+    )

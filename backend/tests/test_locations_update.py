@@ -129,7 +129,7 @@ def test_update_location_name_only(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r = client.patch(
-            f"/api/trips/{trip_id}/locations/{loc_id}",
+            f"/api/v1/trips/{trip_id}/locations/{loc_id}",
             json={"name": "New name"},
         )
         assert r.status_code == 200
@@ -163,7 +163,7 @@ def test_update_location_multiple_fields(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r = client.patch(
-            f"/api/trips/{trip_id}/locations/{loc_id}",
+            f"/api/v1/trips/{trip_id}/locations/{loc_id}",
             json={
                 "name": "Updated name",
                 "address": "New address",
@@ -199,7 +199,7 @@ def test_update_location_empty_body_returns_422(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r = client.patch(
-            f"/api/trips/{trip_id}/locations/{loc_id}",
+            f"/api/v1/trips/{trip_id}/locations/{loc_id}",
             json={},
         )
         assert r.status_code == 422
@@ -228,7 +228,7 @@ def test_update_location_nonexistent_trip_returns_404(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r = client.patch(
-            f"/api/trips/{trip_id}/locations/{loc_id}",
+            f"/api/v1/trips/{trip_id}/locations/{loc_id}",
             json={"name": "New name"},
         )
         assert r.status_code == 404
@@ -255,7 +255,7 @@ def test_update_location_other_users_trip_returns_404(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r = client.patch(
-            f"/api/trips/{trip_id}/locations/{loc_id}",
+            f"/api/v1/trips/{trip_id}/locations/{loc_id}",
             json={"name": "New name"},
         )
         assert r.status_code == 404
@@ -282,7 +282,7 @@ def test_update_location_nonexistent_location_returns_404(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r = client.patch(
-            f"/api/trips/{trip_id}/locations/{loc_id}",
+            f"/api/v1/trips/{trip_id}/locations/{loc_id}",
             json={"name": "New name"},
         )
         assert r.status_code == 404
@@ -300,7 +300,7 @@ def test_update_location_no_jwt_returns_401(client: TestClient, monkeypatch):
     trip_id = "00000000-0000-0000-0000-000000000001"
     loc_id = "00000000-0000-0000-0000-000000000002"
     r = client.patch(
-        f"/api/trips/{trip_id}/locations/{loc_id}",
+        f"/api/v1/trips/{trip_id}/locations/{loc_id}",
         json={"name": "New name"},
     )
     assert r.status_code == 401

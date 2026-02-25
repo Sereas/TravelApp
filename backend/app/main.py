@@ -16,5 +16,5 @@ app = FastAPI(
 app.add_middleware(RequestLoggingMiddleware)
 
 app.include_router(infra.router)
-app.include_router(trips.router, prefix="/api")
-app.include_router(trip_locations.router, prefix="/api")
+app.include_router(trips.router, prefix="/api/v1")
+app.include_router(trip_locations.router, prefix="/api/v1")

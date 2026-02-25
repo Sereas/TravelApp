@@ -26,13 +26,13 @@ def test_add_location_missing_name_returns_422(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r = client.post(
-            f"/api/trips/{trip_id}/locations",
+            f"/api/v1/trips/{trip_id}/locations",
             json={},
             headers={},
         )
         assert r.status_code == 422
         r = client.post(
-            f"/api/trips/{trip_id}/locations",
+            f"/api/v1/trips/{trip_id}/locations",
             json={"name": ""},
         )
         assert r.status_code == 422
@@ -57,7 +57,7 @@ def test_add_location_valid_body_own_trip_returns_201(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r = client.post(
-            f"/api/trips/{trip_id}/locations",
+            f"/api/v1/trips/{trip_id}/locations",
             json={
                 "name": "Eiffel Tower",
                 "address": "Champ de Mars, Paris",
@@ -94,7 +94,7 @@ def test_add_location_nonexistent_trip_returns_404(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r = client.post(
-            f"/api/trips/{trip_id}/locations",
+            f"/api/v1/trips/{trip_id}/locations",
             json={"name": "Some Place"},
             headers={"Authorization": f"Bearer {valid_jwt}"},
         )
@@ -124,7 +124,7 @@ def test_add_location_other_users_trip_returns_404(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r = client.post(
-            f"/api/trips/{trip_id}/locations",
+            f"/api/v1/trips/{trip_id}/locations",
             json={"name": "Some Place"},
             headers={"Authorization": f"Bearer {valid_jwt}"},
         )
@@ -153,7 +153,7 @@ def test_add_location_then_verify_in_db(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r = client.post(
-            f"/api/trips/{trip_id}/locations",
+            f"/api/v1/trips/{trip_id}/locations",
             json={"name": "Louvre", "note": "Book in advance"},
         )
         assert r.status_code == 201
@@ -183,11 +183,11 @@ def test_add_location_duplicate_names_allowed(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r1 = client.post(
-            f"/api/trips/{trip_id}/locations",
+            f"/api/v1/trips/{trip_id}/locations",
             json={"name": "Cafe"},
         )
         r2 = client.post(
-            f"/api/trips/{trip_id}/locations",
+            f"/api/v1/trips/{trip_id}/locations",
             json={"name": "Cafe"},
         )
         assert r1.status_code == 201 and r2.status_code == 201
@@ -217,7 +217,7 @@ def test_batch_add_empty_array_returns_422(
     app.dependency_overrides[get_current_user_id] = override_user
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
-        r = client.post(f"/api/trips/{trip_id}/locations/batch", json=[])
+        r = client.post(f"/api/v1/trips/{trip_id}/locations/batch", json=[])
         assert r.status_code == 422
         detail = r.json().get("detail", "")
         if isinstance(detail, str):
@@ -243,7 +243,7 @@ def test_batch_add_single_item_returns_201(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r = client.post(
-            f"/api/trips/{trip_id}/locations/batch",
+            f"/api/v1/trips/{trip_id}/locations/batch",
             json=[{"name": "Louvre", "note": "Book ahead"}],
         )
         assert r.status_code == 201
@@ -275,7 +275,7 @@ def test_batch_add_multiple_items_returns_201_and_same_order(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r = client.post(
-            f"/api/trips/{trip_id}/locations/batch",
+            f"/api/v1/trips/{trip_id}/locations/batch",
             json=[
                 {"name": "Eiffel Tower", "address": "Paris"},
                 {"name": "Louvre", "note": "Morning"},
@@ -314,7 +314,7 @@ def test_batch_add_item_missing_name_returns_422(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r = client.post(
-            f"/api/trips/{trip_id}/locations/batch",
+            f"/api/v1/trips/{trip_id}/locations/batch",
             json=[{"name": "Valid"}, {"address": "No name"}],
         )
         assert r.status_code == 422
@@ -340,7 +340,7 @@ def test_batch_add_non_array_body_returns_422(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r = client.post(
-            f"/api/trips/{trip_id}/locations/batch",
+            f"/api/v1/trips/{trip_id}/locations/batch",
             json={"name": "Single object"},
         )
         assert r.status_code == 422
@@ -362,7 +362,7 @@ def test_batch_add_nonexistent_trip_returns_404(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r = client.post(
-            f"/api/trips/{trip_id}/locations/batch",
+            f"/api/v1/trips/{trip_id}/locations/batch",
             json=[{"name": "Place"}],
             headers={"Authorization": f"Bearer {valid_jwt}"},
         )
@@ -392,7 +392,7 @@ def test_batch_add_other_users_trip_returns_404(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r = client.post(
-            f"/api/trips/{trip_id}/locations/batch",
+            f"/api/v1/trips/{trip_id}/locations/batch",
             json=[{"name": "Place"}],
             headers={"Authorization": f"Bearer {valid_jwt}"},
         )
@@ -409,7 +409,7 @@ def test_batch_add_no_jwt_returns_401(client: TestClient, monkeypatch):
 
     get_settings.cache_clear()
     r = client.post(
-        "/api/trips/00000000-0000-0000-0000-000000000001/locations/batch",
+        "/api/v1/trips/00000000-0000-0000-0000-000000000001/locations/batch",
         json=[{"name": "Place"}],
     )
     assert r.status_code == 401
@@ -435,14 +435,14 @@ def test_list_locations_own_trip_with_locations_returns_200(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         client.post(
-            f"/api/trips/{trip_id}/locations",
+            f"/api/v1/trips/{trip_id}/locations",
             json={"name": "Eiffel Tower", "address": "Paris", "note": "Visit"},
         )
         client.post(
-            f"/api/trips/{trip_id}/locations",
+            f"/api/v1/trips/{trip_id}/locations",
             json={"name": "Louvre", "google_link": "https://maps.google.com/"},
         )
-        r = client.get(f"/api/trips/{trip_id}/locations")
+        r = client.get(f"/api/v1/trips/{trip_id}/locations")
         assert r.status_code == 200
         data = r.json()
         assert isinstance(data, list)
@@ -474,7 +474,7 @@ def test_list_locations_own_trip_zero_locations_returns_200_empty(
     app.dependency_overrides[get_current_user_id] = override_user
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
-        r = client.get(f"/api/trips/{trip_id}/locations")
+        r = client.get(f"/api/v1/trips/{trip_id}/locations")
         assert r.status_code == 200
         assert r.json() == []
     finally:
@@ -495,7 +495,7 @@ def test_list_locations_nonexistent_trip_returns_404(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r = client.get(
-            f"/api/trips/{trip_id}/locations",
+            f"/api/v1/trips/{trip_id}/locations",
             headers={"Authorization": f"Bearer {valid_jwt}"},
         )
         assert r.status_code == 404
@@ -523,7 +523,7 @@ def test_list_locations_other_users_trip_returns_404(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r = client.get(
-            f"/api/trips/{trip_id}/locations",
+            f"/api/v1/trips/{trip_id}/locations",
             headers={"Authorization": f"Bearer {valid_jwt}"},
         )
         assert r.status_code == 404
@@ -538,5 +538,5 @@ def test_list_locations_no_jwt_returns_401(client: TestClient, monkeypatch):
     from backend.app.core.config import get_settings
 
     get_settings.cache_clear()
-    r = client.get("/api/trips/00000000-0000-0000-0000-000000000001/locations")
+    r = client.get("/api/v1/trips/00000000-0000-0000-0000-000000000001/locations")
     assert r.status_code == 401

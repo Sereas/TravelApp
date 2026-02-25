@@ -84,7 +84,7 @@ def test_update_trip_name_only(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r = client.patch(
-            f"/api/trips/{trip_id}",
+            f"/api/v1/trips/{trip_id}",
             json={"name": "New name"},
         )
         assert r.status_code == 200
@@ -114,7 +114,7 @@ def test_update_trip_dates_only(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r = client.patch(
-            f"/api/trips/{trip_id}",
+            f"/api/v1/trips/{trip_id}",
             json={
                 "start_date": "2025-07-01",
                 "end_date": "2025-07-10",
@@ -146,7 +146,7 @@ def test_update_trip_all_fields(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r = client.patch(
-            f"/api/trips/{trip_id}",
+            f"/api/v1/trips/{trip_id}",
             json={
                 "name": "Updated trip",
                 "start_date": "2025-08-01",
@@ -181,7 +181,7 @@ def test_update_trip_empty_body_returns_422(
     app.dependency_overrides[get_current_user_id] = override_user
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
-        r = client.patch(f"/api/trips/{trip_id}", json={})
+        r = client.patch(f"/api/v1/trips/{trip_id}", json={})
         assert r.status_code == 422
         detail = r.json().get("detail", "")
         assert isinstance(detail, str)
@@ -206,7 +206,7 @@ def test_update_trip_invalid_start_date_returns_422(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r = client.patch(
-            f"/api/trips/{trip_id}",
+            f"/api/v1/trips/{trip_id}",
             json={"start_date": "2025/07/01"},
         )
         assert r.status_code == 422
@@ -229,7 +229,7 @@ def test_update_trip_nonexistent_returns_404(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r = client.patch(
-            f"/api/trips/{trip_id}",
+            f"/api/v1/trips/{trip_id}",
             json={"name": "New name"},
         )
         assert r.status_code == 404
@@ -255,7 +255,7 @@ def test_update_trip_other_users_trip_returns_404(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r = client.patch(
-            f"/api/trips/{trip_id}",
+            f"/api/v1/trips/{trip_id}",
             json={"name": "New name"},
         )
         assert r.status_code == 404
@@ -271,5 +271,5 @@ def test_update_trip_no_jwt_returns_401(client: TestClient, monkeypatch):
 
     get_settings.cache_clear()
     trip_id = "00000000-0000-0000-0000-000000000001"
-    r = client.patch(f"/api/trips/{trip_id}", json={"name": "New name"})
+    r = client.patch(f"/api/v1/trips/{trip_id}", json={"name": "New name"})
     assert r.status_code == 401

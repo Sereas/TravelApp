@@ -48,7 +48,7 @@ def test_list_trips_returns_200_and_own_trips(
     app.dependency_overrides[get_current_user_id] = override_user
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
-        r = client.get("/api/trips")
+        r = client.get("/api/v1/trips")
         assert r.status_code == 200
         data = r.json()
         assert isinstance(data, list)
@@ -80,7 +80,7 @@ def test_list_trips_empty_returns_200_empty_array(
     app.dependency_overrides[get_current_user_id] = override_user
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
-        r = client.get("/api/trips")
+        r = client.get("/api/v1/trips")
         assert r.status_code == 200
         assert r.json() == []
     finally:
@@ -93,7 +93,7 @@ def test_list_trips_no_jwt_returns_401(client: TestClient, monkeypatch):
     from backend.app.core.config import get_settings
 
     get_settings.cache_clear()
-    r = client.get("/api/trips")
+    r = client.get("/api/v1/trips")
     assert r.status_code == 401
 
 
@@ -122,7 +122,7 @@ def test_get_trip_own_trip_returns_200(
     app.dependency_overrides[get_current_user_id] = override_user
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
-        r = client.get(f"/api/trips/{trip_id}")
+        r = client.get(f"/api/v1/trips/{trip_id}")
         assert r.status_code == 200
         data = r.json()
         assert data["id"] == trip_id
@@ -147,7 +147,7 @@ def test_get_trip_nonexistent_returns_404(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r = client.get(
-            f"/api/trips/{trip_id}",
+            f"/api/v1/trips/{trip_id}",
             headers={"Authorization": f"Bearer {valid_jwt}"},
         )
         assert r.status_code == 404
@@ -175,7 +175,7 @@ def test_get_trip_other_users_trip_returns_404(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r = client.get(
-            f"/api/trips/{trip_id}",
+            f"/api/v1/trips/{trip_id}",
             headers={"Authorization": f"Bearer {valid_jwt}"},
         )
         assert r.status_code == 404
@@ -190,5 +190,5 @@ def test_get_trip_no_jwt_returns_401(client: TestClient, monkeypatch):
     from backend.app.core.config import get_settings
 
     get_settings.cache_clear()
-    r = client.get("/api/trips/00000000-0000-0000-0000-000000000001")
+    r = client.get("/api/v1/trips/00000000-0000-0000-0000-000000000001")
     assert r.status_code == 401
