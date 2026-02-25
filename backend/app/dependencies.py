@@ -40,7 +40,7 @@ async def get_current_user_id(
             },
         )
     except JWTError:
-        raise _auth_error("Invalid or expired token")
+        raise _auth_error("Invalid or expired token") from None
 
     sub = payload.get("sub")
     if not sub:
@@ -49,7 +49,7 @@ async def get_current_user_id(
     try:
         user_id = UUID(sub)
     except (ValueError, TypeError):
-        raise _auth_error("Invalid subject in token")
+        raise _auth_error("Invalid subject in token") from None
 
     request.state.user_id = user_id
     return user_id

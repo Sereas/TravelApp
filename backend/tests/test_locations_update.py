@@ -241,7 +241,7 @@ def test_update_location_other_users_trip_returns_404(
     client: TestClient,
     mock_supabase_trips_and_locations,
 ):
-    locations_inserted, MockSupabase = mock_supabase_trips_and_locations
+    _locations_inserted, MockSupabase = mock_supabase_trips_and_locations
     trip_id = str(uuid4())
     owner_id = str(uuid4())
     other_user_id = str(uuid4())
@@ -304,4 +304,3 @@ def test_update_location_no_jwt_returns_401(client: TestClient, monkeypatch):
         json={"name": "New name"},
     )
     assert r.status_code == 401
-

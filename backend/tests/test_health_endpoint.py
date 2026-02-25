@@ -2,8 +2,6 @@
 
 from fastapi.testclient import TestClient
 
-from backend.app.main import app
-
 
 def test_health_returns_200_and_ok_json(client: TestClient):
     """GET /health -> 200 and {'status': 'ok'} without auth."""
@@ -28,4 +26,3 @@ def test_health_does_not_require_auth_even_when_jwt_required_for_others(
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
-

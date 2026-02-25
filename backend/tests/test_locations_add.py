@@ -2,7 +2,6 @@
 
 from uuid import UUID, uuid4
 
-import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.db.supabase import get_supabase_client
@@ -16,7 +15,7 @@ def test_add_location_missing_name_returns_422(
     mock_supabase_trips_and_locations,
 ):
     """Missing name -> 422."""
-    locations_inserted, MockSupabase = mock_supabase_trips_and_locations
+    _locations_inserted, MockSupabase = mock_supabase_trips_and_locations
     trip_id = str(uuid4())
     mock_sb = MockSupabase({trip_id: str(mock_user_id)}, mock_user_id)
 
@@ -87,7 +86,7 @@ def test_add_location_nonexistent_trip_returns_404(
     valid_jwt,
 ):
     """Non-existent trip_id -> 404."""
-    locations_inserted, MockSupabase = mock_supabase_trips_and_locations
+    _locations_inserted, MockSupabase = mock_supabase_trips_and_locations
     trip_id = str(uuid4())
     # No trip in mock -> 404
     mock_sb = MockSupabase({}, mock_user_id)
@@ -141,7 +140,8 @@ def test_add_location_then_verify_in_db(
     mock_user_id,
     mock_supabase_trips_and_locations,
 ):
-    """Add location via API, then read from (mock) DB -> location exists with correct trip_id and name."""
+    """Add location via API, then read from (mock) DB -> location exists
+    with correct trip_id and name."""
     locations_inserted, MockSupabase = mock_supabase_trips_and_locations
     trip_id = str(uuid4())
     mock_sb = MockSupabase({trip_id: str(mock_user_id)}, mock_user_id)
@@ -200,13 +200,14 @@ def test_add_location_duplicate_names_allowed(
 
 # ---- Batch add locations ----
 
+
 def test_batch_add_empty_array_returns_422(
     client: TestClient,
     mock_user_id,
     mock_supabase_trips_and_locations,
 ):
     """Empty array -> 422."""
-    locations_inserted, MockSupabase = mock_supabase_trips_and_locations
+    _locations_inserted, MockSupabase = mock_supabase_trips_and_locations
     trip_id = str(uuid4())
     mock_sb = MockSupabase({trip_id: str(mock_user_id)}, mock_user_id)
 
@@ -290,7 +291,8 @@ def test_batch_add_multiple_items_returns_201_and_same_order(
         assert data[1]["note"] == "Morning"
         assert data[2]["name"] == "Notre-Dame"
         assert len(locations_inserted) == 3
-        assert [loc["name"] for loc in locations_inserted] == ["Eiffel Tower", "Louvre", "Notre-Dame"]
+        names = [loc["name"] for loc in locations_inserted]
+        assert names == ["Eiffel Tower", "Louvre", "Notre-Dame"]
     finally:
         app.dependency_overrides.clear()
 
@@ -327,7 +329,7 @@ def test_batch_add_non_array_body_returns_422(
     mock_supabase_trips_and_locations,
 ):
     """Non-array body -> 422."""
-    locations_inserted, MockSupabase = mock_supabase_trips_and_locations
+    _locations_inserted, MockSupabase = mock_supabase_trips_and_locations
     trip_id = str(uuid4())
     mock_sb = MockSupabase({trip_id: str(mock_user_id)}, mock_user_id)
 
@@ -404,6 +406,7 @@ def test_batch_add_no_jwt_returns_401(client: TestClient, monkeypatch):
     """No Authorization header -> 401."""
     monkeypatch.setenv("SUPABASE_JWT_SECRET", "test-secret")
     from backend.app.core.config import get_settings
+
     get_settings.cache_clear()
     r = client.post(
         "/api/trips/00000000-0000-0000-0000-000000000001/locations/batch",
@@ -414,13 +417,14 @@ def test_batch_add_no_jwt_returns_401(client: TestClient, monkeypatch):
 
 # ---- List locations (Slice 4) ----
 
+
 def test_list_locations_own_trip_with_locations_returns_200(
     client: TestClient,
     mock_user_id,
     mock_supabase_trips_and_locations,
 ):
     """Own trip with locations -> 200, array with all stored fields."""
-    locations_inserted, MockSupabase = mock_supabase_trips_and_locations
+    _locations_inserted, MockSupabase = mock_supabase_trips_and_locations
     trip_id = str(uuid4())
     mock_sb = MockSupabase({trip_id: str(mock_user_id)}, mock_user_id)
 
@@ -460,7 +464,7 @@ def test_list_locations_own_trip_zero_locations_returns_200_empty(
     mock_supabase_trips_and_locations,
 ):
     """Own trip with zero locations -> 200, []."""
-    locations_inserted, MockSupabase = mock_supabase_trips_and_locations
+    _locations_inserted, MockSupabase = mock_supabase_trips_and_locations
     trip_id = str(uuid4())
     mock_sb = MockSupabase({trip_id: str(mock_user_id)}, mock_user_id)
 
@@ -484,7 +488,7 @@ def test_list_locations_nonexistent_trip_returns_404(
     valid_jwt,
 ):
     """Non-existent trip_id -> 404."""
-    locations_inserted, MockSupabase = mock_supabase_trips_and_locations
+    _locations_inserted, MockSupabase = mock_supabase_trips_and_locations
     trip_id = str(uuid4())
     mock_sb = MockSupabase({}, mock_user_id)
 
@@ -506,7 +510,7 @@ def test_list_locations_other_users_trip_returns_404(
     valid_jwt,
 ):
     """Other user's trip_id -> 404."""
-    locations_inserted, MockSupabase = mock_supabase_trips_and_locations
+    _locations_inserted, MockSupabase = mock_supabase_trips_and_locations
     trip_id = str(uuid4())
     owner_id = str(uuid4())
     other_user_id = str(uuid4())
@@ -532,6 +536,7 @@ def test_list_locations_no_jwt_returns_401(client: TestClient, monkeypatch):
     """No Authorization header -> 401."""
     monkeypatch.setenv("SUPABASE_JWT_SECRET", "test-secret")
     from backend.app.core.config import get_settings
+
     get_settings.cache_clear()
     r = client.get("/api/trips/00000000-0000-0000-0000-000000000001/locations")
     assert r.status_code == 401

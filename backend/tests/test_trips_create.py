@@ -2,15 +2,14 @@
 
 from uuid import UUID
 
-import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.db.supabase import get_supabase_client
 from backend.app.dependencies import get_current_user_id
 from backend.app.main import app
 
-
 # ---- Unit: validation and success with mocks ----
+
 
 def test_create_trip_missing_name_returns_422(
     client: TestClient,
@@ -42,7 +41,7 @@ def test_create_trip_with_name_and_mock_auth_returns_201(
     mock_supabase,
 ):
     """With name and mock auth -> success, response contains id and name."""
-    mock_sb, inserted = mock_supabase
+    mock_sb, _inserted = mock_supabase
 
     async def override_user():
         return mock_user_id
@@ -62,6 +61,7 @@ def test_create_trip_with_name_and_mock_auth_returns_201(
 
 
 # ---- Integration: auth and DB verification ----
+
 
 def test_create_trip_valid_jwt_and_body_returns_201(
     client: TestClient,
@@ -95,6 +95,7 @@ def test_create_trip_no_authorization_returns_401(client: TestClient, monkeypatc
     """No Authorization header -> 401."""
     monkeypatch.setenv("SUPABASE_JWT_SECRET", "test-secret")
     from backend.app.core.config import get_settings
+
     get_settings.cache_clear()
     r = client.post("/api/trips", json={"name": "My Trip"})
     assert r.status_code == 401
@@ -104,6 +105,7 @@ def test_create_trip_invalid_token_returns_401(client: TestClient, monkeypatch):
     """Invalid or expired token -> 401."""
     monkeypatch.setenv("SUPABASE_JWT_SECRET", "test-secret")
     from backend.app.core.config import get_settings
+
     get_settings.cache_clear()
     r = client.post(
         "/api/trips",

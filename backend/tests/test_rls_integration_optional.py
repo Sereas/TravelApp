@@ -5,14 +5,16 @@ dev branch). Requires: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_
 and SUPABASE_TEST_USER_ID (a UUID of an existing Supabase Auth user, e.g. from
 Dashboard → Authentication → Users). Skip by default so CI and local runs do not need a live DB.
 
-  RUN_RLS_INTEGRATION=1 SUPABASE_TEST_USER_ID=<auth-user-uuid> pytest backend/tests/test_rls_integration_optional.py -v
+  RUN_RLS_INTEGRATION=1 SUPABASE_TEST_USER_ID=<auth-user-uuid> \\
+    pytest backend/tests/test_rls_integration_optional.py -v
 
 See docs/design/backend-and-supabase.md.
 """
 
 import os
-import pytest
 from uuid import uuid4
+
+import pytest
 
 # Skip entire module unless explicitly requested
 pytestmark = pytest.mark.skipif(
@@ -29,6 +31,7 @@ def supabase_client():
     if not url or not key:
         pytest.skip("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY required")
     from supabase import create_client
+
     return create_client(url, key)
 
 
@@ -52,14 +55,21 @@ def test_rls_trips_isolated_by_user(supabase_client):
             "(e.g. from Supabase Dashboard → Authentication → Users)"
         )
     from backend.app.core.config import get_settings
+
     get_settings.cache_clear()
     get_settings()
     trip_name = f"RLS test trip {uuid4()}"
     # Insert as if we were the API (we have the key)
-    r = supabase_client.table("trips").insert({
-        "user_id": user_id,
-        "trip_name": trip_name,
-    }).execute()
+    r = (
+        supabase_client.table("trips")
+        .insert(
+            {
+                "user_id": user_id,
+                "trip_name": trip_name,
+            }
+        )
+        .execute()
+    )
     assert r.data and len(r.data) == 1
     trip_id = r.data[0]["trip_id"]
     # Read back (service role bypasses RLS)
