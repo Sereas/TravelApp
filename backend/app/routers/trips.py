@@ -1,4 +1,4 @@
-"""Trips API: create-trip (Slice 2), list-trips + get-trip, update-trip (Slice 5)."""
+"""Trips API: create-trip, list-trips, get-trip, update-trip."""
 
 from datetime import date
 from uuid import UUID
@@ -146,13 +146,9 @@ async def update_trip(
     if "name" in body.model_fields_set:
         update_data["trip_name"] = body.name
     if "start_date" in body.model_fields_set:
-        update_data["start_date"] = (
-            body.start_date.isoformat() if body.start_date else None
-        )
+        update_data["start_date"] = body.start_date.isoformat() if body.start_date else None
     if "end_date" in body.model_fields_set:
-        update_data["end_date"] = (
-            body.end_date.isoformat() if body.end_date else None
-        )
+        update_data["end_date"] = body.end_date.isoformat() if body.end_date else None
 
     if not update_data:
         raise HTTPException(
@@ -161,10 +157,7 @@ async def update_trip(
         )
 
     update_result = (
-        supabase.table("trips")
-        .update(update_data)
-        .eq("trip_id", str(trip_id))
-        .execute()
+        supabase.table("trips").update(update_data).eq("trip_id", str(trip_id)).execute()
     )
     if not update_result.data or len(update_result.data) == 0:
         raise RuntimeError("Update did not return row")

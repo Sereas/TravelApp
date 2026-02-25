@@ -242,7 +242,7 @@ def test_update_trip_other_users_trip_returns_404(
     client: TestClient,
     mock_supabase_trips_and_locations,
 ):
-    locations_inserted, MockSupabase = mock_supabase_trips_and_locations
+    _locations_inserted, MockSupabase = mock_supabase_trips_and_locations
     trip_id = str(uuid4())
     owner_id = str(uuid4())
     other_user_id = str(uuid4())
@@ -273,4 +273,3 @@ def test_update_trip_no_jwt_returns_401(client: TestClient, monkeypatch):
     trip_id = "00000000-0000-0000-0000-000000000001"
     r = client.patch(f"/api/trips/{trip_id}", json={"name": "New name"})
     assert r.status_code == 401
-

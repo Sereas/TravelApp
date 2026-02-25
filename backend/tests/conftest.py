@@ -1,6 +1,6 @@
 """Pytest fixtures: app, client, auth and Supabase mocks."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
@@ -15,10 +15,10 @@ TEST_USER_ID = "11111111-2222-3333-4444-555555555555"
 
 def make_test_jwt(sub: str = TEST_USER_ID, secret: str = "test-jwt-secret") -> str:
     """Build a JWT valid for our dependency (sub, exp)."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {
         "sub": sub,
-        "exp": datetime(now.year + 1, 1, 1, tzinfo=timezone.utc),
+        "exp": datetime(now.year + 1, 1, 1, tzinfo=UTC),
         "iat": now,
     }
     return jwt.encode(payload, secret, algorithm="HS256")
@@ -28,6 +28,7 @@ def make_test_jwt(sub: str = TEST_USER_ID, secret: str = "test-jwt-secret") -> s
 def reset_settings_cache():
     """Clear config cache so env changes in tests take effect."""
     from backend.app.core.config import get_settings
+
     yield
     get_settings.cache_clear()
 
@@ -50,6 +51,7 @@ def valid_jwt(monkeypatch):
     secret = "test-supabase-jwt-secret"
     monkeypatch.setenv("SUPABASE_JWT_SECRET", secret)
     from backend.app.core.config import get_settings
+
     get_settings.cache_clear()
     yield make_test_jwt(sub=TEST_USER_ID, secret=secret)
     get_settings.cache_clear()
@@ -113,6 +115,7 @@ def mock_supabase_with_rls():
 
         def execute(self):
             import uuid
+
             if self._insert_row is not None:
                 trip_id = str(uuid.uuid4())
                 row = {
@@ -126,8 +129,10 @@ def mock_supabase_with_rls():
                 return type("Result", (), {"data": [row]})()
             if self._select_trip_id is not None:
                 filtered = [
-                    r for r in self._store
-                    if r["trip_id"] == self._select_trip_id and r["user_id"] == self._current_user_id
+                    r
+                    for r in self._store
+                    if r["trip_id"] == self._select_trip_id
+                    and r["user_id"] == self._current_user_id
                 ]
                 return type("Result", (), {"data": filtered})()
             return type("Result", (), {"data": []})()
@@ -146,7 +151,8 @@ def mock_supabase_with_rls():
 def mock_supabase_trips_and_locations():
     """
     Mock Supabase for add-location: trips select by trip_id (with ownership),
-    locations insert. trip_owners = {trip_id: user_id}; client built with (trip_owners, current_user_id).
+    locations insert. trip_owners = {trip_id: user_id};
+    client built with (trip_owners, current_user_id).
     """
     import uuid as _uuid
 
@@ -187,7 +193,17 @@ def mock_supabase_trips_and_locations():
             return type(
                 "Result",
                 (),
-                {"data": [{"trip_id": tid, "user_id": owner_id, "trip_name": "Trip", "start_date": None, "end_date": None}]},
+                {
+                    "data": [
+                        {
+                            "trip_id": tid,
+                            "user_id": owner_id,
+                            "trip_name": "Trip",
+                            "start_date": None,
+                            "end_date": None,
+                        }
+                    ]
+                },
             )()
 
     class _LocationsTable:
@@ -213,8 +229,7 @@ def mock_supabase_trips_and_locations():
         def execute(self):
             if self._select_trip_id is not None:
                 filtered = [
-                    loc for loc in self._store
-                    if loc.get("trip_id") == self._select_trip_id
+                    loc for loc in self._store if loc.get("trip_id") == self._select_trip_id
                 ]
                 return type("Result", (), {"data": filtered})()
             out_list = []
