@@ -166,8 +166,16 @@ def mock_supabase_trips_and_locations():
             self._store = store
             self._trip_id = None
             self._user_id_filter = None
+            self._is_delete = False
 
         def select(self, *args):
+            self._trip_id = None
+            self._user_id_filter = None
+            self._is_delete = False
+            return self
+
+        def delete(self):
+            self._is_delete = True
             self._trip_id = None
             self._user_id_filter = None
             return self
@@ -180,6 +188,11 @@ def mock_supabase_trips_and_locations():
             return self
 
         def execute(self):
+            if self._is_delete:
+                tid = self._trip_id
+                if tid is not None:
+                    self._store[:] = [t for t in self._store if str(t.get("trip_id")) != tid]
+                return type("Result", (), {"data": []})()
             if self._user_id_filter is not None:
                 out = [t for t in self._store if t.get("user_id") == self._user_id_filter]
                 return type("Result", (), {"data": out})()
@@ -211,27 +224,69 @@ def mock_supabase_trips_and_locations():
             self._store = store
             self._rows = None
             self._select_trip_id = None
+            self._is_delete = False
+            self._delete_location_id = None
+            self._delete_trip_id = None
+            self._select_location_id = None
 
         def select(self, *args):
-            self._rows = None  # mark as select mode
+            self._rows = None
+            self._is_delete = False
+            self._select_location_id = None
+            return self
+
+        def delete(self):
+            self._is_delete = True
+            self._delete_location_id = None
+            self._delete_trip_id = None
+            self._select_trip_id = None
+            self._rows = None
             return self
 
         def eq(self, key, value):
-            if key == "trip_id":
-                self._select_trip_id = str(value) if value is not None else None
+            val = str(value) if value is not None else None
+            if self._is_delete:
+                if key == "location_id":
+                    self._delete_location_id = val
+                elif key == "trip_id":
+                    self._delete_trip_id = val
+            else:
+                if key == "trip_id":
+                    self._select_trip_id = val
+                elif key == "location_id":
+                    self._select_location_id = val
             return self
 
         def insert(self, row):
             self._select_trip_id = None
+            self._is_delete = False
             self._rows = [dict(r) for r in (row if isinstance(row, list) else [row])]
             return self
 
         def execute(self):
+            if self._is_delete:
+                lid = self._delete_location_id
+                tid = self._delete_trip_id
+                if lid is not None:
+                    self._store[:] = [
+                        loc for loc in self._store if str(loc.get("location_id")) != lid
+                    ]
+                elif tid is not None:
+                    self._store[:] = [loc for loc in self._store if str(loc.get("trip_id")) != tid]
+                return type("Result", (), {"data": []})()
             if self._select_trip_id is not None:
                 filtered = [
                     loc for loc in self._store if loc.get("trip_id") == self._select_trip_id
                 ]
+                if self._select_location_id is not None:
+                    filtered = [
+                        loc
+                        for loc in filtered
+                        if loc.get("location_id") == self._select_location_id
+                    ]
                 return type("Result", (), {"data": filtered})()
+            if self._rows is None:
+                return type("Result", (), {"data": []})()
             out_list = []
             for r in self._rows:
                 loc_id = str(_uuid.uuid4())

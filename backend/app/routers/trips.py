@@ -1,4 +1,4 @@
-"""Trips API: create-trip, list-trips, get-trip, update-trip."""
+"""Trips API: create, list, get, update, delete trips."""
 
 from datetime import date
 from uuid import UUID
@@ -176,3 +176,35 @@ async def update_trip(
         fields=list(update_data.keys()),
     )
     return _trip_row_to_response(updated_trip)
+
+
+@router.delete("/{trip_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_trip(
+    trip_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+    supabase=Depends(get_supabase_client),
+):
+    """
+    Delete a trip and its associated locations. Requires valid JWT.
+    Trip must exist and be owned by the authenticated user; else 404.
+    Returns 204 No Content on success.
+    """
+    result = (
+        supabase.table("trips").select("trip_id, user_id").eq("trip_id", str(trip_id)).execute()
+    )
+    if not result.data or len(result.data) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Trip not found",
+        )
+    trip = result.data[0]
+    if trip.get("user_id") != str(user_id):
+        logger.warning("trip_delete_denied", trip_id=str(trip_id), user_id=str(user_id))
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Trip not owned by user",
+        )
+
+    supabase.table("locations").delete().eq("trip_id", str(trip_id)).execute()
+    supabase.table("trips").delete().eq("trip_id", str(trip_id)).execute()
+    logger.info("trip_deleted", trip_id=str(trip_id), user_id=str(user_id))
