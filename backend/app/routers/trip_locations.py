@@ -2,6 +2,7 @@
 
 from uuid import UUID
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from backend.app.db.supabase import get_supabase_client
@@ -11,6 +12,8 @@ from backend.app.models.schemas import (
     LocationResponse,
     UpdateLocationBody,
 )
+
+logger: structlog.stdlib.BoundLogger = structlog.get_logger("locations")
 
 router = APIRouter(prefix="/trips", tags=["trips-locations"])
 
@@ -55,6 +58,12 @@ async def add_location(
     if not result.data or len(result.data) == 0:
         raise RuntimeError("Insert did not return row")
     loc = result.data[0]
+    logger.info(
+        "location_added",
+        location_id=str(loc["location_id"]),
+        trip_id=str(trip_id),
+        name=body.name,
+    )
     return LocationResponse(
         id=str(loc["location_id"]),
         name=loc.get("name", body.name),
@@ -99,6 +108,7 @@ async def list_locations(
         .execute()
     )
     items = result.data if result.data else []
+    logger.info("locations_listed", trip_id=str(trip_id), count=len(items))
     return [
         LocationResponse(
             id=str(loc["location_id"]),
@@ -159,6 +169,7 @@ async def batch_add_locations(
     result = supabase.table("locations").insert(rows).execute()
     if not result.data or len(result.data) != len(body):
         raise RuntimeError("Insert did not return expected rows")
+    logger.info("locations_batch_added", trip_id=str(trip_id), count=len(body))
     return [
         LocationResponse(
             id=str(loc["location_id"]),
@@ -249,6 +260,12 @@ async def update_location(
     if not update_result.data or len(update_result.data) == 0:
         raise RuntimeError("Update did not return row")
     loc = update_result.data[0]
+    logger.info(
+        "location_updated",
+        location_id=str(location_id),
+        trip_id=str(trip_id),
+        fields=list(update_data.keys()),
+    )
     return LocationResponse(
         id=str(loc["location_id"]),
         name=loc.get("name", ""),
