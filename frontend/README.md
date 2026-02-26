@@ -6,31 +6,31 @@ Next.js 14 Web app (App Router) for trip planning. Uses TypeScript, Tailwind CSS
 
 ## Structure
 
-| Path | Purpose |
-|------|---------|
-| `src/app/` | App Router: `layout.tsx`, `page.tsx`, `globals.css`. Routes and global layout. |
-| `src/components/layout/` | PageShell, SiteHeader. Wraps all pages. |
-| `src/components/ui/` | Button, Card, Input, Label. Shared primitives (design tokens). |
-| `src/components/trips/` | TripCard. Trip list items. |
-| `src/components/locations/` | LocationRow. Location list rows. |
-| `src/components/feedback/` | EmptyState, ErrorBanner, LoadingSpinner. Empty/error/loading states. |
-| `src/lib/` | `utils.ts` (e.g. `cn()` for class names). |
-| `src/test/` | Vitest setup (`setup.ts`). |
+| Path                        | Purpose                                                                        |
+| --------------------------- | ------------------------------------------------------------------------------ |
+| `src/app/`                  | App Router: `layout.tsx`, `page.tsx`, `globals.css`. Routes and global layout. |
+| `src/components/layout/`    | PageShell, SiteHeader. Wraps all pages.                                        |
+| `src/components/ui/`        | Button, Card, Input, Label. Shared primitives (design tokens).                 |
+| `src/components/trips/`     | TripCard. Trip list items.                                                     |
+| `src/components/locations/` | LocationRow. Location list rows.                                               |
+| `src/components/feedback/`  | EmptyState, ErrorBanner, LoadingSpinner. Empty/error/loading states.           |
+| `src/lib/`                  | `utils.ts` (e.g. `cn()` for class names).                                      |
+| `src/test/`                 | Vitest setup (`setup.ts`).                                                     |
 
 ---
 
 ## Scripts
 
-| Command | Purpose |
-|---------|---------|
-| `npm run dev` | Start dev server (http://localhost:3000). |
-| `npm run build` | Production build. |
-| `npm run start` | Run production server (after `build`). |
-| `npm run lint` | ESLint + Prettier check. |
-| `npm run lint:fix` | ESLint --fix + Prettier write. |
-| `npm run typecheck` | `tsc --noEmit`. |
-| `npm run test` | Vitest run. |
-| `npm run test:watch` | Vitest watch. |
+| Command              | Purpose                                   |
+| -------------------- | ----------------------------------------- |
+| `npm run dev`        | Start dev server (http://localhost:3000). |
+| `npm run build`      | Production build.                         |
+| `npm run start`      | Run production server (after `build`).    |
+| `npm run lint`       | ESLint + Prettier check.                  |
+| `npm run lint:fix`   | ESLint --fix + Prettier write.            |
+| `npm run typecheck`  | `tsc --noEmit`.                           |
+| `npm run test`       | Vitest run.                               |
+| `npm run test:watch` | Vitest watch.                             |
 
 ---
 

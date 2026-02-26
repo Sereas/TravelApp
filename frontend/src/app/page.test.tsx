@@ -9,7 +9,14 @@ describe("HomePage", () => {
       screen.getByRole("heading", { name: /travelapp/i })
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/trip planning and in-trip assistance/i)
+      screen.getByText(/plan trips, collect locations/i)
+    ).toBeInTheDocument();
+  });
+
+  it("renders sign-in link", () => {
+    render(<HomePage />);
+    expect(
+      screen.getByRole("link", { name: /sign in to get started/i })
     ).toBeInTheDocument();
   });
 });
