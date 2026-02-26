@@ -1,13 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { createBrowserClient } from "@/lib/supabase";
 import type { User } from "@supabase/supabase-js";
 
 export function UserNav() {
-  const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
@@ -26,9 +24,9 @@ export function UserNav() {
   if (!user) return null;
 
   async function handleLogout() {
-    await fetch("/auth/logout", { method: "POST" });
-    router.push("/login");
-    router.refresh();
+    const supabase = createBrowserClient();
+    await supabase.auth.signOut();
+    window.location.href = "/login";
   }
 
   return (

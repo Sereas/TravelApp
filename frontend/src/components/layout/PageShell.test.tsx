@@ -13,10 +13,6 @@ vi.mock("next/link", () => ({
   }) => <a href={href}>{children}</a>,
 }));
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
-}));
-
 vi.mock("@/lib/supabase", () => ({
   createBrowserClient: () => ({
     auth: {
