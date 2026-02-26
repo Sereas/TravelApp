@@ -16,7 +16,9 @@ app = FastAPI(
     description="MVP Core Trip Planning",
 )
 
-_cors_origins = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+_cors_origins = [
+    o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001").split(",")
+]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
