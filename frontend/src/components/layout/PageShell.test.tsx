@@ -13,6 +13,17 @@ vi.mock("next/link", () => ({
   }) => <a href={href}>{children}</a>,
 }));
 
+vi.mock("@/lib/supabase", () => ({
+  createBrowserClient: () => ({
+    auth: {
+      getUser: () => Promise.resolve({ data: { user: null } }),
+      onAuthStateChange: () => ({
+        data: { subscription: { unsubscribe: vi.fn() } },
+      }),
+    },
+  }),
+}));
+
 describe("PageShell", () => {
   it("renders the header with site name", () => {
     render(<PageShell>content</PageShell>);
