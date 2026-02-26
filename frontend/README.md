@@ -8,8 +8,8 @@ Next.js 14 Web app (App Router) for trip planning. Uses TypeScript, Tailwind CSS
 
 | Path                        | Purpose                                                                        |
 | --------------------------- | ------------------------------------------------------------------------------ |
-| `src/app/`                  | App Router: `layout.tsx`, `page.tsx`, `globals.css`. Routes and global layout. |
-| `src/components/layout/`    | PageShell, SiteHeader. Wraps all pages.                                        |
+| `src/app/`                  | App Router: `/` (landing), `/login`, `/auth/callback`, `/auth/logout`, `/trips`. `layout.tsx`, `globals.css`. |
+| `src/components/layout/`    | PageShell, SiteHeader, UserNav (user email + sign out). Wraps all pages.        |
 | `src/components/ui/`        | Button, Card, Input, Label. Shared primitives (design tokens).                 |
 | `src/components/trips/`     | TripCard. Trip list items.                                                     |
 | `src/components/locations/` | LocationRow. Location list rows.                                               |
@@ -44,9 +44,7 @@ Next.js 14 Web app (App Router) for trip planning. Uses TypeScript, Tailwind CSS
 
 ## Environment
 
-For local dev, optional env (e.g. in `.env.local`):
+For local dev, set `frontend/.env.local` (see `.env.local.example`):
 
-- `NEXT_PUBLIC_API_URL` — Backend API base URL (for future API client).
-- `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` — For Supabase Auth (when added).
-
-Not required for the current stub home page.
+- `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Required for Supabase Auth (login, sign-up, Google, password reset). Middleware and auth routes depend on these.
+- `NEXT_PUBLIC_API_URL` — Backend API base URL (e.g. `http://localhost:8000`) for the API client (Slice 7).
