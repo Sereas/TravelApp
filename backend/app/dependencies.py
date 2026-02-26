@@ -1,5 +1,6 @@
 """FastAPI dependencies: auth and shared services."""
 
+import base64
 from uuid import UUID
 
 import structlog
@@ -32,21 +33,22 @@ async def get_current_user_id(
         raise _auth_error("Missing Authorization header")
 
     token = credentials.credentials
+    decode_opts = {
+        "verify_signature": True,
+        "verify_exp": True,
+        "verify_aud": False,
+        "require_sub": True,
+    }
+    secret = settings.supabase_jwt_secret
     try:
-        payload = jwt.decode(
-            token,
-            settings.supabase_jwt_secret,
-            algorithms=["HS256"],
-            options={
-                "verify_signature": True,
-                "verify_exp": True,
-                "verify_aud": False,
-                "require_sub": True,
-            },
-        )
+        payload = jwt.decode(token, secret, algorithms=["HS256"], options=decode_opts)
     except JWTError:
-        logger.warning("auth_failed", reason="invalid_or_expired_token")
-        raise _auth_error("Invalid or expired token") from None
+        try:
+            raw_secret = base64.b64decode(secret)
+            payload = jwt.decode(token, raw_secret, algorithms=["HS256"], options=decode_opts)
+        except Exception:
+            logger.warning("auth_failed", reason="invalid_or_expired_token")
+            raise _auth_error("Invalid or expired token") from None
 
     sub = payload.get("sub")
     if not sub:
