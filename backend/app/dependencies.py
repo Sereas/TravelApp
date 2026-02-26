@@ -1,18 +1,68 @@
 """FastAPI dependencies: auth and shared services."""
 
 import base64
+from functools import lru_cache
 from uuid import UUID
 
+import jwt as pyjwt
 import structlog
 from fastapi import Depends, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
+from jwt import PyJWKClient
 
 from backend.app.core.config import get_settings
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger("auth")
 
 _scheme = HTTPBearer(auto_error=False)
+
+
+@lru_cache
+def _get_jwk_client() -> PyJWKClient | None:
+    settings = get_settings()
+    if settings.supabase_url:
+        jwks_url = f"{settings.supabase_url}/auth/v1/.well-known/jwks.json"
+        return PyJWKClient(jwks_url, cache_keys=True)
+    return None
+
+
+def _verify_token(token: str) -> dict:
+    """Verify JWT using JWKS (ES256) with HS256 fallback for tests."""
+    settings = get_settings()
+
+    jwk_client = _get_jwk_client()
+    if jwk_client:
+        try:
+            signing_key = jwk_client.get_signing_key_from_jwt(token)
+            return pyjwt.decode(
+                token,
+                signing_key.key,
+                algorithms=["ES256"],
+                audience="authenticated",
+            )
+        except Exception:
+            pass
+
+    if not settings.supabase_jwt_secret:
+        raise pyjwt.InvalidTokenError("No verification method available")
+
+    secret = settings.supabase_jwt_secret
+    try:
+        return pyjwt.decode(
+            token,
+            secret,
+            algorithms=["HS256"],
+            audience=["authenticated"],
+            options={"verify_aud": False},
+        )
+    except pyjwt.InvalidTokenError:
+        raw = base64.b64decode(secret)
+        return pyjwt.decode(
+            token,
+            raw,
+            algorithms=["HS256"],
+            options={"verify_aud": False},
+        )
 
 
 async def get_current_user_id(
@@ -24,31 +74,20 @@ async def get_current_user_id(
     Set authenticated user id on request state; return 401 if missing or invalid.
     """
     settings = get_settings()
-    if not settings.supabase_jwt_secret:
-        logger.error("auth_failed", reason="jwt_secret_not_configured")
-        raise _auth_error("JWT secret not configured")
+    if not settings.supabase_jwt_secret and not settings.supabase_url:
+        logger.error("auth_failed", reason="no_jwt_verification_configured")
+        raise _auth_error("JWT verification not configured")
 
     if not credentials:
         logger.info("auth_failed", reason="missing_authorization_header")
         raise _auth_error("Missing Authorization header")
 
     token = credentials.credentials
-    decode_opts = {
-        "verify_signature": True,
-        "verify_exp": True,
-        "verify_aud": False,
-        "require_sub": True,
-    }
-    secret = settings.supabase_jwt_secret
     try:
-        payload = jwt.decode(token, secret, algorithms=["HS256"], options=decode_opts)
-    except JWTError:
-        try:
-            raw_secret = base64.b64decode(secret)
-            payload = jwt.decode(token, raw_secret, algorithms=["HS256"], options=decode_opts)
-        except Exception:
-            logger.warning("auth_failed", reason="invalid_or_expired_token")
-            raise _auth_error("Invalid or expired token") from None
+        payload = _verify_token(token)
+    except Exception:
+        logger.warning("auth_failed", reason="invalid_or_expired_token")
+        raise _auth_error("Invalid or expired token") from None
 
     sub = payload.get("sub")
     if not sub:
