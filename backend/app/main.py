@@ -1,6 +1,9 @@
 """FastAPI application: auth and trips (MVP Slice 2)."""
 
+import os
+
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.core.logging import setup_logging
 from backend.app.middleware import RequestLoggingMiddleware
@@ -13,6 +16,14 @@ app = FastAPI(
     description="MVP Core Trip Planning",
 )
 
+_cors_origins = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.add_middleware(RequestLoggingMiddleware)
 
 app.include_router(infra.router)
