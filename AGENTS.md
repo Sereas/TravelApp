@@ -33,18 +33,20 @@ A `.env` file with `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_JW
 ### Supabase connection
 
 The app connects to a hosted Supabase instance. Required env vars (from `config.py`):
-- `SUPABASE_URL` — project URL
+- `SUPABASE_URL` — project URL (required for both DB access and JWT verification via JWKS)
 - `SUPABASE_SERVICE_ROLE_KEY` — service role key (bypasses RLS, used by backend)
-- `SUPABASE_JWT_SECRET` — needed for the API to verify auth tokens
+- `SUPABASE_JWT_SECRET` — **optional** fallback for HS256 JWT verification; not needed when `SUPABASE_URL` is set (ES256 via JWKS is the primary method)
+
+**JWT verification**: Supabase uses ES256 (asymmetric) JWTs. The backend verifies tokens via the JWKS endpoint at `{SUPABASE_URL}/auth/v1/.well-known/jwks.json`. HS256 with `SUPABASE_JWT_SECRET` is only used as a fallback (e.g. in tests or legacy setups).
 
 **Secret name mapping**: Cursor Secrets use different names than the app expects. The `.env` file (gitignored) bridges the gap:
 
-| Cursor Secret | App Env Var |
-|---|---|
-| `SUPABASE_URL` | `SUPABASE_URL` (same) |
-| `SUPABASE_SERVICE_ROLE_KEY` | `SUPABASE_SERVICE_ROLE_KEY` (same) |
-| `SUPABASE_KEY` | `SUPABASE_ANON_KEY` |
-| `JWT_SECRET` | `SUPABASE_JWT_SECRET` |
+| Cursor Secret | App Env Var | Required |
+|---|---|---|
+| `SUPABASE_URL` | `SUPABASE_URL` (same) | Yes |
+| `SUPABASE_SERVICE_ROLE_KEY` | `SUPABASE_SERVICE_ROLE_KEY` (same) | Yes |
+| `SUPABASE_KEY` | `SUPABASE_ANON_KEY` | Yes (frontend) |
+| `JWT_SECRET` | `SUPABASE_JWT_SECRET` | No (JWKS used instead) |
 
 The `trips` table has a foreign key `user_id` referencing Supabase Auth users (`auth.users`), so you cannot insert trips for arbitrary UUIDs. Use an existing user ID from the database.
 

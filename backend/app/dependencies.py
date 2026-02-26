@@ -40,8 +40,8 @@ def _verify_token(token: str) -> dict:
                 algorithms=["ES256"],
                 audience="authenticated",
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("jwks_verification_failed", error=str(exc))
 
     if not settings.supabase_jwt_secret:
         raise pyjwt.InvalidTokenError("No verification method available")

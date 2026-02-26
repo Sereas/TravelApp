@@ -3,8 +3,8 @@
 import base64
 from datetime import UTC, datetime
 
+import jwt
 from fastapi.testclient import TestClient
-from jose import jwt
 
 from backend.app.db.supabase import get_supabase_client
 from backend.app.dependencies import _get_jwk_client

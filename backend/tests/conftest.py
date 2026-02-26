@@ -3,9 +3,9 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
+import jwt
 import pytest
 from fastapi.testclient import TestClient
-from jose import jwt
 
 from backend.app.main import app
 
