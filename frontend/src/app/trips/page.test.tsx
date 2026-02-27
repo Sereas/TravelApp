@@ -9,10 +9,12 @@ vi.mock("next/navigation", () => ({
 }));
 
 const mockListTrips = vi.fn();
+const mockCreateTrip = vi.fn();
 vi.mock("@/lib/api", () => ({
   api: {
     trips: {
       list: (...args: unknown[]) => mockListTrips(...args),
+      create: (...args: unknown[]) => mockCreateTrip(...args),
     },
   },
 }));
@@ -45,7 +47,18 @@ describe("TripsPage", () => {
     expect(screen.getByText("2026-06-01 — 2026-06-15")).toBeInTheDocument();
   });
 
-  it("shows empty state when API returns empty array", async () => {
+  it("shows 'New trip' button when trips exist", async () => {
+    mockListTrips.mockResolvedValue([
+      { id: "1", name: "Paris", start_date: null, end_date: null },
+    ]);
+    render(<TripsPage />);
+    await screen.findByText("Paris");
+    expect(
+      screen.getByRole("button", { name: /new trip/i })
+    ).toBeInTheDocument();
+  });
+
+  it("shows empty state with create CTA when no trips", async () => {
     mockListTrips.mockResolvedValue([]);
     render(<TripsPage />);
 
@@ -62,9 +75,6 @@ describe("TripsPage", () => {
     render(<TripsPage />);
 
     expect(await screen.findByText("Network error")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /try again/i })
-    ).toBeInTheDocument();
 
     mockListTrips.mockResolvedValue([]);
     await userEvent.click(screen.getByRole("button", { name: /try again/i }));
@@ -86,8 +96,14 @@ describe("TripsPage", () => {
     expect(mockPush).toHaveBeenCalledWith("/trips/trip-42");
   });
 
-  it("navigates to /trips/new when create CTA is clicked", async () => {
+  it("adds new trip to list after creation via dialog", async () => {
     mockListTrips.mockResolvedValue([]);
+    mockCreateTrip.mockResolvedValue({
+      id: "new-1",
+      name: "Berlin",
+      start_date: null,
+      end_date: null,
+    });
     render(<TripsPage />);
 
     await screen.findByText(/haven't created any trips/i);
@@ -95,6 +111,9 @@ describe("TripsPage", () => {
       screen.getByRole("button", { name: /create your first trip/i })
     );
 
-    expect(mockPush).toHaveBeenCalledWith("/trips/new");
+    await userEvent.type(screen.getByLabelText(/trip name/i), "Berlin");
+    await userEvent.click(screen.getByRole("button", { name: /create trip/i }));
+
+    expect(await screen.findByText("Berlin")).toBeInTheDocument();
   });
 });

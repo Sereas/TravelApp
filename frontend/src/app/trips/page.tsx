@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, type Trip } from "@/lib/api";
-import { TripCard } from "@/components/trips";
+import { TripCard, CreateTripDialog } from "@/components/trips";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { LoadingSpinner } from "@/components/feedback/LoadingSpinner";
 import { ErrorBanner } from "@/components/feedback/ErrorBanner";
@@ -32,10 +32,22 @@ export default function TripsPage() {
     fetchTrips();
   }, []);
 
+  function handleTripCreated(trip: Trip) {
+    setTrips((prev) => [trip, ...prev]);
+  }
+
+  const createButton = (
+    <CreateTripDialog
+      trigger={<Button>New trip</Button>}
+      onCreated={handleTripCreated}
+    />
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight">My Trips</h1>
+        {!loading && trips.length > 0 && createButton}
       </div>
 
       {loading && (
@@ -48,9 +60,10 @@ export default function TripsPage() {
 
       {!loading && !error && trips.length === 0 && (
         <EmptyState message="You haven't created any trips yet.">
-          <Button onClick={() => router.push("/trips/new")}>
-            Create your first trip
-          </Button>
+          <CreateTripDialog
+            trigger={<Button>Create your first trip</Button>}
+            onCreated={handleTripCreated}
+          />
         </EmptyState>
       )}
 
