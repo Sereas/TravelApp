@@ -31,10 +31,9 @@ describe("TripCard", () => {
     expect(screen.getByText(/Ends Jun 10, 2026/)).toBeInTheDocument();
   });
 
-  it("does not render date when both are null", () => {
-    const { container } = render(<TripCard id="1" name="Trip" />);
-    const description = container.querySelector("[class*='CardDescription']");
-    expect(description).toBeNull();
+  it("shows friendly placeholder when no dates set", () => {
+    render(<TripCard id="1" name="Trip" />);
+    expect(screen.getByText("Dates still open")).toBeInTheDocument();
   });
 
   it("calls onClick with trip id when clicked", async () => {

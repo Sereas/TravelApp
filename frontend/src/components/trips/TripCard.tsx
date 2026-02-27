@@ -24,12 +24,9 @@ function formatDate(dateStr: string): string {
   });
 }
 
-function formatDateDisplay(
-  start?: string | null,
-  end?: string | null
-): string | null {
-  if (!start && !end) return null;
-  if (start && end) return `${formatDate(start)} — ${formatDate(end)}`;
+function formatDateDisplay(start?: string | null, end?: string | null): string {
+  if (!start && !end) return "Dates still open";
+  if (start && end) return `${formatDate(start)} \u2014 ${formatDate(end)}`;
   if (start) return `Starts ${formatDate(start)}`;
   return `Ends ${formatDate(end!)}`;
 }
@@ -60,9 +57,7 @@ export function TripCard({
     >
       <CardHeader className="p-4">
         <CardTitle className="text-base">{name}</CardTitle>
-        {dateDisplay && (
-          <CardDescription className="text-sm">{dateDisplay}</CardDescription>
-        )}
+        <CardDescription className="text-sm">{dateDisplay}</CardDescription>
       </CardHeader>
     </Card>
   );
