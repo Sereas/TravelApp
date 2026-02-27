@@ -7,6 +7,7 @@ All notable changes to this project are documented here.
 ## Unreleased
 
 ### Frontend
+- **Slice 11:** Trip page — edit trip details and add/edit location.
 - **Slice 10:** Trip page — view trip details and locations list (`/trips/[id]`).
 - **Slice 9:** Home page — create trip (CreateTripDialog).
 - **Slice 8:** Home page — trips list and empty state (`/trips`).

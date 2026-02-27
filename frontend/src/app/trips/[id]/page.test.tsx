@@ -1,8 +1,7 @@
 /// <reference types="vitest/globals" />
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import TripDetailPage from "./page";
-import { ApiError } from "@/lib/api";
 
 const mockPush = vi.fn();
 const mockParams = { id: "trip-1" };
@@ -14,14 +13,20 @@ vi.mock("next/navigation", () => ({
 
 const mockGetTrip = vi.fn();
 const mockListLocations = vi.fn();
+const mockUpdateTrip = vi.fn();
+const mockAddLocation = vi.fn();
+const mockUpdateLocation = vi.fn();
 
 vi.mock("@/lib/api", () => ({
   api: {
     trips: {
       get: (...args: unknown[]) => mockGetTrip(...args),
+      update: (...args: unknown[]) => mockUpdateTrip(...args),
     },
     locations: {
       list: (...args: unknown[]) => mockListLocations(...args),
+      add: (...args: unknown[]) => mockAddLocation(...args),
+      update: (...args: unknown[]) => mockUpdateLocation(...args),
     },
   },
   ApiError: class ApiError extends Error {
@@ -111,9 +116,6 @@ describe("TripDetailPage", () => {
     render(<TripDetailPage />);
 
     expect(await screen.findByText("Network error")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /try again/i })
-    ).toBeInTheDocument();
 
     mockGetTrip.mockResolvedValue(sampleTrip);
     mockListLocations.mockResolvedValue(sampleLocations);
@@ -123,7 +125,7 @@ describe("TripDetailPage", () => {
   });
 
   it("shows 'Trip not found' for 404 errors", async () => {
-    const error = new ApiError("Not found", 404);
+    const error = Object.assign(new Error("Not found"), { status: 404 });
     mockGetTrip.mockRejectedValueOnce(error);
     mockListLocations.mockRejectedValueOnce(error);
     render(<TripDetailPage />);
@@ -164,5 +166,172 @@ describe("TripDetailPage", () => {
     await screen.findByText("Paris Summer");
     expect(mockGetTrip).toHaveBeenCalledWith("trip-42");
     expect(mockListLocations).toHaveBeenCalledWith("trip-42");
+  });
+
+  // --- Slice 11: Edit trip ---
+
+  it("shows Edit trip button and opens edit form", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue([]);
+    render(<TripDetailPage />);
+
+    await screen.findByText("Paris Summer");
+    await userEvent.click(screen.getByRole("button", { name: /edit trip/i }));
+
+    expect(screen.getByLabelText(/trip name/i)).toHaveValue("Paris Summer");
+  });
+
+  it("updates trip details on save", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue([]);
+    mockUpdateTrip.mockResolvedValue({
+      ...sampleTrip,
+      name: "Paris Winter",
+    });
+    render(<TripDetailPage />);
+
+    await screen.findByText("Paris Summer");
+    await userEvent.click(screen.getByRole("button", { name: /edit trip/i }));
+
+    const nameInput = screen.getByLabelText(/trip name/i);
+    await userEvent.clear(nameInput);
+    await userEvent.type(nameInput, "Paris Winter");
+    await userEvent.click(
+      screen.getByRole("button", { name: /save changes/i })
+    );
+
+    expect(await screen.findByText("Paris Winter")).toBeInTheDocument();
+    expect(mockUpdateTrip).toHaveBeenCalledWith(
+      "trip-1",
+      expect.objectContaining({ name: "Paris Winter" })
+    );
+  });
+
+  it("cancels trip edit without saving", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue([]);
+    render(<TripDetailPage />);
+
+    await screen.findByText("Paris Summer");
+    await userEvent.click(screen.getByRole("button", { name: /edit trip/i }));
+    await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
+
+    expect(screen.getByText("Paris Summer")).toBeInTheDocument();
+    expect(mockUpdateTrip).not.toHaveBeenCalled();
+  });
+
+  // --- Slice 11: Add location ---
+
+  it("opens add-location form from empty state CTA", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue([]);
+    render(<TripDetailPage />);
+
+    await screen.findByText(/no locations added/i);
+    await userEvent.click(
+      screen.getByRole("button", { name: /add a location/i })
+    );
+
+    expect(screen.getByLabelText(/location name/i)).toBeInTheDocument();
+  });
+
+  it("adds a new location and shows it in the list", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue([]);
+    mockAddLocation.mockResolvedValue({
+      id: "loc-new",
+      name: "Arc de Triomphe",
+      address: null,
+      google_link: null,
+      note: "Great views",
+    });
+    render(<TripDetailPage />);
+
+    await screen.findByText(/no locations added/i);
+    await userEvent.click(
+      screen.getByRole("button", { name: /add a location/i })
+    );
+
+    await userEvent.type(
+      screen.getByLabelText(/location name/i),
+      "Arc de Triomphe"
+    );
+    await userEvent.type(screen.getByLabelText(/note/i), "Great views");
+    await userEvent.click(
+      screen.getByRole("button", { name: /add location/i })
+    );
+
+    expect(await screen.findByText("Arc de Triomphe")).toBeInTheDocument();
+    expect(screen.getByText("Great views")).toBeInTheDocument();
+    expect(mockAddLocation).toHaveBeenCalledWith(
+      "trip-1",
+      expect.objectContaining({ name: "Arc de Triomphe", note: "Great views" })
+    );
+  });
+
+  it("shows 'Add location' button when locations exist", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue(sampleLocations);
+    render(<TripDetailPage />);
+
+    await screen.findByText("Eiffel Tower");
+    expect(
+      screen.getByRole("button", { name: /add location/i })
+    ).toBeInTheDocument();
+  });
+
+  // --- Slice 11: Edit location ---
+
+  it("shows Edit button on each location row", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue(sampleLocations);
+    render(<TripDetailPage />);
+
+    await screen.findByText("Eiffel Tower");
+    const editButtons = screen.getAllByRole("button", { name: /^edit$/i });
+    expect(editButtons).toHaveLength(2);
+  });
+
+  it("edits a location inline and saves", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue(sampleLocations);
+    mockUpdateLocation.mockResolvedValue({
+      ...sampleLocations[0],
+      name: "Eiffel Tower (top floor)",
+    });
+    render(<TripDetailPage />);
+
+    await screen.findByText("Eiffel Tower");
+    const editButtons = screen.getAllByRole("button", { name: /^edit$/i });
+    await userEvent.click(editButtons[0]);
+
+    const nameInput = screen.getByDisplayValue("Eiffel Tower");
+    await userEvent.clear(nameInput);
+    await userEvent.type(nameInput, "Eiffel Tower (top floor)");
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+
+    expect(
+      await screen.findByText("Eiffel Tower (top floor)")
+    ).toBeInTheDocument();
+    expect(mockUpdateLocation).toHaveBeenCalledWith(
+      "trip-1",
+      "loc-1",
+      expect.objectContaining({ name: "Eiffel Tower (top floor)" })
+    );
+  });
+
+  it("cancels location edit without saving", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue(sampleLocations);
+    render(<TripDetailPage />);
+
+    await screen.findByText("Eiffel Tower");
+    const editButtons = screen.getAllByRole("button", { name: /^edit$/i });
+    await userEvent.click(editButtons[0]);
+
+    await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
+
+    expect(screen.getByText("Eiffel Tower")).toBeInTheDocument();
+    expect(mockUpdateLocation).not.toHaveBeenCalled();
   });
 });
