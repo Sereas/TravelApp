@@ -30,8 +30,21 @@ export function DatePicker({
   fromDate,
   id,
 }: DatePickerProps) {
+  const [open, setOpen] = React.useState(false);
+  const [month, setMonth] = React.useState<Date | undefined>(
+    value ?? fromDate ?? new Date()
+  );
+
+  React.useEffect(() => {
+    if (value) {
+      setMonth(value);
+    } else if (fromDate) {
+      setMonth(fromDate);
+    }
+  }, [value, fromDate]);
+
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
           id={id}
@@ -46,12 +59,23 @@ export function DatePicker({
           {value ? format(value, "MMM d, yyyy") : placeholder}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
+      <PopoverContent
+        className="w-auto p-0"
+        align="start"
+        side="bottom"
+        collisionPadding={8}
+      >
         <Calendar
           mode="single"
           selected={value}
-          onSelect={onChange}
-          defaultMonth={value ?? fromDate}
+          onSelect={(date) => {
+            onChange(date);
+            if (date) {
+              setOpen(false);
+            }
+          }}
+          month={month}
+          onMonthChange={setMonth}
           disabled={fromDate ? { before: fromDate } : undefined}
           initialFocus
         />

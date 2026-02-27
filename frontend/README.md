@@ -10,8 +10,8 @@ Next.js 14 Web app (App Router) for trip planning. Uses TypeScript, Tailwind CSS
 | --------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `src/app/`                  | App Router: `/` (landing), `/login`, `/auth/callback`, `/auth/logout`, `/trips`. `layout.tsx`, `globals.css`. |
 | `src/components/layout/`    | PageShell, SiteHeader, UserNav (user email + sign out). Wraps all pages.                                      |
-| `src/components/ui/`        | Button, Card, Input, Label. Shared primitives (design tokens).                                                |
-| `src/components/trips/`     | TripCard. Trip list items.                                                                                    |
+| `src/components/ui/`        | Button, Card, Input, Label, Dialog, Popover, Calendar, DatePicker. Shared primitives (design tokens).        |
+| `src/components/trips/`     | TripCard and CreateTripDialog. Trip list items and trip creation dialog.                                      |
 | `src/components/locations/` | LocationRow. Location list rows.                                                                              |
 | `src/components/feedback/`  | EmptyState, ErrorBanner, LoadingSpinner. Empty/error/loading states.                                          |
 | `src/lib/`                  | `utils.ts` (e.g. `cn()` for class names).                                                                     |
@@ -37,7 +37,8 @@ Next.js 14 Web app (App Router) for trip planning. Uses TypeScript, Tailwind CSS
 ## Design system
 
 - **Tokens:** `src/app/globals.css` (CSS variables), `tailwind.config.ts` (Tailwind theme).
-- **Components:** Use `@/components/ui` and pattern components (`TripCard`, `LocationRow`, `EmptyState`, etc.) so UI stays consistent.
+- **Components:** Use `@/components/ui` and pattern components (`TripCard`, `CreateTripDialog`, `LocationRow`, `EmptyState`, etc.) so UI stays consistent.
+- **Date picker UX:** Trip date fields use a calendar/date picker built on `react-day-picker` and `date-fns`, with a stable month layout, automatic close on date selection, and end-date calendars defaulting to the month of the chosen start date.
 - Full reference: [docs/design/design-system-web.md](../docs/design/design-system-web.md) in the repo root.
 
 ---
