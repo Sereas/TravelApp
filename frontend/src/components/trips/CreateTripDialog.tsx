@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   Dialog,
   DialogContent,
@@ -26,17 +28,21 @@ export function CreateTripDialog({
 }: CreateTripDialogProps) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [startDate, setStartDate] = useState<Date | undefined>();
+  const [endDate, setEndDate] = useState<Date | undefined>();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   function resetForm() {
     setName("");
-    setStartDate("");
-    setEndDate("");
+    setStartDate(undefined);
+    setEndDate(undefined);
     setError(null);
     setLoading(false);
+  }
+
+  function toISODate(date: Date | undefined): string | null {
+    return date ? format(date, "yyyy-MM-dd") : null;
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -47,8 +53,8 @@ export function CreateTripDialog({
     try {
       const trip = await api.trips.create({
         name,
-        start_date: startDate || null,
-        end_date: endDate || null,
+        start_date: toISODate(startDate),
+        end_date: toISODate(endDate),
       });
       onCreated(trip);
       setOpen(false);
@@ -91,30 +97,27 @@ export function CreateTripDialog({
             />
           </div>
 
-          <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="start-date">Start date</Label>
-              <Input
-                id="start-date"
-                type="date"
+              <Label>Start date</Label>
+              <DatePicker
                 value={startDate}
-                onChange={(e) => {
-                  const newStart = e.target.value;
-                  setStartDate(newStart);
-                  if (endDate && newStart && endDate < newStart) {
-                    setEndDate("");
+                onChange={(date) => {
+                  setStartDate(date);
+                  if (endDate && date && endDate < date) {
+                    setEndDate(undefined);
                   }
                 }}
+                placeholder="Start date"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="end-date">End date</Label>
-              <Input
-                id="end-date"
-                type="date"
+              <Label>End date</Label>
+              <DatePicker
                 value={endDate}
-                min={startDate || undefined}
-                onChange={(e) => setEndDate(e.target.value)}
+                onChange={setEndDate}
+                placeholder="End date"
+                fromDate={startDate}
               />
             </div>
           </div>
