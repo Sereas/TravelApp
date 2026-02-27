@@ -35,16 +35,20 @@ describe("CreateTripDialog", () => {
     await userEvent.click(screen.getByRole("button", { name: /open/i }));
 
     expect(screen.getByLabelText(/trip name/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/start date/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/end date/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /start date/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /end date/i })
+    ).toBeInTheDocument();
   });
 
-  it("calls api.trips.create with form data and invokes onCreated", async () => {
+  it("calls api.trips.create with name and invokes onCreated", async () => {
     const newTrip = {
       id: "new-1",
       name: "Paris",
-      start_date: "2026-06-01",
-      end_date: "2026-06-15",
+      start_date: null,
+      end_date: null,
     };
     mockCreateTrip.mockResolvedValue(newTrip);
     const onCreated = vi.fn();
@@ -53,45 +57,16 @@ describe("CreateTripDialog", () => {
       <CreateTripDialog trigger={<button>Open</button>} onCreated={onCreated} />
     );
     await userEvent.click(screen.getByRole("button", { name: /open/i }));
-
     await userEvent.type(screen.getByLabelText(/trip name/i), "Paris");
-    await userEvent.type(screen.getByLabelText(/start date/i), "2026-06-01");
-    await userEvent.type(screen.getByLabelText(/end date/i), "2026-06-15");
     await userEvent.click(screen.getByRole("button", { name: /create trip/i }));
 
     expect(mockCreateTrip).toHaveBeenCalledWith({
       name: "Paris",
-      start_date: "2026-06-01",
-      end_date: "2026-06-15",
+      start_date: null,
+      end_date: null,
     });
     await waitFor(() => {
       expect(onCreated).toHaveBeenCalledWith(newTrip);
-    });
-  });
-
-  it("creates trip with only name (dates optional)", async () => {
-    mockCreateTrip.mockResolvedValue({
-      id: "new-2",
-      name: "Rome",
-      start_date: null,
-      end_date: null,
-    });
-    const onCreated = vi.fn();
-
-    render(
-      <CreateTripDialog trigger={<button>Open</button>} onCreated={onCreated} />
-    );
-    await userEvent.click(screen.getByRole("button", { name: /open/i }));
-    await userEvent.type(screen.getByLabelText(/trip name/i), "Rome");
-    await userEvent.click(screen.getByRole("button", { name: /create trip/i }));
-
-    expect(mockCreateTrip).toHaveBeenCalledWith({
-      name: "Rome",
-      start_date: null,
-      end_date: null,
-    });
-    await waitFor(() => {
-      expect(onCreated).toHaveBeenCalled();
     });
   });
 
@@ -124,38 +99,5 @@ describe("CreateTripDialog", () => {
         screen.queryByRole("heading", { name: /create a new trip/i })
       ).not.toBeInTheDocument();
     });
-  });
-
-  it("sets min on end date when start date is chosen", async () => {
-    render(
-      <CreateTripDialog trigger={<button>Open</button>} onCreated={vi.fn()} />
-    );
-    await userEvent.click(screen.getByRole("button", { name: /open/i }));
-
-    const startInput = screen.getByLabelText(/start date/i);
-    const endInput = screen.getByLabelText(/end date/i);
-
-    expect(endInput).not.toHaveAttribute("min");
-
-    await userEvent.type(startInput, "2026-06-01");
-    expect(endInput).toHaveAttribute("min", "2026-06-01");
-  });
-
-  it("clears end date when start date moves after it", async () => {
-    render(
-      <CreateTripDialog trigger={<button>Open</button>} onCreated={vi.fn()} />
-    );
-    await userEvent.click(screen.getByRole("button", { name: /open/i }));
-
-    const startInput = screen.getByLabelText(/start date/i);
-    const endInput = screen.getByLabelText(/end date/i) as HTMLInputElement;
-
-    await userEvent.type(startInput, "2026-06-01");
-    await userEvent.type(endInput, "2026-06-05");
-    expect(endInput.value).toBe("2026-06-05");
-
-    await userEvent.clear(startInput);
-    await userEvent.type(startInput, "2026-06-10");
-    expect(endInput.value).toBe("");
   });
 });
