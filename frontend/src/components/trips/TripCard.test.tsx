@@ -9,7 +9,7 @@ describe("TripCard", () => {
     expect(screen.getByText("Paris Trip")).toBeInTheDocument();
   });
 
-  it("renders date range when both dates provided", () => {
+  it("renders formatted date range when both dates provided", () => {
     render(
       <TripCard
         id="1"
@@ -18,12 +18,17 @@ describe("TripCard", () => {
         endDate="2026-06-10"
       />
     );
-    expect(screen.getByText("2026-06-01 — 2026-06-10")).toBeInTheDocument();
+    expect(screen.getByText(/Jun 1, 2026 — Jun 10, 2026/)).toBeInTheDocument();
   });
 
-  it("renders only start date when end date is null", () => {
+  it("renders 'Starts' label when only start date provided", () => {
     render(<TripCard id="1" name="Trip" startDate="2026-06-01" />);
-    expect(screen.getByText("2026-06-01")).toBeInTheDocument();
+    expect(screen.getByText(/Starts Jun 1, 2026/)).toBeInTheDocument();
+  });
+
+  it("renders 'Ends' label when only end date provided", () => {
+    render(<TripCard id="1" name="Trip" endDate="2026-06-10" />);
+    expect(screen.getByText(/Ends Jun 10, 2026/)).toBeInTheDocument();
   });
 
   it("does not render date when both are null", () => {

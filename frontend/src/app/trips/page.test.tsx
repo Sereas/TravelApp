@@ -44,7 +44,7 @@ describe("TripsPage", () => {
 
     expect(await screen.findByText("Paris")).toBeInTheDocument();
     expect(screen.getByText("Rome")).toBeInTheDocument();
-    expect(screen.getByText("2026-06-01 — 2026-06-15")).toBeInTheDocument();
+    expect(screen.getByText(/Jun 1, 2026 — Jun 15, 2026/)).toBeInTheDocument();
   });
 
   it("shows 'New trip' button when trips exist", async () => {

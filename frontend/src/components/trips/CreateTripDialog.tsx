@@ -98,7 +98,13 @@ export function CreateTripDialog({
                 id="start-date"
                 type="date"
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                onChange={(e) => {
+                  const newStart = e.target.value;
+                  setStartDate(newStart);
+                  if (endDate && newStart && endDate < newStart) {
+                    setEndDate("");
+                  }
+                }}
               />
             </div>
             <div className="space-y-2">
@@ -107,6 +113,7 @@ export function CreateTripDialog({
                 id="end-date"
                 type="date"
                 value={endDate}
+                min={startDate || undefined}
                 onChange={(e) => setEndDate(e.target.value)}
               />
             </div>

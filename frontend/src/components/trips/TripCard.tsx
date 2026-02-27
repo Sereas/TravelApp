@@ -15,13 +15,23 @@ export interface TripCardProps {
   onClick?: (id: string) => void;
 }
 
-function formatDateRange(
+function formatDate(dateStr: string): string {
+  const date = new Date(dateStr + "T00:00:00");
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function formatDateDisplay(
   start?: string | null,
   end?: string | null
 ): string | null {
   if (!start && !end) return null;
-  if (start && end) return `${start} — ${end}`;
-  return start ?? end ?? null;
+  if (start && end) return `${formatDate(start)} — ${formatDate(end)}`;
+  if (start) return `Starts ${formatDate(start)}`;
+  return `Ends ${formatDate(end!)}`;
 }
 
 export function TripCard({
@@ -31,7 +41,7 @@ export function TripCard({
   endDate,
   onClick,
 }: TripCardProps) {
-  const dateRange = formatDateRange(startDate, endDate);
+  const dateDisplay = formatDateDisplay(startDate, endDate);
 
   return (
     <Card
@@ -50,8 +60,8 @@ export function TripCard({
     >
       <CardHeader className="p-4">
         <CardTitle className="text-base">{name}</CardTitle>
-        {dateRange && (
-          <CardDescription className="text-sm">{dateRange}</CardDescription>
+        {dateDisplay && (
+          <CardDescription className="text-sm">{dateDisplay}</CardDescription>
         )}
       </CardHeader>
     </Card>

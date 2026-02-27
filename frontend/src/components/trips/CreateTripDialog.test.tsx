@@ -125,4 +125,37 @@ describe("CreateTripDialog", () => {
       ).not.toBeInTheDocument();
     });
   });
+
+  it("sets min on end date when start date is chosen", async () => {
+    render(
+      <CreateTripDialog trigger={<button>Open</button>} onCreated={vi.fn()} />
+    );
+    await userEvent.click(screen.getByRole("button", { name: /open/i }));
+
+    const startInput = screen.getByLabelText(/start date/i);
+    const endInput = screen.getByLabelText(/end date/i);
+
+    expect(endInput).not.toHaveAttribute("min");
+
+    await userEvent.type(startInput, "2026-06-01");
+    expect(endInput).toHaveAttribute("min", "2026-06-01");
+  });
+
+  it("clears end date when start date moves after it", async () => {
+    render(
+      <CreateTripDialog trigger={<button>Open</button>} onCreated={vi.fn()} />
+    );
+    await userEvent.click(screen.getByRole("button", { name: /open/i }));
+
+    const startInput = screen.getByLabelText(/start date/i);
+    const endInput = screen.getByLabelText(/end date/i) as HTMLInputElement;
+
+    await userEvent.type(startInput, "2026-06-01");
+    await userEvent.type(endInput, "2026-06-05");
+    expect(endInput.value).toBe("2026-06-05");
+
+    await userEvent.clear(startInput);
+    await userEvent.type(startInput, "2026-06-10");
+    expect(endInput.value).toBe("");
+  });
 });
