@@ -12,7 +12,7 @@ TravelApp is a Python/FastAPI backend API and a Next.js Web frontend for travel 
 ```bash
 python3 -m pytest -v
 ```
-All tests mock Supabase entirely — no real Supabase instance is needed to run the test suite (61 tests pass, 1 RLS integration test skipped by default).
+All tests mock Supabase entirely — no real Supabase instance is needed to run the test suite (67 tests pass, 1 RLS integration test skipped by default).
 
 **Frontend:** From repo root, `cd frontend` then:
 ```bash
@@ -68,3 +68,4 @@ All API routes are under `/api/v1/` (e.g. `/api/v1/trips`, `/api/v1/trips/{id}/l
 - The `.env` file is gitignored — create it locally with dummy or real Supabase credentials. In Cursor Cloud, secrets are injected as environment variables automatically.
 - `config.py` uses `@lru_cache` for settings. Tests clear this cache via the `reset_settings_cache` autouse fixture. If you modify env vars in a test, ensure you call `get_settings.cache_clear()`.
 - **Linting/formatting**: `ruff` is configured in `pyproject.toml`. Run `ruff check .` and `ruff format --check .` to verify. Use `ruff check --fix .` and `ruff format .` to auto-fix. Rule B008 is ignored (needed for FastAPI `Depends()`).
+- **Frontend `.env.local`**: The frontend dev server needs `frontend/.env.local` with `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `NEXT_PUBLIC_API_URL=http://localhost:8000`. In Cursor Cloud, create this from injected secrets: `SUPABASE_URL` maps to `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_KEY` maps to `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
