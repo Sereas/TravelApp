@@ -6,33 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ErrorBanner } from "@/components/feedback/ErrorBanner";
 import { api, type Location } from "@/lib/api";
-
-const REQUIRES_BOOKING_OPTIONS = [
-  { value: "", label: "—" },
-  { value: "no", label: "No" },
-  { value: "yes", label: "Yes" },
-  { value: "yes_done", label: "Yes (done)" },
-] as const;
-
-const CATEGORY_OPTIONS = [
-  "Museum",
-  "Restaurant",
-  "Café",
-  "Bar",
-  "Walking around",
-  "Excursion",
-  "Accommodation",
-  "Transport",
-  "Shopping",
-  "Park / nature",
-  "Beach",
-  "Viewpoint",
-  "Event",
-  "Other",
-] as const;
-
-const selectClassName =
-  "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm";
+import {
+  REQUIRES_BOOKING_OPTIONS,
+  CATEGORY_OPTIONS,
+  selectClassName,
+} from "@/lib/location-constants";
 
 interface EditLocationRowProps {
   tripId: string;
@@ -52,7 +30,9 @@ export function EditLocationRow({
   const [googleLink, setGoogleLink] = useState(location.google_link ?? "");
   const [note, setNote] = useState(location.note ?? "");
   const [city, setCity] = useState(location.city ?? "");
-  const [workingHours, setWorkingHours] = useState(location.working_hours ?? "");
+  const [workingHours, setWorkingHours] = useState(
+    location.working_hours ?? ""
+  );
   const [requiresBooking, setRequiresBooking] = useState(
     location.requires_booking ?? ""
   );
@@ -124,7 +104,9 @@ export function EditLocationRow({
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="edit-location-google-link">Google Maps link (optional)</Label>
+        <Label htmlFor="edit-location-google-link">
+          Google Maps link (optional)
+        </Label>
         <Input
           id="edit-location-google-link"
           type="url"
@@ -135,7 +117,9 @@ export function EditLocationRow({
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="edit-location-working-hours">Working hours (optional)</Label>
+        <Label htmlFor="edit-location-working-hours">
+          Working hours (optional)
+        </Label>
         <Input
           id="edit-location-working-hours"
           value={workingHours}
@@ -145,7 +129,9 @@ export function EditLocationRow({
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="edit-location-requires-booking">Requires booking (optional)</Label>
+        <Label htmlFor="edit-location-requires-booking">
+          Requires booking (optional)
+        </Label>
         <select
           id="edit-location-requires-booking"
           className={selectClassName}
