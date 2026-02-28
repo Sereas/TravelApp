@@ -40,14 +40,15 @@ def _resolve_user_email(supabase_client, user_id: str | None) -> str | None:
 def _loc_to_response(supabase_client, loc: dict) -> LocationResponse:
     """Build LocationResponse from a locations row dict."""
     added_by_uid = loc.get("added_by_user_id")
+    uid_str = str(added_by_uid) if added_by_uid else None
     return LocationResponse(
         id=str(loc["location_id"]),
         name=loc.get("name", ""),
         address=loc.get("address"),
         google_link=loc.get("google_link"),
         note=loc.get("note"),
-        added_by_user_id=str(added_by_uid) if added_by_uid else None,
-        added_by_email=_resolve_user_email(supabase_client, str(added_by_uid) if added_by_uid else None),
+        added_by_user_id=uid_str,
+        added_by_email=_resolve_user_email(supabase_client, uid_str),
         city=loc.get("city"),
         working_hours=loc.get("working_hours"),
         requires_booking=loc.get("requires_booking"),
@@ -154,10 +155,7 @@ async def list_locations(
             detail="Trip not owned by user",
         )
     result = (
-        supabase.table("locations")
-        .select(_LOCATIONS_SELECT)
-        .eq("trip_id", str(trip_id))
-        .execute()
+        supabase.table("locations").select(_LOCATIONS_SELECT).eq("trip_id", str(trip_id)).execute()
     )
     items = result.data if result.data else []
     logger.info("locations_listed", trip_id=str(trip_id), count=len(items))
@@ -226,21 +224,24 @@ async def batch_add_locations(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create one or more locations; please try again",
         )
-    # Fetch full rows with all columns
+    # Fetch full rows with all columns in a single query
+    loc_ids = [str(loc["location_id"]) for loc in result.data if loc.get("location_id")]
+    if loc_ids:
+        fetch = (
+            supabase.table("locations")
+            .select(_LOCATIONS_SELECT)
+            .eq("trip_id", str(trip_id))
+            .in_("location_id", loc_ids)
+            .execute()
+        )
+        fetched_by_id = {r["location_id"]: r for r in (fetch.data or [])}
+    else:
+        fetched_by_id = {}
     out = []
     for loc in result.data:
-        loc_id = loc.get("location_id")
-        if loc_id:
-            fetch = (
-                supabase.table("locations")
-                .select(_LOCATIONS_SELECT)
-                .eq("location_id", str(loc_id))
-                .eq("trip_id", str(trip_id))
-                .execute()
-            )
-            if fetch.data and len(fetch.data) > 0:
-                loc = fetch.data[0]
-        out.append(_loc_to_response(supabase, loc))
+        lid = loc.get("location_id")
+        full = fetched_by_id.get(str(lid), loc) if lid else loc
+        out.append(_loc_to_response(supabase, full))
     logger.info("locations_batch_added", trip_id=str(trip_id), count=len(body))
     return out
 
@@ -291,29 +292,19 @@ async def update_location(
             detail="Location not found",
         )
 
-    if not body.model_fields_set:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="At least one field must be provided for update",
-        )
-
     update_data: dict[str, object] = {}
-    if "name" in body.model_fields_set:
-        update_data["name"] = body.name
-    if "address" in body.model_fields_set:
-        update_data["address"] = body.address
-    if "google_link" in body.model_fields_set:
-        update_data["google_link"] = body.google_link
-    if "note" in body.model_fields_set:
-        update_data["note"] = body.note
-    if "city" in body.model_fields_set:
-        update_data["city"] = body.city
-    if "working_hours" in body.model_fields_set:
-        update_data["working_hours"] = body.working_hours
-    if "requires_booking" in body.model_fields_set:
-        update_data["requires_booking"] = body.requires_booking
-    if "category" in body.model_fields_set:
-        update_data["category"] = body.category
+    for field in (
+        "name",
+        "address",
+        "google_link",
+        "note",
+        "city",
+        "working_hours",
+        "requires_booking",
+        "category",
+    ):
+        if field in body.model_fields_set:
+            update_data[field] = getattr(body, field)
 
     if not update_data:
         raise HTTPException(
@@ -321,9 +312,9 @@ async def update_location(
             detail="At least one field must be provided for update",
         )
 
-    supabase.table("locations").update(update_data).eq(
-        "location_id", str(location_id)
-    ).eq("trip_id", str(trip_id)).execute()
+    supabase.table("locations").update(update_data).eq("location_id", str(location_id)).eq(
+        "trip_id", str(trip_id)
+    ).execute()
 
     # Fetch full row (update().execute() returns representation but builder has no .select())
     fetch = (

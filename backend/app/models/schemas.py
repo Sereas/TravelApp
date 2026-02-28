@@ -22,8 +22,8 @@ class TripResponse(BaseModel):
     end_date: date | None = None
 
 
-_REQUIRES_BOOKING_VALUES = frozenset({"no", "yes", "yes_done"})
-_CATEGORY_VALUES = frozenset(
+REQUIRES_BOOKING_VALUES = frozenset({"no", "yes", "yes_done"})
+CATEGORY_VALUES = frozenset(
     {
         "Museum",
         "Restaurant",
@@ -42,6 +42,7 @@ _CATEGORY_VALUES = frozenset(
     }
 )
 
+_NULLABLE_TEXT_FIELDS = ("address", "google_link", "note", "city", "working_hours")
 
 # Max lengths aligned with DB / audit (city varchar(255); others reasonable limits)
 _LOCATION_NAME_MAX = 500
@@ -52,7 +53,36 @@ _LOCATION_CITY_MAX = 255
 _LOCATION_WORKING_HOURS_MAX = 500
 
 
-class AddLocationBody(BaseModel):
+class _LocationFieldsMixin(BaseModel):
+    """Shared validators for location write schemas."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def empty_strings_to_none(cls, data):
+        if not isinstance(data, dict):
+            return data
+        out = dict(data)
+        for key in _NULLABLE_TEXT_FIELDS:
+            if key in out and out[key] == "":
+                out[key] = None
+        return out
+
+    @field_validator("requires_booking", check_fields=False)
+    @classmethod
+    def validate_requires_booking(cls, v):
+        if v is not None and v not in REQUIRES_BOOKING_VALUES:
+            raise ValueError("must be one of: no, yes, yes_done")
+        return v
+
+    @field_validator("category", check_fields=False)
+    @classmethod
+    def validate_category(cls, v):
+        if v is not None and v not in CATEGORY_VALUES:
+            raise ValueError(f"must be one of: {sorted(CATEGORY_VALUES)}")
+        return v
+
+
+class AddLocationBody(_LocationFieldsMixin):
     """Request body for POST add-location."""
 
     name: str = Field(
@@ -71,31 +101,6 @@ class AddLocationBody(BaseModel):
         description="One of: no, yes, yes_done",
     )
     category: str | None = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def empty_strings_to_none(cls, data):
-        if not isinstance(data, dict):
-            return data
-        out = dict(data)
-        for key in ("address", "google_link", "note", "city", "working_hours"):
-            if key in out and out[key] == "":
-                out[key] = None
-        return out
-
-    @field_validator("requires_booking")
-    @classmethod
-    def validate_requires_booking(cls, v):
-        if v is not None and v not in _REQUIRES_BOOKING_VALUES:
-            raise ValueError("must be one of: no, yes, yes_done")
-        return v
-
-    @field_validator("category")
-    @classmethod
-    def validate_category(cls, v):
-        if v is not None and v not in _CATEGORY_VALUES:
-            raise ValueError(f"must be one of: {sorted(_CATEGORY_VALUES)}")
-        return v
 
 
 class LocationResponse(BaseModel):
@@ -126,7 +131,7 @@ class UpdateTripBody(BaseModel):
     end_date: date | None = None
 
 
-class UpdateLocationBody(BaseModel):
+class UpdateLocationBody(_LocationFieldsMixin):
     """Request body for PATCH update-location."""
 
     name: str | None = Field(
@@ -142,28 +147,3 @@ class UpdateLocationBody(BaseModel):
     working_hours: str | None = Field(None, max_length=_LOCATION_WORKING_HOURS_MAX)
     requires_booking: str | None = None
     category: str | None = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def empty_strings_to_none(cls, data):
-        if not isinstance(data, dict):
-            return data
-        out = dict(data)
-        for key in ("address", "google_link", "note", "city", "working_hours"):
-            if key in out and out[key] == "":
-                out[key] = None
-        return out
-
-    @field_validator("requires_booking")
-    @classmethod
-    def validate_requires_booking(cls, v):
-        if v is not None and v not in _REQUIRES_BOOKING_VALUES:
-            raise ValueError("must be one of: no, yes, yes_done")
-        return v
-
-    @field_validator("category")
-    @classmethod
-    def validate_category(cls, v):
-        if v is not None and v not in _CATEGORY_VALUES:
-            raise ValueError(f"must be one of: {sorted(_CATEGORY_VALUES)}")
-        return v
