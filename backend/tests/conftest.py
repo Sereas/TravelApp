@@ -236,7 +236,10 @@ def mock_supabase_trips_and_locations():
         }
 
     class _InsertBuilder:
-        """Mimics Supabase insert(): has execute() but NO select() (real client is SyncQueryRequestBuilder)."""
+        """Mimics Supabase insert(): has execute() but NO select().
+
+        Real client is SyncQueryRequestBuilder.
+        """
 
         def __init__(self, store, rows):
             self._store = store
@@ -252,7 +255,10 @@ def mock_supabase_trips_and_locations():
             return type("Result", (), {"data": out_list})()
 
     class _UpdateBuilder:
-        """Mimics Supabase update(): has eq(), execute() but NO select() (real client is SyncFilterRequestBuilder)."""
+        """Mimics Supabase update(): has eq(), execute() but NO select().
+
+        Real client is SyncFilterRequestBuilder.
+        """
 
         def __init__(self, store, update_data):
             self._store = store
@@ -272,7 +278,10 @@ def mock_supabase_trips_and_locations():
             filtered = [
                 loc
                 for loc in self._store
-                if (not self._filter_location_id or loc.get("location_id") == self._filter_location_id)
+                if (
+                    not self._filter_location_id
+                    or loc.get("location_id") == self._filter_location_id
+                )
                 and (not self._filter_trip_id or loc.get("trip_id") == self._filter_trip_id)
             ]
             if not filtered:
@@ -289,10 +298,12 @@ def mock_supabase_trips_and_locations():
             self._delete_location_id = None
             self._delete_trip_id = None
             self._select_location_id = None
+            self._in_location_ids = None
 
         def select(self, *args):
             self._is_delete = False
             self._select_location_id = None
+            self._in_location_ids = None
             return self
 
         def delete(self):
@@ -300,6 +311,7 @@ def mock_supabase_trips_and_locations():
             self._delete_location_id = None
             self._delete_trip_id = None
             self._select_trip_id = None
+            self._in_location_ids = None
             return self
 
         def eq(self, key, value):
@@ -314,6 +326,11 @@ def mock_supabase_trips_and_locations():
                     self._select_trip_id = val
                 elif key == "location_id":
                     self._select_location_id = val
+            return self
+
+        def in_(self, key, values):
+            if key == "location_id":
+                self._in_location_ids = [str(v) for v in values]
             return self
 
         def insert(self, row):
@@ -343,14 +360,36 @@ def mock_supabase_trips_and_locations():
                         for loc in filtered
                         if loc.get("location_id") == self._select_location_id
                     ]
+                if self._in_location_ids is not None:
+                    filtered = [
+                        loc for loc in filtered if loc.get("location_id") in self._in_location_ids
+                    ]
                 return type("Result", (), {"data": filtered})()
             return type("Result", (), {"data": []})()
 
+    class _MockAuthAdmin:
+        """Mimics supabase.auth.admin for email resolution."""
+
+        def __init__(self, user_emails):
+            self._emails = {str(k): v for k, v in user_emails.items()}
+
+        def get_user_by_id(self, uid):
+            email = self._emails.get(str(uid))
+            if email is None:
+                return None
+            user = type("User", (), {"email": email})()
+            return type("Response", (), {"user": user})()
+
+    class _MockAuth:
+        def __init__(self, user_emails):
+            self.admin = _MockAuthAdmin(user_emails)
+
     class MockSupabaseTL2:
-        def __init__(self, trip_owners, user_id):
+        def __init__(self, trip_owners, user_id, *, user_emails=None):
             self._trip_owners = {str(k): str(v) for k, v in trip_owners.items()}
             self._user_id = str(user_id)
             self._trips_store = trips_store
+            self.auth = _MockAuth(user_emails or {})
 
         def table(self, name):
             if name == "trips":

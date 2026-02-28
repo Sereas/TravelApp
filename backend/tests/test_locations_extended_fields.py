@@ -10,28 +10,42 @@ from backend.app.main import app
 
 
 def test_locations_mock_insert_has_no_select(mock_supabase_trips_and_locations):
-    """Regression: insert() returns builder with execute() but NOT select() (matches real Supabase).
-    Router must use insert().execute() then separate select(), not insert().select().execute().
+    """Regression: insert() builder has execute() but NOT select().
+
+    Matches real Supabase SyncQueryRequestBuilder.
+    Router must use insert().execute() then separate select().
     """
     _locations_inserted, MockSupabase = mock_supabase_trips_and_locations
     trip_id = str(uuid4())
-    mock_sb = MockSupabase({trip_id: "11111111-2222-3333-4444-555555555555"}, "11111111-2222-3333-4444-555555555555")
+    uid = "11111111-2222-3333-4444-555555555555"
+    mock_sb = MockSupabase({trip_id: uid}, uid)
     table = mock_sb.table("locations")
     builder = table.insert({"name": "x", "trip_id": trip_id})
     assert hasattr(builder, "execute"), "insert builder must have execute()"
-    assert not hasattr(builder, "select"), "insert builder must NOT have select() - real Supabase SyncQueryRequestBuilder has no select"
+    assert not hasattr(builder, "select"), (
+        "insert builder must NOT have select() "
+        "- real Supabase SyncQueryRequestBuilder has no select"
+    )
 
 
 def test_locations_mock_update_has_no_select(mock_supabase_trips_and_locations):
-    """Regression: update() returns builder with eq(), execute() but NOT select() (matches real Supabase).
-    Router must use update().eq().eq().execute() then separate select(), not update().select().execute().
+    """Regression: update() builder has eq(), execute() but NOT select().
+
+    Matches real Supabase SyncFilterRequestBuilder.
+    Router must use update().eq().eq().execute() then separate select().
     """
     _locations_inserted, MockSupabase = mock_supabase_trips_and_locations
-    mock_sb = MockSupabase({}, "11111111-2222-3333-4444-555555555555")
+    uid = "11111111-2222-3333-4444-555555555555"
+    mock_sb = MockSupabase({}, uid)
     table = mock_sb.table("locations")
     builder = table.update({"name": "x"})
-    assert hasattr(builder, "eq") and hasattr(builder, "execute"), "update builder must have eq() and execute()"
-    assert not hasattr(builder, "select"), "update builder must NOT have select() - real Supabase SyncFilterRequestBuilder has no select"
+    assert hasattr(builder, "eq") and hasattr(builder, "execute"), (
+        "update builder must have eq() and execute()"
+    )
+    assert not hasattr(builder, "select"), (
+        "update builder must NOT have select() "
+        "- real Supabase SyncFilterRequestBuilder has no select"
+    )
 
 
 def test_add_location_with_extended_fields_returns_201(
@@ -55,7 +69,7 @@ def test_add_location_with_extended_fields_returns_201(
             json={
                 "name": "Louvre",
                 "city": "Paris",
-                "working_hours": "9:00–18:00",
+                "working_hours": "9:00-18:00",
                 "requires_booking": "yes",
                 "category": "Museum",
             },
@@ -64,7 +78,7 @@ def test_add_location_with_extended_fields_returns_201(
         data = r.json()
         assert data["name"] == "Louvre"
         assert data["city"] == "Paris"
-        assert data["working_hours"] == "9:00–18:00"
+        assert data["working_hours"] == "9:00-18:00"
         assert data["requires_booking"] == "yes"
         assert data["category"] == "Museum"
         assert data["added_by_user_id"] == str(mock_user_id)
@@ -73,7 +87,7 @@ def test_add_location_with_extended_fields_returns_201(
         assert len(locations_inserted) == 1
         loc = locations_inserted[0]
         assert loc["city"] == "Paris"
-        assert loc["working_hours"] == "9:00–18:00"
+        assert loc["working_hours"] == "9:00-18:00"
         assert loc["requires_booking"] == "yes"
         assert loc["category"] == "Museum"
         assert loc["added_by_user_id"] == str(mock_user_id)
@@ -237,7 +251,9 @@ class _LocationsTableMock:
             rows = [
                 r
                 for r in self._store.values()
-                if (not self._filter_location_id or r.get("location_id") == self._filter_location_id)
+                if (
+                    not self._filter_location_id or r.get("location_id") == self._filter_location_id
+                )
                 and (not self._filter_trip_id or r.get("trip_id") == self._filter_trip_id)
             ]
             if not rows:
@@ -293,7 +309,7 @@ def test_update_location_extended_fields(
             f"/api/v1/trips/{trip_id}/locations/{loc_id}",
             json={
                 "city": "Milan",
-                "working_hours": "8–20",
+                "working_hours": "8-20",
                 "requires_booking": "yes_done",
                 "category": "Restaurant",
             },
@@ -301,7 +317,7 @@ def test_update_location_extended_fields(
         assert r.status_code == 200
         data = r.json()
         assert data["city"] == "Milan"
-        assert data["working_hours"] == "8–20"
+        assert data["working_hours"] == "8-20"
         assert data["requires_booking"] == "yes_done"
         assert data["category"] == "Restaurant"
     finally:
@@ -340,5 +356,144 @@ def test_batch_add_locations_with_extended_fields(
         assert len(locations_inserted) == 2
         assert locations_inserted[0]["category"] == "Museum"
         assert locations_inserted[1]["city"] == "Berlin"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_add_location_empty_strings_coerced_to_none(
+    client: TestClient,
+    mock_user_id: UUID,
+    mock_supabase_trips_and_locations,
+):
+    """Empty strings for city, working_hours -> null in DB row."""
+    locations_inserted, MockSupabase = mock_supabase_trips_and_locations
+    trip_id = str(uuid4())
+    mock_sb = MockSupabase({trip_id: str(mock_user_id)}, mock_user_id)
+
+    async def override_user():
+        return mock_user_id
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        r = client.post(
+            f"/api/v1/trips/{trip_id}/locations",
+            json={
+                "name": "Place",
+                "city": "",
+                "working_hours": "",
+                "address": "",
+                "google_link": "",
+                "note": "",
+            },
+        )
+        assert r.status_code == 201
+        data = r.json()
+        assert data["city"] is None
+        assert data["working_hours"] is None
+        assert data["address"] is None
+        assert data["google_link"] is None
+        assert data["note"] is None
+        assert len(locations_inserted) == 1
+        loc = locations_inserted[0]
+        assert loc["city"] is None
+        assert loc["working_hours"] is None
+        assert loc["address"] is None
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_update_location_empty_strings_coerced_to_none(
+    client: TestClient,
+    mock_user_id: UUID,
+):
+    """PATCH with empty strings for text fields -> coerced to null."""
+    trips_store: dict = {}
+    locations_store: dict = {}
+    trip_id = str(uuid4())
+    loc_id = str(uuid4())
+    trips_store[trip_id] = _make_trip(trip_id, mock_user_id)
+    locations_store[loc_id] = _make_location(loc_id, trip_id, city="Paris", working_hours="9-17")
+    mock_sb = _MockSupabaseUpdate(trips_store, locations_store)
+
+    async def override_user():
+        return mock_user_id
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        r = client.patch(
+            f"/api/v1/trips/{trip_id}/locations/{loc_id}",
+            json={"city": "", "working_hours": ""},
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["city"] is None
+        assert data["working_hours"] is None
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_add_location_added_by_email_resolved(
+    client: TestClient,
+    mock_user_id: UUID,
+    mock_supabase_trips_and_locations,
+):
+    """added_by_email is resolved from auth when user_emails mapping is provided."""
+    _locations_inserted, MockSupabase = mock_supabase_trips_and_locations
+    trip_id = str(uuid4())
+    mock_sb = MockSupabase(
+        {trip_id: str(mock_user_id)},
+        mock_user_id,
+        user_emails={str(mock_user_id): "alice@example.com"},
+    )
+
+    async def override_user():
+        return mock_user_id
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        r = client.post(
+            f"/api/v1/trips/{trip_id}/locations",
+            json={"name": "Place"},
+        )
+        assert r.status_code == 201
+        data = r.json()
+        assert data["added_by_user_id"] == str(mock_user_id)
+        assert data["added_by_email"] == "alice@example.com"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_list_locations_added_by_email_resolved(
+    client: TestClient,
+    mock_user_id: UUID,
+    mock_supabase_trips_and_locations,
+):
+    """GET list also resolves added_by_email."""
+    _locations_inserted, MockSupabase = mock_supabase_trips_and_locations
+    trip_id = str(uuid4())
+    mock_sb = MockSupabase(
+        {trip_id: str(mock_user_id)},
+        mock_user_id,
+        user_emails={str(mock_user_id): "bob@example.com"},
+    )
+
+    async def override_user():
+        return mock_user_id
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        client.post(
+            f"/api/v1/trips/{trip_id}/locations",
+            json={"name": "Cafe"},
+        )
+        r = client.get(f"/api/v1/trips/{trip_id}/locations")
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data) == 1
+        assert data[0]["added_by_email"] == "bob@example.com"
     finally:
         app.dependency_overrides.clear()
