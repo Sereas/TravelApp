@@ -12,7 +12,7 @@ TravelApp is a Python/FastAPI backend API and a Next.js Web frontend for travel 
 ```bash
 python3 -m pytest -v
 ```
-All tests mock Supabase entirely — no real Supabase instance is needed to run the test suite (72 tests pass across backend+frontend, 1 RLS integration test skipped by default).
+All tests mock Supabase entirely — no real Supabase instance is needed to run the test suite (67 backend + 81 frontend tests pass, 1 RLS integration test skipped by default).
 
 **Frontend:** From repo root, `cd frontend` then:
 ```bash
