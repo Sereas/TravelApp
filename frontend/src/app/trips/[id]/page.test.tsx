@@ -101,20 +101,22 @@ describe("TripDetailPage", () => {
     expect(screen.getByText("Louvre Museum")).toBeInTheDocument();
   });
 
-  it("renders extended location fields (city, category, booking, hours, email)", async () => {
+  it("renders extended location fields via LocationCard", async () => {
     mockGetTrip.mockResolvedValue(sampleTrip);
     mockListLocations.mockResolvedValue(sampleLocations);
     render(<TripDetailPage />);
 
     await screen.findByText("Eiffel Tower");
+    expect(screen.getByText("Viewpoint")).toBeInTheDocument();
     expect(
-      screen.getByText("Paris · Viewpoint · Yes · 9:00-23:00")
+      screen.getByText("Paris · Champ de Mars, Paris")
     ).toBeInTheDocument();
+    expect(screen.getByText("9:00-23:00")).toBeInTheDocument();
+    expect(screen.getByText("Booking needed")).toBeInTheDocument();
     expect(screen.getByText("Added by alice@example.com")).toBeInTheDocument();
-    expect(screen.getByText("Paris · Museum")).toBeInTheDocument();
-    expect(screen.getByText("Champ de Mars, Paris")).toBeInTheDocument();
+    expect(screen.getByText("Museum")).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Open in Google Maps" })
+      screen.getByRole("link", { name: /open in google maps/i })
     ).toBeInTheDocument();
   });
 
@@ -362,5 +364,96 @@ describe("TripDetailPage", () => {
 
     expect(screen.getByText("Eiffel Tower")).toBeInTheDocument();
     expect(mockUpdateLocation).not.toHaveBeenCalled();
+  });
+
+  // --- Location pool features ---
+
+  it("shows location count in section header", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue(sampleLocations);
+    render(<TripDetailPage />);
+
+    await screen.findByText("Eiffel Tower");
+    expect(screen.getByText("(2)")).toBeInTheDocument();
+  });
+
+  it("shows category filter chips when 2+ categories exist", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue(sampleLocations);
+    render(<TripDetailPage />);
+
+    await screen.findByText("Eiffel Tower");
+    expect(screen.getByText("All (2)")).toBeInTheDocument();
+    expect(screen.getByText("Museum (1)")).toBeInTheDocument();
+    expect(screen.getByText("Viewpoint (1)")).toBeInTheDocument();
+  });
+
+  it("filters locations by category when chip is clicked", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue(sampleLocations);
+    render(<TripDetailPage />);
+
+    await screen.findByText("Eiffel Tower");
+    await userEvent.click(screen.getByText("Museum (1)"));
+
+    expect(screen.getByText("Louvre Museum")).toBeInTheDocument();
+    expect(screen.queryByText("Eiffel Tower")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByText("All (2)"));
+    expect(screen.getByText("Eiffel Tower")).toBeInTheDocument();
+    expect(screen.getByText("Louvre Museum")).toBeInTheDocument();
+  });
+
+  it("does not show filter chips with only 1 category", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue([sampleLocations[0]]);
+    render(<TripDetailPage />);
+
+    await screen.findByText("Eiffel Tower");
+    expect(screen.queryByText("All (1)")).not.toBeInTheDocument();
+  });
+
+  it("does not show group-by-city when all locations share a city", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue(sampleLocations);
+    render(<TripDetailPage />);
+
+    await screen.findByText("Eiffel Tower");
+    expect(
+      screen.queryByRole("button", { name: /group by city/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows group-by-city toggle when locations span 2+ cities", async () => {
+    const multiCityLocations = [
+      ...sampleLocations,
+      {
+        id: "loc-3",
+        name: "Promenade des Anglais",
+        address: null,
+        google_link: null,
+        note: null,
+        added_by_user_id: null,
+        added_by_email: null,
+        city: "Nice",
+        working_hours: null,
+        requires_booking: null,
+        category: "Walking around",
+      },
+    ];
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue(multiCityLocations);
+    render(<TripDetailPage />);
+
+    await screen.findByText("Eiffel Tower");
+    const groupBtn = screen.getByRole("button", { name: /group by city/i });
+    expect(groupBtn).toBeInTheDocument();
+
+    await userEvent.click(groupBtn);
+    const headings = screen.getAllByRole("heading", { level: 3 });
+    const cityNames = headings.map((h) => h.textContent);
+    expect(cityNames.some((t) => t?.includes("Nice"))).toBe(true);
+    expect(cityNames.some((t) => t?.includes("Paris"))).toBe(true);
+    expect(screen.getByText("Promenade des Anglais")).toBeInTheDocument();
   });
 });

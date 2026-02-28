@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api, type Trip, type Location } from "@/lib/api";
-import { LocationRow } from "@/components/locations/LocationRow";
+import { LocationCard } from "@/components/locations/LocationCard";
 import { AddLocationForm } from "@/components/locations/AddLocationForm";
 import { EditLocationRow } from "@/components/locations/EditLocationRow";
 import { EditTripForm } from "@/components/trips/EditTripForm";
@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/feedback/EmptyState";
 import { LoadingSpinner } from "@/components/feedback/LoadingSpinner";
 import { ErrorBanner } from "@/components/feedback/ErrorBanner";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr + "T00:00:00");
@@ -46,6 +47,8 @@ export default function TripDetailPage() {
   const [editingLocationId, setEditingLocationId] = useState<string | null>(
     null
   );
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [groupByCity, setGroupByCity] = useState(false);
 
   async function fetchData() {
     setError(null);
@@ -76,6 +79,43 @@ export default function TripDetailPage() {
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tripId]);
+
+  const categoryOptions = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const loc of locations) {
+      const cat = loc.category ?? "Uncategorized";
+      counts[cat] = (counts[cat] || 0) + 1;
+    }
+    return Object.entries(counts).sort(([a], [b]) => a.localeCompare(b));
+  }, [locations]);
+
+  const cities = useMemo(() => {
+    const set = new Set<string>();
+    for (const loc of locations) {
+      if (loc.city) set.add(loc.city);
+    }
+    return set;
+  }, [locations]);
+
+  const filteredLocations = useMemo(
+    () =>
+      categoryFilter
+        ? locations.filter(
+            (loc) => (loc.category ?? "Uncategorized") === categoryFilter
+          )
+        : locations,
+    [locations, categoryFilter]
+  );
+
+  const groupedLocations = useMemo(() => {
+    if (!groupByCity) return null;
+    const groups: Record<string, Location[]> = {};
+    for (const loc of filteredLocations) {
+      const key = loc.city || "No city";
+      (groups[key] ??= []).push(loc);
+    }
+    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
+  }, [filteredLocations, groupByCity]);
 
   if (loading) {
     return (
@@ -115,6 +155,44 @@ export default function TripDetailPage() {
       prev.map((loc) => (loc.id === updated.id ? updated : loc))
     );
     setEditingLocationId(null);
+  }
+
+  function renderLocationCard(loc: Location) {
+    if (editingLocationId === loc.id) {
+      return (
+        <EditLocationRow
+          key={loc.id}
+          tripId={tripId}
+          location={loc}
+          onUpdated={handleLocationUpdated}
+          onCancel={() => setEditingLocationId(null)}
+        />
+      );
+    }
+    return (
+      <LocationCard
+        key={loc.id}
+        id={loc.id}
+        name={loc.name}
+        address={loc.address}
+        google_link={loc.google_link}
+        note={loc.note}
+        city={loc.city}
+        category={loc.category}
+        requires_booking={loc.requires_booking}
+        working_hours={loc.working_hours}
+        added_by_email={loc.added_by_email}
+        actions={
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setEditingLocationId(loc.id)}
+          >
+            Edit
+          </Button>
+        }
+      />
+    );
   }
 
   return (
@@ -158,13 +236,68 @@ export default function TripDetailPage() {
 
       <section>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Locations</h2>
-          {!addingLocation && locations.length > 0 && (
-            <Button size="sm" onClick={() => setAddingLocation(true)}>
-              Add location
-            </Button>
-          )}
+          <h2 className="text-lg font-semibold">
+            Locations
+            {locations.length > 0 && (
+              <span className="ml-1.5 text-sm font-normal text-muted-foreground">
+                ({locations.length})
+              </span>
+            )}
+          </h2>
+          <div className="flex items-center gap-2">
+            {cities.size >= 2 && (
+              <Button
+                variant={groupByCity ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => setGroupByCity((v) => !v)}
+              >
+                {groupByCity ? "Ungroup" : "Group by city"}
+              </Button>
+            )}
+            {!addingLocation && locations.length > 0 && (
+              <Button size="sm" onClick={() => setAddingLocation(true)}>
+                Add location
+              </Button>
+            )}
+          </div>
         </div>
+
+        {/* Category filter chips */}
+        {categoryOptions.length >= 2 && (
+          <div
+            className="mb-3 flex flex-wrap gap-1.5"
+            role="toolbar"
+            aria-label="Filter locations by category"
+          >
+            <button
+              className={cn(
+                "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                categoryFilter === null
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-background text-muted-foreground hover:bg-accent"
+              )}
+              onClick={() => setCategoryFilter(null)}
+            >
+              All ({locations.length})
+            </button>
+            {categoryOptions.map(([cat, count]) => (
+              <button
+                key={cat}
+                className={cn(
+                  "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                  categoryFilter === cat
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-background text-muted-foreground hover:bg-accent"
+                )}
+                onClick={() =>
+                  setCategoryFilter(categoryFilter === cat ? null : cat)
+                }
+              >
+                {cat} ({count})
+              </button>
+            ))}
+          </div>
+        )}
 
         {addingLocation && (
           <div className="mb-4">
@@ -182,42 +315,21 @@ export default function TripDetailPage() {
               Add a location
             </Button>
           </EmptyState>
+        ) : groupedLocations ? (
+          <div className="space-y-4">
+            {groupedLocations.map(([cityName, locs]) => (
+              <div key={cityName}>
+                <h3 className="mb-2 text-sm font-semibold text-muted-foreground">
+                  {cityName}{" "}
+                  <span className="font-normal">({locs.length})</span>
+                </h3>
+                <div className="space-y-2">{locs.map(renderLocationCard)}</div>
+              </div>
+            ))}
+          </div>
         ) : (
           <div className="space-y-2">
-            {locations.map((loc) =>
-              editingLocationId === loc.id ? (
-                <EditLocationRow
-                  key={loc.id}
-                  tripId={tripId}
-                  location={loc}
-                  onUpdated={handleLocationUpdated}
-                  onCancel={() => setEditingLocationId(null)}
-                />
-              ) : (
-                <LocationRow
-                  key={loc.id}
-                  id={loc.id}
-                  name={loc.name}
-                  address={loc.address}
-                  google_link={loc.google_link}
-                  note={loc.note}
-                  city={loc.city}
-                  category={loc.category}
-                  requires_booking={loc.requires_booking}
-                  working_hours={loc.working_hours}
-                  added_by_email={loc.added_by_email}
-                  actions={
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setEditingLocationId(loc.id)}
-                    >
-                      Edit
-                    </Button>
-                  }
-                />
-              )
-            )}
+            {filteredLocations.map(renderLocationCard)}
           </div>
         )}
       </section>
