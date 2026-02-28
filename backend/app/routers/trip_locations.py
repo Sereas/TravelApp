@@ -17,6 +17,43 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger("locations")
 
 router = APIRouter(prefix="/trips", tags=["trips-locations"])
 
+_LOCATIONS_SELECT = (
+    "location_id, trip_id, name, address, google_link, note, "
+    "added_by_user_id, city, working_hours, requires_booking, category"
+)
+
+
+def _resolve_user_email(supabase_client, user_id: str | None) -> str | None:
+    """Resolve email from auth.users for added_by_user_id. Returns None on failure."""
+    if not user_id:
+        return None
+    try:
+        resp = supabase_client.auth.admin.get_user_by_id(user_id)
+        user = getattr(resp, "user", None) if resp else None
+        if user:
+            return getattr(user, "email", None)
+        return None
+    except Exception:
+        return None
+
+
+def _loc_to_response(supabase_client, loc: dict) -> LocationResponse:
+    """Build LocationResponse from a locations row dict."""
+    added_by_uid = loc.get("added_by_user_id")
+    return LocationResponse(
+        id=str(loc["location_id"]),
+        name=loc.get("name", ""),
+        address=loc.get("address"),
+        google_link=loc.get("google_link"),
+        note=loc.get("note"),
+        added_by_user_id=str(added_by_uid) if added_by_uid else None,
+        added_by_email=_resolve_user_email(supabase_client, str(added_by_uid) if added_by_uid else None),
+        city=loc.get("city"),
+        working_hours=loc.get("working_hours"),
+        requires_booking=loc.get("requires_booking"),
+        category=loc.get("category"),
+    )
+
 
 @router.post(
     "/{trip_id}/locations",
@@ -53,24 +90,39 @@ async def add_location(
         "address": body.address,
         "google_link": body.google_link,
         "note": body.note,
+        "added_by_user_id": str(user_id),
+        "city": body.city,
+        "working_hours": body.working_hours,
+        "requires_booking": body.requires_booking,
+        "category": body.category,
     }
     result = supabase.table("locations").insert(row).execute()
     if not result.data or len(result.data) == 0:
-        raise RuntimeError("Insert did not return row")
+        logger.error("location_insert_failed", trip_id=str(trip_id))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create location; please try again",
+        )
     loc = result.data[0]
+    # Fetch full row with all columns (insert().execute() returns row but may omit some columns)
+    loc_id = loc.get("location_id")
+    if loc_id:
+        fetch = (
+            supabase.table("locations")
+            .select(_LOCATIONS_SELECT)
+            .eq("location_id", str(loc_id))
+            .eq("trip_id", str(trip_id))
+            .execute()
+        )
+        if fetch.data and len(fetch.data) > 0:
+            loc = fetch.data[0]
     logger.info(
         "location_added",
         location_id=str(loc["location_id"]),
         trip_id=str(trip_id),
         name=body.name,
     )
-    return LocationResponse(
-        id=str(loc["location_id"]),
-        name=loc.get("name", body.name),
-        address=loc.get("address"),
-        google_link=loc.get("google_link"),
-        note=loc.get("note"),
-    )
+    return _loc_to_response(supabase, loc)
 
 
 @router.get(
@@ -103,22 +155,13 @@ async def list_locations(
         )
     result = (
         supabase.table("locations")
-        .select("location_id, trip_id, name, address, google_link, note")
+        .select(_LOCATIONS_SELECT)
         .eq("trip_id", str(trip_id))
         .execute()
     )
     items = result.data if result.data else []
     logger.info("locations_listed", trip_id=str(trip_id), count=len(items))
-    return [
-        LocationResponse(
-            id=str(loc["location_id"]),
-            name=loc.get("name", ""),
-            address=loc.get("address"),
-            google_link=loc.get("google_link"),
-            note=loc.get("note"),
-        )
-        for loc in items
-    ]
+    return [_loc_to_response(supabase, loc) for loc in items]
 
 
 @router.post(
@@ -163,23 +206,43 @@ async def batch_add_locations(
             "address": item.address,
             "google_link": item.google_link,
             "note": item.note,
+            "added_by_user_id": str(user_id),
+            "city": item.city,
+            "working_hours": item.working_hours,
+            "requires_booking": item.requires_booking,
+            "category": item.category,
         }
         for item in body
     ]
     result = supabase.table("locations").insert(rows).execute()
     if not result.data or len(result.data) != len(body):
-        raise RuntimeError("Insert did not return expected rows")
-    logger.info("locations_batch_added", trip_id=str(trip_id), count=len(body))
-    return [
-        LocationResponse(
-            id=str(loc["location_id"]),
-            name=loc.get("name", body[i].name),
-            address=loc.get("address"),
-            google_link=loc.get("google_link"),
-            note=loc.get("note"),
+        logger.error(
+            "locations_batch_insert_failed",
+            trip_id=str(trip_id),
+            expected=len(body),
+            got=len(result.data) if result.data else 0,
         )
-        for i, loc in enumerate(result.data)
-    ]
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create one or more locations; please try again",
+        )
+    # Fetch full rows with all columns
+    out = []
+    for loc in result.data:
+        loc_id = loc.get("location_id")
+        if loc_id:
+            fetch = (
+                supabase.table("locations")
+                .select(_LOCATIONS_SELECT)
+                .eq("location_id", str(loc_id))
+                .eq("trip_id", str(trip_id))
+                .execute()
+            )
+            if fetch.data and len(fetch.data) > 0:
+                loc = fetch.data[0]
+        out.append(_loc_to_response(supabase, loc))
+    logger.info("locations_batch_added", trip_id=str(trip_id), count=len(body))
+    return out
 
 
 @router.patch(
@@ -217,7 +280,7 @@ async def update_location(
     # Ensure the location exists under this trip
     loc_result = (
         supabase.table("locations")
-        .select("location_id, trip_id, name, address, google_link, note")
+        .select(_LOCATIONS_SELECT)
         .eq("location_id", str(location_id))
         .eq("trip_id", str(trip_id))
         .execute()
@@ -243,6 +306,14 @@ async def update_location(
         update_data["google_link"] = body.google_link
     if "note" in body.model_fields_set:
         update_data["note"] = body.note
+    if "city" in body.model_fields_set:
+        update_data["city"] = body.city
+    if "working_hours" in body.model_fields_set:
+        update_data["working_hours"] = body.working_hours
+    if "requires_booking" in body.model_fields_set:
+        update_data["requires_booking"] = body.requires_booking
+    if "category" in body.model_fields_set:
+        update_data["category"] = body.category
 
     if not update_data:
         raise HTTPException(
@@ -250,29 +321,36 @@ async def update_location(
             detail="At least one field must be provided for update",
         )
 
-    update_result = (
+    supabase.table("locations").update(update_data).eq(
+        "location_id", str(location_id)
+    ).eq("trip_id", str(trip_id)).execute()
+
+    # Fetch full row (update().execute() returns representation but builder has no .select())
+    fetch = (
         supabase.table("locations")
-        .update(update_data)
+        .select(_LOCATIONS_SELECT)
         .eq("location_id", str(location_id))
         .eq("trip_id", str(trip_id))
         .execute()
     )
-    if not update_result.data or len(update_result.data) == 0:
-        raise RuntimeError("Update did not return row")
-    loc = update_result.data[0]
+    if not fetch.data or len(fetch.data) == 0:
+        logger.error(
+            "location_update_fetch_failed",
+            location_id=str(location_id),
+            trip_id=str(trip_id),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Location was updated but could not be retrieved; please refresh",
+        )
+    loc = fetch.data[0]
     logger.info(
         "location_updated",
         location_id=str(location_id),
         trip_id=str(trip_id),
         fields=list(update_data.keys()),
     )
-    return LocationResponse(
-        id=str(loc["location_id"]),
-        name=loc.get("name", ""),
-        address=loc.get("address"),
-        google_link=loc.get("google_link"),
-        note=loc.get("note"),
-    )
+    return _loc_to_response(supabase, loc)
 
 
 @router.delete(

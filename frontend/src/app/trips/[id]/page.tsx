@@ -198,7 +198,14 @@ export default function TripDetailPage() {
                   key={loc.id}
                   id={loc.id}
                   name={loc.name}
+                  address={loc.address}
+                  google_link={loc.google_link}
                   note={loc.note}
+                  city={loc.city}
+                  category={loc.category}
+                  requires_booking={loc.requires_booking}
+                  working_hours={loc.working_hours}
+                  added_by_email={loc.added_by_email}
                   actions={
                     <Button
                       variant="ghost"
