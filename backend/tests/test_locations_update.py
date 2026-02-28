@@ -66,16 +66,20 @@ class _LocationsTableMock:
         return rows
 
     def execute(self):
+        # update().eq().eq().select().execute() — apply update when _update_data set
+        if self._update_data is not None:
+            rows = self._filter_rows()
+            if not rows:
+                out = type("Result", (), {"data": []})()
+            else:
+                row = rows[0]
+                row.update(self._update_data)
+                out = type("Result", (), {"data": [row]})()
+            self._update_data = None
+            return out
         if self._mode == "select":
             rows = self._filter_rows()
             return type("Result", (), {"data": rows})()
-        if self._mode == "update":
-            rows = self._filter_rows()
-            if not rows:
-                return type("Result", (), {"data": []})()
-            row = rows[0]
-            row.update(self._update_data)
-            return type("Result", (), {"data": [row]})()
         return type("Result", (), {"data": []})()
 
 
@@ -99,15 +103,22 @@ def _make_trip(trip_id: str, user_id: UUID):
     }
 
 
-def _make_location(location_id: str, trip_id: str):
-    return {
+def _make_location(location_id: str, trip_id: str, **kwargs):
+    base = {
         "location_id": location_id,
         "trip_id": trip_id,
         "name": "Old name",
         "address": "Old address",
         "google_link": "https://old.example.com",
         "note": "Old note",
+        "added_by_user_id": None,
+        "city": None,
+        "working_hours": None,
+        "requires_booking": None,
+        "category": None,
     }
+    base.update(kwargs)
+    return base
 
 
 def test_update_location_name_only(
@@ -287,6 +298,62 @@ def test_update_location_nonexistent_location_returns_404(
         )
         assert r.status_code == 404
         assert r.json().get("detail") == "Location not found"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_update_location_invalid_requires_booking_returns_422(
+    client: TestClient,
+    mock_user_id: UUID,
+):
+    """PATCH with requires_booking not in (no, yes, yes_done) -> 422."""
+    trips_store: dict[str, dict] = {}
+    locations_store: dict[str, dict] = {}
+    trip_id = str(uuid4())
+    loc_id = str(uuid4())
+    trips_store[trip_id] = _make_trip(trip_id, mock_user_id)
+    locations_store[loc_id] = _make_location(loc_id, trip_id)
+    mock_sb = MockSupabaseLocations(trips_store, locations_store)
+
+    async def override_user():
+        return mock_user_id
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        r = client.patch(
+            f"/api/v1/trips/{trip_id}/locations/{loc_id}",
+            json={"requires_booking": "maybe"},
+        )
+        assert r.status_code == 422
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_update_location_invalid_category_returns_422(
+    client: TestClient,
+    mock_user_id: UUID,
+):
+    """PATCH with category not in allowed 14 values -> 422."""
+    trips_store: dict[str, dict] = {}
+    locations_store: dict[str, dict] = {}
+    trip_id = str(uuid4())
+    loc_id = str(uuid4())
+    trips_store[trip_id] = _make_trip(trip_id, mock_user_id)
+    locations_store[loc_id] = _make_location(loc_id, trip_id)
+    mock_sb = MockSupabaseLocations(trips_store, locations_store)
+
+    async def override_user():
+        return mock_user_id
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        r = client.patch(
+            f"/api/v1/trips/{trip_id}/locations/{loc_id}",
+            json={"category": "InvalidCategory"},
+        )
+        assert r.status_code == 422
     finally:
         app.dependency_overrides.clear()
 

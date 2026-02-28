@@ -166,6 +166,19 @@ def test_add_location_then_verify_in_db(
         app.dependency_overrides.clear()
 
 
+def test_add_location_no_jwt_returns_401(client: TestClient, monkeypatch):
+    """No Authorization header on POST add location -> 401."""
+    monkeypatch.setenv("SUPABASE_JWT_SECRET", "test-secret")
+    from backend.app.core.config import get_settings
+
+    get_settings.cache_clear()
+    r = client.post(
+        "/api/v1/trips/00000000-0000-0000-0000-000000000001/locations",
+        json={"name": "Some Place"},
+    )
+    assert r.status_code == 401
+
+
 def test_add_location_duplicate_names_allowed(
     client: TestClient,
     mock_user_id,

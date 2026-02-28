@@ -10,9 +10,9 @@ Next.js 14 Web app (App Router) for trip planning. Uses TypeScript, Tailwind CSS
 | --------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `src/app/`                  | App Router: `/` (landing), `/login`, `/auth/callback`, `/auth/logout`, `/trips`. `layout.tsx`, `globals.css`. |
 | `src/components/layout/`    | PageShell, SiteHeader, UserNav (user email + sign out). Wraps all pages.                                      |
-| `src/components/ui/`        | Button, Card, Input, Label, Dialog, Popover, Calendar, DatePicker. Shared primitives (design tokens).        |
+| `src/components/ui/`        | Button, Card, Input, Label, Dialog, Popover, Calendar, DatePicker. Shared primitives (design tokens).         |
 | `src/components/trips/`     | TripCard and CreateTripDialog. Trip list items and trip creation dialog.                                      |
-| `src/components/locations/` | LocationRow. Location list rows.                                                                              |
+| `src/components/locations/` | LocationRow (name, address, Google Maps link, note), AddLocationForm, EditLocationRow. See [location-fields-and-ui.md](../docs/features/location-fields-and-ui.md). |
 | `src/components/feedback/`  | EmptyState, ErrorBanner, LoadingSpinner. Empty/error/loading states.                                          |
 | `src/lib/`                  | `utils.ts` (e.g. `cn()` for class names).                                                                     |
 | `src/test/`                 | Vitest setup (`setup.ts`).                                                                                    |

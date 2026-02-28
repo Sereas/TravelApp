@@ -67,6 +67,12 @@ export interface Location {
   address: string | null;
   google_link: string | null;
   note: string | null;
+  added_by_user_id: string | null;
+  added_by_email: string | null;
+  city: string | null;
+  working_hours: string | null;
+  requires_booking: string | null; // no | yes | yes_done
+  category: string | null;
 }
 
 export const api = {
@@ -113,9 +119,31 @@ export const api = {
         address?: string | null;
         google_link?: string | null;
         note?: string | null;
+        city?: string | null;
+        working_hours?: string | null;
+        requires_booking?: string | null;
+        category?: string | null;
       }
     ) =>
       request<Location>(`/api/v1/trips/${tripId}/locations`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+
+    batchAdd: (
+      tripId: string,
+      body: Array<{
+        name: string;
+        address?: string | null;
+        google_link?: string | null;
+        note?: string | null;
+        city?: string | null;
+        working_hours?: string | null;
+        requires_booking?: string | null;
+        category?: string | null;
+      }>
+    ) =>
+      request<Location[]>(`/api/v1/trips/${tripId}/locations/batch`, {
         method: "POST",
         body: JSON.stringify(body),
       }),
@@ -128,6 +156,10 @@ export const api = {
         address?: string | null;
         google_link?: string | null;
         note?: string | null;
+        city?: string | null;
+        working_hours?: string | null;
+        requires_booking?: string | null;
+        category?: string | null;
       }
     ) =>
       request<Location>(`/api/v1/trips/${tripId}/locations/${locationId}`, {

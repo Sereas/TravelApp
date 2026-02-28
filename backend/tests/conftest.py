@@ -219,10 +219,71 @@ def mock_supabase_trips_and_locations():
                 },
             )()
 
+    def _location_row(loc_id: str, r: dict):
+        """Build a full location row (with extended fields) for select/return."""
+        return {
+            "location_id": loc_id,
+            "trip_id": r.get("trip_id"),
+            "name": r.get("name", ""),
+            "address": r.get("address"),
+            "google_link": r.get("google_link"),
+            "note": r.get("note"),
+            "added_by_user_id": r.get("added_by_user_id"),
+            "city": r.get("city"),
+            "working_hours": r.get("working_hours"),
+            "requires_booking": r.get("requires_booking"),
+            "category": r.get("category"),
+        }
+
+    class _InsertBuilder:
+        """Mimics Supabase insert(): has execute() but NO select() (real client is SyncQueryRequestBuilder)."""
+
+        def __init__(self, store, rows):
+            self._store = store
+            self._rows = [dict(r) for r in (rows if isinstance(rows, list) else [rows])]
+
+        def execute(self):
+            out_list = []
+            for r in self._rows:
+                loc_id = str(_uuid.uuid4())
+                out = _location_row(loc_id, r)
+                self._store.append(out)
+                out_list.append(out)
+            return type("Result", (), {"data": out_list})()
+
+    class _UpdateBuilder:
+        """Mimics Supabase update(): has eq(), execute() but NO select() (real client is SyncFilterRequestBuilder)."""
+
+        def __init__(self, store, update_data):
+            self._store = store
+            self._update_data = dict(update_data)
+            self._filter_location_id = None
+            self._filter_trip_id = None
+
+        def eq(self, key, value):
+            val = str(value) if value is not None else None
+            if key == "location_id":
+                self._filter_location_id = val
+            elif key == "trip_id":
+                self._filter_trip_id = val
+            return self
+
+        def execute(self):
+            filtered = [
+                loc
+                for loc in self._store
+                if (not self._filter_location_id or loc.get("location_id") == self._filter_location_id)
+                and (not self._filter_trip_id or loc.get("trip_id") == self._filter_trip_id)
+            ]
+            if not filtered:
+                return type("Result", (), {"data": []})()
+            for row in filtered:
+                row.update(self._update_data)
+            return type("Result", (), {"data": filtered})()
+
     class _LocationsTable:
         def __init__(self, store):
             self._store = store
-            self._rows = None
             self._select_trip_id = None
             self._is_delete = False
             self._delete_location_id = None
@@ -230,7 +291,6 @@ def mock_supabase_trips_and_locations():
             self._select_location_id = None
 
         def select(self, *args):
-            self._rows = None
             self._is_delete = False
             self._select_location_id = None
             return self
@@ -240,7 +300,6 @@ def mock_supabase_trips_and_locations():
             self._delete_location_id = None
             self._delete_trip_id = None
             self._select_trip_id = None
-            self._rows = None
             return self
 
         def eq(self, key, value):
@@ -258,10 +317,10 @@ def mock_supabase_trips_and_locations():
             return self
 
         def insert(self, row):
-            self._select_trip_id = None
-            self._is_delete = False
-            self._rows = [dict(r) for r in (row if isinstance(row, list) else [row])]
-            return self
+            return _InsertBuilder(self._store, row)
+
+        def update(self, data):
+            return _UpdateBuilder(self._store, data)
 
         def execute(self):
             if self._is_delete:
@@ -285,22 +344,7 @@ def mock_supabase_trips_and_locations():
                         if loc.get("location_id") == self._select_location_id
                     ]
                 return type("Result", (), {"data": filtered})()
-            if self._rows is None:
-                return type("Result", (), {"data": []})()
-            out_list = []
-            for r in self._rows:
-                loc_id = str(_uuid.uuid4())
-                out = {
-                    "location_id": loc_id,
-                    "trip_id": r["trip_id"],
-                    "name": r["name"],
-                    "address": r.get("address"),
-                    "google_link": r.get("google_link"),
-                    "note": r.get("note"),
-                }
-                self._store.append(out)
-                out_list.append(out)
-            return type("Result", (), {"data": out_list})()
+            return type("Result", (), {"data": []})()
 
     class MockSupabaseTL2:
         def __init__(self, trip_owners, user_id):
