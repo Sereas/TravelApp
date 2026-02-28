@@ -50,16 +50,28 @@ const sampleLocations = [
   {
     id: "loc-1",
     name: "Eiffel Tower",
-    address: null,
+    address: "Champ de Mars, Paris",
     google_link: null,
     note: "Must visit at sunset",
+    added_by_user_id: "user-1",
+    added_by_email: "alice@example.com",
+    city: "Paris",
+    working_hours: "9:00-23:00",
+    requires_booking: "yes",
+    category: "Viewpoint",
   },
   {
     id: "loc-2",
     name: "Louvre Museum",
     address: null,
-    google_link: null,
+    google_link: "https://maps.google.com/?q=louvre",
     note: null,
+    added_by_user_id: null,
+    added_by_email: null,
+    city: "Paris",
+    working_hours: null,
+    requires_booking: null,
+    category: "Museum",
   },
 ];
 
@@ -87,6 +99,23 @@ describe("TripDetailPage", () => {
     expect(screen.getByText("Eiffel Tower")).toBeInTheDocument();
     expect(screen.getByText("Must visit at sunset")).toBeInTheDocument();
     expect(screen.getByText("Louvre Museum")).toBeInTheDocument();
+  });
+
+  it("renders extended location fields (city, category, booking, hours, email)", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue(sampleLocations);
+    render(<TripDetailPage />);
+
+    await screen.findByText("Eiffel Tower");
+    expect(
+      screen.getByText("Paris · Viewpoint · Yes · 9:00-23:00")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Added by alice@example.com")).toBeInTheDocument();
+    expect(screen.getByText("Paris · Museum")).toBeInTheDocument();
+    expect(screen.getByText("Champ de Mars, Paris")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Open in Google Maps" })
+    ).toBeInTheDocument();
   });
 
   it("renders trip with no dates gracefully", async () => {

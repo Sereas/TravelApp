@@ -41,7 +41,10 @@ describe("LocationRow", () => {
     );
     const link = screen.getByRole("link", { name: "Open in Google Maps" });
     expect(link).toBeInTheDocument();
-    expect(link).toHaveAttribute("href", "https://maps.google.com/?q=eiffel+tower");
+    expect(link).toHaveAttribute(
+      "href",
+      "https://maps.google.com/?q=eiffel+tower"
+    );
   });
 
   it("renders actions slot when provided", () => {
@@ -62,9 +65,7 @@ describe("LocationRow", () => {
   });
 
   it("renders requires_booking as label when provided", () => {
-    render(
-      <LocationRow id="1" name="Louvre" requires_booking="yes_done" />
-    );
+    render(<LocationRow id="1" name="Louvre" requires_booking="yes_done" />);
     expect(screen.getByText("Yes (done)")).toBeInTheDocument();
   });
 
@@ -83,11 +84,7 @@ describe("LocationRow", () => {
 
   it("renders Added by email when added_by_email provided", () => {
     render(
-      <LocationRow
-        id="1"
-        name="Louvre"
-        added_by_email="alice@example.com"
-      />
+      <LocationRow id="1" name="Louvre" added_by_email="alice@example.com" />
     );
     expect(screen.getByText("Added by alice@example.com")).toBeInTheDocument();
   });
@@ -98,9 +95,7 @@ describe("LocationRow", () => {
   });
 
   it("renders working_hours in meta line when provided", () => {
-    render(
-      <LocationRow id="1" name="Café" working_hours="9:00–18:00" />
-    );
+    render(<LocationRow id="1" name="Café" working_hours="9:00–18:00" />);
     expect(screen.getByText("9:00–18:00")).toBeInTheDocument();
   });
 });
