@@ -113,7 +113,7 @@ describe("TripDetailPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("9:00-23:00")).toBeInTheDocument();
     expect(screen.getByText("Booking needed")).toBeInTheDocument();
-    expect(screen.getByText("Added by alice@example.com")).toBeInTheDocument();
+    expect(screen.getByText("alice@example.com")).toBeInTheDocument();
     expect(screen.getByText("Museum")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /open in google maps/i })
