@@ -90,12 +90,12 @@ describe("LocationCard", () => {
     render(
       <LocationCard id="1" name="Louvre" added_by_email="alice@example.com" />
     );
-    expect(screen.getByText("Added by alice@example.com")).toBeInTheDocument();
+    expect(screen.getByText("alice@example.com")).toBeInTheDocument();
   });
 
   it("does not render added_by_email when null", () => {
     render(<LocationCard id="1" name="Louvre" />);
-    expect(screen.queryByText(/Added by/)).not.toBeInTheDocument();
+    expect(screen.queryByText("alice@example.com")).not.toBeInTheDocument();
   });
 
   it("renders actions slot", () => {
@@ -133,7 +133,7 @@ describe("LocationCard", () => {
     expect(screen.getByText("9:30-23:00")).toBeInTheDocument();
     expect(screen.getByText("Booking needed")).toBeInTheDocument();
     expect(screen.getByText("Must visit at sunset")).toBeInTheDocument();
-    expect(screen.getByText("Added by alice@example.com")).toBeInTheDocument();
+    expect(screen.getByText("alice@example.com")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /open in google maps/i })
     ).toBeInTheDocument();

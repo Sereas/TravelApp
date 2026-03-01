@@ -323,12 +323,14 @@ export default function TripDetailPage() {
                   {cityName}{" "}
                   <span className="font-normal">({locs.length})</span>
                 </h3>
-                <div className="space-y-2">{locs.map(renderLocationCard)}</div>
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                  {locs.map(renderLocationCard)}
+                </div>
               </div>
             ))}
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
             {filteredLocations.map(renderLocationCard)}
           </div>
         )}
