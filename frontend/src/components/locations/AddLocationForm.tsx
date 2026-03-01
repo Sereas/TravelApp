@@ -70,6 +70,7 @@ export function AddLocationForm({
           onChange={(e) => setName(e.target.value)}
           required
           autoFocus
+          autoComplete="off"
         />
       </div>
 
@@ -80,6 +81,7 @@ export function AddLocationForm({
           placeholder="e.g. 5 Avenue Anatole France, 75007 Paris"
           value={address}
           onChange={(e) => setAddress(e.target.value)}
+          autoComplete="off"
         />
       </div>
 
@@ -90,6 +92,7 @@ export function AddLocationForm({
           placeholder="e.g. Paris"
           value={city}
           onChange={(e) => setCity(e.target.value)}
+          autoComplete="off"
         />
       </div>
 
@@ -103,6 +106,7 @@ export function AddLocationForm({
           placeholder="https://maps.google.com/..."
           value={googleLink}
           onChange={(e) => setGoogleLink(e.target.value)}
+          autoComplete="off"
         />
       </div>
 
@@ -115,6 +119,7 @@ export function AddLocationForm({
           placeholder="e.g. 9:00–18:00"
           value={workingHours}
           onChange={(e) => setWorkingHours(e.target.value)}
+          autoComplete="off"
         />
       </div>
 
@@ -160,6 +165,7 @@ export function AddLocationForm({
           placeholder="e.g. Visit at sunset"
           value={note}
           onChange={(e) => setNote(e.target.value)}
+          autoComplete="off"
         />
       </div>
 

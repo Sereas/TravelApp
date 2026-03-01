@@ -81,6 +81,7 @@ export function EditLocationRow({
           placeholder="Location name"
           aria-label="Location name"
           autoFocus
+          autoComplete="off"
         />
       </div>
       <div className="space-y-2">
@@ -91,6 +92,7 @@ export function EditLocationRow({
           onChange={(e) => setAddress(e.target.value)}
           placeholder="e.g. 5 Avenue Anatole France, 75007 Paris"
           aria-label="Address"
+          autoComplete="off"
         />
       </div>
       <div className="space-y-2">
@@ -101,6 +103,7 @@ export function EditLocationRow({
           onChange={(e) => setCity(e.target.value)}
           placeholder="e.g. Paris"
           aria-label="City"
+          autoComplete="off"
         />
       </div>
       <div className="space-y-2">
@@ -114,6 +117,7 @@ export function EditLocationRow({
           onChange={(e) => setGoogleLink(e.target.value)}
           placeholder="https://maps.google.com/..."
           aria-label="Google Maps link"
+          autoComplete="off"
         />
       </div>
       <div className="space-y-2">
@@ -126,6 +130,7 @@ export function EditLocationRow({
           onChange={(e) => setWorkingHours(e.target.value)}
           placeholder="e.g. 9:00–18:00"
           aria-label="Working hours"
+          autoComplete="off"
         />
       </div>
       <div className="space-y-2">
@@ -169,6 +174,7 @@ export function EditLocationRow({
           onChange={(e) => setNote(e.target.value)}
           placeholder="Note (optional)"
           aria-label="Location note"
+          autoComplete="off"
         />
       </div>
       <div className="flex gap-2">
