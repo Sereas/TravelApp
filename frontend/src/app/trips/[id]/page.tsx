@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/feedback/EmptyState";
 import { LoadingSpinner } from "@/components/feedback/LoadingSpinner";
 import { ErrorBanner } from "@/components/feedback/ErrorBanner";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
 
 function formatDate(dateStr: string): string {
@@ -47,6 +48,7 @@ export default function TripDetailPage() {
   const [editingLocationId, setEditingLocationId] = useState<string | null>(
     null
   );
+  const [deletingTrip, setDeletingTrip] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [groupByCity, setGroupByCity] = useState(false);
 
@@ -157,6 +159,28 @@ export default function TripDetailPage() {
     setEditingLocationId(null);
   }
 
+  async function handleDeleteTrip() {
+    setDeletingTrip(true);
+    try {
+      await api.trips.delete(tripId);
+      router.push("/trips");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete trip");
+      setDeletingTrip(false);
+    }
+  }
+
+  async function handleDeleteLocation(locationId: string) {
+    try {
+      await api.locations.delete(tripId, locationId);
+      setLocations((prev) => prev.filter((loc) => loc.id !== locationId));
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to delete location"
+      );
+    }
+  }
+
   function renderLocationCard(loc: Location) {
     if (editingLocationId === loc.id) {
       return (
@@ -183,13 +207,27 @@ export default function TripDetailPage() {
         working_hours={loc.working_hours}
         added_by_email={loc.added_by_email}
         actions={
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setEditingLocationId(loc.id)}
-          >
-            Edit
-          </Button>
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setEditingLocationId(loc.id)}
+            >
+              Edit
+            </Button>
+            <ConfirmDialog
+              trigger={
+                <Button variant="ghost" size="sm" className="text-destructive">
+                  Delete
+                </Button>
+              }
+              title="Delete location?"
+              description={`"${loc.name}" will be permanently removed from this trip.`}
+              confirmLabel="Delete"
+              variant="destructive"
+              onConfirm={() => handleDeleteLocation(loc.id)}
+            />
+          </>
         }
       />
     );
@@ -223,13 +261,31 @@ export default function TripDetailPage() {
                 </p>
               )}
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setEditingTrip(true)}
-            >
-              Edit trip
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setEditingTrip(true)}
+              >
+                Edit trip
+              </Button>
+              <ConfirmDialog
+                trigger={
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    disabled={deletingTrip}
+                  >
+                    Delete trip
+                  </Button>
+                }
+                title="Delete trip?"
+                description="This will permanently delete this trip and all its locations. This action cannot be undone."
+                confirmLabel="Delete trip"
+                variant="destructive"
+                onConfirm={handleDeleteTrip}
+              />
+            </div>
           </div>
         )}
       </div>

@@ -14,19 +14,23 @@ vi.mock("next/navigation", () => ({
 const mockGetTrip = vi.fn();
 const mockListLocations = vi.fn();
 const mockUpdateTrip = vi.fn();
+const mockDeleteTrip = vi.fn();
 const mockAddLocation = vi.fn();
 const mockUpdateLocation = vi.fn();
+const mockDeleteLocation = vi.fn();
 
 vi.mock("@/lib/api", () => ({
   api: {
     trips: {
       get: (...args: unknown[]) => mockGetTrip(...args),
       update: (...args: unknown[]) => mockUpdateTrip(...args),
+      delete: (...args: unknown[]) => mockDeleteTrip(...args),
     },
     locations: {
       list: (...args: unknown[]) => mockListLocations(...args),
       add: (...args: unknown[]) => mockAddLocation(...args),
       update: (...args: unknown[]) => mockUpdateLocation(...args),
+      delete: (...args: unknown[]) => mockDeleteLocation(...args),
     },
   },
   ApiError: class ApiError extends Error {
@@ -455,5 +459,167 @@ describe("TripDetailPage", () => {
     expect(cityNames.some((t) => t?.includes("Nice"))).toBe(true);
     expect(cityNames.some((t) => t?.includes("Paris"))).toBe(true);
     expect(screen.getByText("Promenade des Anglais")).toBeInTheDocument();
+  });
+
+  // --- Delete trip ---
+
+  it("shows Delete trip button on trip detail page", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue([]);
+    render(<TripDetailPage />);
+
+    await screen.findByText("Paris Summer");
+    expect(
+      screen.getByRole("button", { name: /delete trip/i })
+    ).toBeInTheDocument();
+  });
+
+  it("opens confirmation dialog when Delete trip is clicked", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue([]);
+    render(<TripDetailPage />);
+
+    await screen.findByText("Paris Summer");
+    await userEvent.click(screen.getByRole("button", { name: /delete trip/i }));
+
+    expect(screen.getByText("Delete trip?")).toBeInTheDocument();
+    expect(screen.getByText(/permanently delete/i)).toBeInTheDocument();
+  });
+
+  it("deletes trip and navigates to /trips on confirm", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue([]);
+    mockDeleteTrip.mockResolvedValue(undefined);
+    render(<TripDetailPage />);
+
+    await screen.findByText("Paris Summer");
+    await userEvent.click(screen.getByRole("button", { name: /delete trip/i }));
+    // Confirm in the dialog — the confirm button also says "Delete trip"
+    const dialogButtons = screen.getAllByRole("button", {
+      name: /delete trip/i,
+    });
+    await userEvent.click(dialogButtons[dialogButtons.length - 1]);
+
+    await waitFor(() => {
+      expect(mockDeleteTrip).toHaveBeenCalledWith("trip-1");
+    });
+    expect(mockPush).toHaveBeenCalledWith("/trips");
+  });
+
+  it("does not delete trip when cancel is clicked in dialog", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue([]);
+    render(<TripDetailPage />);
+
+    await screen.findByText("Paris Summer");
+    await userEvent.click(screen.getByRole("button", { name: /delete trip/i }));
+    await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
+
+    expect(mockDeleteTrip).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it("shows error when trip deletion fails", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue([]);
+    mockDeleteTrip.mockRejectedValue(new Error("Server error"));
+    render(<TripDetailPage />);
+
+    await screen.findByText("Paris Summer");
+    await userEvent.click(screen.getByRole("button", { name: /delete trip/i }));
+    const dialogButtons = screen.getAllByRole("button", {
+      name: /delete trip/i,
+    });
+    await userEvent.click(dialogButtons[dialogButtons.length - 1]);
+
+    await waitFor(() => {
+      expect(mockDeleteTrip).toHaveBeenCalled();
+    });
+    expect(await screen.findByText("Server error")).toBeInTheDocument();
+  });
+
+  // --- Delete location ---
+
+  it("shows Delete button on each location card", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue(sampleLocations);
+    render(<TripDetailPage />);
+
+    await screen.findByText("Eiffel Tower");
+    const deleteButtons = screen.getAllByRole("button", {
+      name: /^delete$/i,
+    });
+    expect(deleteButtons).toHaveLength(2);
+  });
+
+  it("deletes a location and removes it from the list", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue(sampleLocations);
+    mockDeleteLocation.mockResolvedValue(undefined);
+    render(<TripDetailPage />);
+
+    await screen.findByText("Eiffel Tower");
+    const deleteButtons = screen.getAllByRole("button", {
+      name: /^delete$/i,
+    });
+    await userEvent.click(deleteButtons[0]);
+
+    // Confirm in the dialog
+    expect(screen.getByText("Delete location?")).toBeInTheDocument();
+    expect(
+      screen.getByText(/permanently removed from this trip/)
+    ).toBeInTheDocument();
+    const dialogConfirmBtns = screen.getAllByRole("button", {
+      name: /^delete$/i,
+    });
+    await userEvent.click(dialogConfirmBtns[dialogConfirmBtns.length - 1]);
+
+    await waitFor(() => {
+      expect(mockDeleteLocation).toHaveBeenCalledWith("trip-1", "loc-1");
+    });
+    await waitFor(() => {
+      expect(screen.queryByText("Eiffel Tower")).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("Louvre Museum")).toBeInTheDocument();
+  });
+
+  it("does not delete location when cancel is clicked", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue(sampleLocations);
+    render(<TripDetailPage />);
+
+    await screen.findByText("Eiffel Tower");
+    const deleteButtons = screen.getAllByRole("button", {
+      name: /^delete$/i,
+    });
+    await userEvent.click(deleteButtons[0]);
+
+    await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
+
+    expect(mockDeleteLocation).not.toHaveBeenCalled();
+    expect(screen.getByText("Eiffel Tower")).toBeInTheDocument();
+  });
+
+  it("shows error when location deletion fails", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue(sampleLocations);
+    mockDeleteLocation.mockRejectedValue(new Error("Delete failed"));
+    render(<TripDetailPage />);
+
+    await screen.findByText("Eiffel Tower");
+    const deleteButtons = screen.getAllByRole("button", {
+      name: /^delete$/i,
+    });
+    await userEvent.click(deleteButtons[0]);
+
+    const dialogConfirmBtns = screen.getAllByRole("button", {
+      name: /^delete$/i,
+    });
+    await userEvent.click(dialogConfirmBtns[dialogConfirmBtns.length - 1]);
+
+    await waitFor(() => {
+      expect(mockDeleteLocation).toHaveBeenCalled();
+    });
+    expect(await screen.findByText("Delete failed")).toBeInTheDocument();
   });
 });
