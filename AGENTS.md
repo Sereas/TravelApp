@@ -6,13 +6,28 @@
 
 TravelApp is a Python/FastAPI backend API and a Next.js Web frontend for travel planning (trips + locations CRUD). It uses Supabase as its database/auth backend. The frontend lives in `frontend/`.
 
+### Python / virtual environment (default for backend)
+
+The project uses a **dedicated venv** for backend work. Use it for all Python and pytest commands so dependencies (e.g. pytest) are available.
+
+- **Path:** `/Users/olegdylevich/PycharmProjects/VirtualEnvironments/travelApp`
+- **Activate (optional):** `source /Users/olegdylevich/PycharmProjects/VirtualEnvironments/travelApp/bin/activate`
+- **Run without activating:** use the venv’s Python explicitly, e.g.:
+  - Backend tests: `/Users/olegdylevich/PycharmProjects/VirtualEnvironments/travelApp/bin/python -m pytest backend/tests -v`
+  - Uvicorn: same `bin/python -m uvicorn backend.app.main:app --reload ...`
+
+If `python3 -m pytest` fails with "No module named pytest", install deps into this venv:  
+`/Users/olegdylevich/PycharmProjects/VirtualEnvironments/travelApp/bin/pip install -r requirements.txt`
+
 ### Running tests
 
-**Backend:**
+**Backend:** (use the project venv; see above)
 ```bash
-python3 -m pytest -v
+/Users/olegdylevich/PycharmProjects/VirtualEnvironments/travelApp/bin/python -m pytest backend/tests -v
 ```
-All tests mock Supabase entirely — no real Supabase instance is needed to run the test suite (67 backend + 81 frontend tests pass, 1 RLS integration test skipped by default).
+Or after activating the venv: `python -m pytest backend/tests -v`.
+
+All tests mock Supabase entirely — no real Supabase instance is needed to run the test suite (89 backend tests pass, 1 RLS integration test skipped by default).
 
 **Frontend:** From repo root, `cd frontend` then:
 ```bash
@@ -61,6 +76,17 @@ sb.table("trips").select("*").execute()
 ### API versioning
 
 All API routes are under `/api/v1/` (e.g. `/api/v1/trips`, `/api/v1/trips/{id}/locations`). The `/health` endpoint remains at the root.
+
+### Itinerary API
+
+Full spec: **`docs/features/itinerary-api.md`**. Use it for URL design, request/response shapes, and detailed behavior.
+
+**Two main entry points for agents:**
+
+1. **Tree (read-only view)** — `GET /api/v1/trips/{trip_id}/itinerary?include_empty_options=false`. Returns full structure: days → options → locations with embedded `LocationSummary`. Default omits options that have no locations; use `include_empty_options=true` when the UI needs empty option slots (e.g. “Add first location”).
+2. **Option-locations CRUD (edit)** — `GET/POST/PATCH/DELETE /api/v1/trips/{trip_id}/days/{day_id}/options/{option_id}/locations` (and `.../locations/{location_id}` for update/delete, plus `POST .../locations/batch`). Every response includes the same `LocationSummary` as the tree; use this for “edit this option’s locations” screens so the frontend does not need to call the tree endpoint for editing.
+
+**Error policy (consistent across itinerary endpoints):** `401` missing/invalid JWT; `404` trip/day/option/link not found or not owned (including reorder when an id in the body is not in scope); `409` conflict (e.g. location already in option, option_index already used, trip already has days); `400` precondition (e.g. location not in trip, trip missing dates); `422` validation (empty body, duplicate ids, invalid `time_period`). Frontend can map status + `detail` string for user feedback.
 
 ### Key caveats
 

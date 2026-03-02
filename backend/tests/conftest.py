@@ -100,7 +100,11 @@ def mock_supabase_with_rls():
             self._select_trip_id = None
 
         def insert(self, row):
-            self._insert_row = dict(row)
+            if isinstance(row, list):
+                # Support bulk insert: used by generate_days endpoint.
+                self._insert_row = [dict(r) for r in row]
+            else:
+                self._insert_row = dict(row)
             self._select_trip_id = None
             return self
 
@@ -399,3 +403,488 @@ def mock_supabase_trips_and_locations():
             return None
 
     return locations_inserted, MockSupabaseTL2
+
+
+@pytest.fixture
+def mock_supabase_trips_and_days():
+    """
+    Mock Supabase for itinerary days: trips (ownership) + trip_days CRUD.
+    trip_owners = {trip_id: user_id}; MockSupabase(trip_owners, current_user_id).
+    """
+    import uuid as _uuid
+
+    trips_store = []
+    trip_days_store = []
+
+    class _TripsTableForDays:
+        def __init__(self, trip_owners, user_id, store):
+            self._trip_owners = {str(k): str(v) for k, v in trip_owners.items()}
+            self._user_id = str(user_id)
+            self._store = store
+            self._trip_id = None
+            self._user_id_filter = None
+
+        def select(self, *args):
+            self._trip_id = None
+            self._user_id_filter = None
+            return self
+
+        def eq(self, key, value):
+            if key == "trip_id":
+                self._trip_id = str(value) if value is not None else None
+            elif key == "user_id":
+                self._user_id_filter = str(value) if value is not None else None
+            return self
+
+        def execute(self):
+            if self._user_id_filter is not None:
+                out = [t for t in self._store if t.get("user_id") == self._user_id_filter]
+                return type("Result", (), {"data": out})()
+            tid = self._trip_id
+            if tid is None or tid not in self._trip_owners:
+                return type("Result", (), {"data": []})()
+            owner_id = self._trip_owners[tid]
+            for t in self._store:
+                if str(t.get("trip_id")) == tid:
+                    return type("Result", (), {"data": [t]})()
+            return type(
+                "Result",
+                (),
+                {
+                    "data": [
+                        {
+                            "trip_id": tid,
+                            "user_id": owner_id,
+                            "trip_name": "Trip",
+                            "start_date": None,
+                            "end_date": None,
+                        }
+                    ]
+                },
+            )()
+
+    class _TripDaysTable:
+        def __init__(self, store):
+            self._store = store
+            self._trip_id = None
+            self._day_id = None
+            self._order_col = None
+            self._order_desc = False
+            self._limit_n = None
+            self._insert_row = None
+            self._update_data = None
+            self._is_delete = False
+
+        def select(self, *args):
+            self._trip_id = None
+            self._day_id = None
+            self._order_col = None
+            self._order_desc = False
+            self._limit_n = None
+            self._insert_row = None
+            self._update_data = None
+            self._is_delete = False
+            return self
+
+        def eq(self, key, value):
+            val = str(value) if value is not None else None
+            if key == "trip_id":
+                self._trip_id = val
+            elif key == "day_id":
+                self._day_id = val
+            return self
+
+        def order(self, column, desc=False):
+            self._order_col = column
+            self._order_desc = bool(desc)
+            return self
+
+        def limit(self, n):
+            self._limit_n = int(n)
+            return self
+
+        def insert(self, row):
+            # Support both single-row and bulk inserts (list of rows),
+            # matching the pattern used by other mocks.
+            if isinstance(row, list):
+                self._insert_row = [dict(r) for r in row]
+            else:
+                self._insert_row = dict(row)
+            self._update_data = None
+            self._is_delete = False
+            return self
+
+        def update(self, data):
+            self._update_data = dict(data)
+            self._insert_row = None
+            self._is_delete = False
+            return self
+
+        def delete(self):
+            self._is_delete = True
+            self._insert_row = None
+            self._update_data = None
+            return self
+
+        def execute(self):
+            if self._insert_row is not None:
+                rows = (
+                    self._insert_row if isinstance(self._insert_row, list) else [self._insert_row]
+                )
+                out = []
+                for base in rows:
+                    day_id = str(_uuid.uuid4())
+                    row = {
+                        "day_id": day_id,
+                        "trip_id": base.get("trip_id"),
+                        "date": base.get("date"),
+                        "sort_order": int(base.get("sort_order", 0)),
+                        "starting_city": base.get("starting_city"),
+                        "ending_city": base.get("ending_city"),
+                        "created_by": base.get("created_by"),
+                        "created_at": "2025-01-01T12:00:00Z",
+                    }
+                    self._store.append(row)
+                    out.append(row)
+                return type("Result", (), {"data": out})()
+            if self._update_data is not None:
+                for r in self._store:
+                    if (not self._day_id or str(r.get("day_id")) == self._day_id) and (
+                        not self._trip_id or str(r.get("trip_id")) == self._trip_id
+                    ):
+                        r.update(self._update_data)
+                        return type("Result", (), {"data": [r]})()
+                return type("Result", (), {"data": []})()
+            if self._is_delete:
+                if self._day_id and self._trip_id:
+                    self._store[:] = [
+                        d
+                        for d in self._store
+                        if not (
+                            str(d.get("day_id")) == self._day_id
+                            and str(d.get("trip_id")) == self._trip_id
+                        )
+                    ]
+                return type("Result", (), {"data": []})()
+            # select
+            filtered = [
+                d
+                for d in self._store
+                if (not self._trip_id or str(d.get("trip_id")) == self._trip_id)
+                and (not self._day_id or str(d.get("day_id")) == self._day_id)
+            ]
+            if self._order_col:
+                filtered = sorted(
+                    filtered,
+                    key=lambda x: (x.get(self._order_col) is not None, x.get(self._order_col)),
+                    reverse=self._order_desc,
+                )
+            if self._limit_n is not None:
+                filtered = filtered[: self._limit_n]
+            return type("Result", (), {"data": filtered})()
+
+    class _DayOptionsTable:
+        def __init__(self, store):
+            self._store = store
+            self._day_id = None
+            self._option_id = None
+            self._order_col = None
+            self._order_desc = False
+            self._limit_n = None
+            self._insert_row = None
+            self._update_data = None
+            self._is_delete = False
+
+        def select(self, *args):
+            self._day_id = None
+            self._option_id = None
+            self._order_col = None
+            self._order_desc = False
+            self._limit_n = None
+            self._insert_row = None
+            self._update_data = None
+            self._is_delete = False
+            return self
+
+        def eq(self, key, value):
+            val = str(value) if value is not None else None
+            if key == "day_id":
+                self._day_id = val
+            elif key == "option_id":
+                self._option_id = val
+            return self
+
+        def in_(self, key, values):
+            if key == "day_id":
+                # Store as a set of ids to filter against in execute()
+                self._day_id = {str(v) for v in values}
+            return self
+
+        def order(self, column, desc=False):
+            self._order_col = column
+            self._order_desc = bool(desc)
+            return self
+
+        def limit(self, n):
+            self._limit_n = int(n)
+            return self
+
+        def insert(self, row):
+            self._insert_row = dict(row)
+            self._update_data = None
+            self._is_delete = False
+            return self
+
+        def update(self, data):
+            self._update_data = dict(data)
+            self._insert_row = None
+            self._is_delete = False
+            return self
+
+        def delete(self):
+            self._is_delete = True
+            self._insert_row = None
+            self._update_data = None
+            return self
+
+        def execute(self):
+            if self._insert_row is not None:
+                option_id = str(_uuid.uuid4())
+                row = {
+                    "option_id": option_id,
+                    "day_id": self._insert_row.get("day_id"),
+                    "option_index": int(self._insert_row.get("option_index", 1)),
+                    "created_at": "2025-01-01T12:00:00Z",
+                }
+                self._store.append(row)
+                return type("Result", (), {"data": [row]})()
+            if self._update_data is not None:
+                for r in self._store:
+                    if (not self._option_id or str(r.get("option_id")) == self._option_id) and (
+                        not self._day_id or str(r.get("day_id")) == self._day_id
+                    ):
+                        r.update(self._update_data)
+                        return type("Result", (), {"data": [r]})()
+                return type("Result", (), {"data": []})()
+            if self._is_delete:
+                if self._option_id and self._day_id:
+                    self._store[:] = [
+                        o
+                        for o in self._store
+                        if not (
+                            str(o.get("option_id")) == self._option_id
+                            and str(o.get("day_id")) == self._day_id
+                        )
+                    ]
+                return type("Result", (), {"data": []})()
+
+            def _matches_day_id(row):
+                if self._day_id is None:
+                    return True
+                if isinstance(self._day_id, set):
+                    return str(row.get("day_id")) in self._day_id
+                return str(row.get("day_id")) == self._day_id
+
+            filtered = [
+                o
+                for o in self._store
+                if _matches_day_id(o)
+                and (not self._option_id or str(o.get("option_id")) == self._option_id)
+            ]
+            if self._order_col:
+                filtered = sorted(
+                    filtered,
+                    key=lambda x: (x.get(self._order_col) is not None, x.get(self._order_col)),
+                    reverse=self._order_desc,
+                )
+            if self._limit_n is not None:
+                filtered = filtered[: self._limit_n]
+            return type("Result", (), {"data": filtered})()
+
+    day_options_store = []
+    locations_store = []
+    option_locations_store = []
+
+    class _LocationsTableForItinerary:
+        def __init__(self, store):
+            self._store = store
+            self._location_id = None
+            self._trip_id = None
+
+        def select(self, *args):
+            self._location_id = None
+            self._trip_id = None
+            return self
+
+        def eq(self, key, value):
+            val = str(value) if value is not None else None
+            if key == "location_id":
+                self._location_id = val
+            elif key == "trip_id":
+                self._trip_id = val
+            return self
+
+        def in_(self, key, values):
+            if key == "location_id":
+                self._location_id = {str(v) for v in values}
+            return self
+
+        def execute(self):
+            filtered = self._store
+            if self._location_id is not None:
+                if isinstance(self._location_id, set):
+                    filtered = [
+                        loc for loc in filtered if str(loc.get("location_id")) in self._location_id
+                    ]
+                else:
+                    filtered = [
+                        loc for loc in filtered if str(loc.get("location_id")) == self._location_id
+                    ]
+            if self._trip_id is not None:
+                filtered = [loc for loc in filtered if str(loc.get("trip_id")) == self._trip_id]
+            return type("Result", (), {"data": filtered})()
+
+    class _OptionLocationsTable:
+        def __init__(self, store):
+            self._store = store
+            self._option_id = None
+            self._location_id = None
+            self._order_col = None
+            self._order_desc = False
+            self._insert_row = None
+            self._update_data = None
+            self._is_delete = False
+
+        def select(self, *args):
+            self._option_id = None
+            self._location_id = None
+            self._order_col = None
+            self._order_desc = False
+            self._insert_row = None
+            self._update_data = None
+            self._is_delete = False
+            return self
+
+        def eq(self, key, value):
+            val = str(value) if value is not None else None
+            if key == "option_id":
+                if self._is_delete:
+                    self._option_id = val
+                else:
+                    self._option_id = val
+            elif key == "location_id":
+                if self._is_delete:
+                    self._location_id = val
+                else:
+                    self._location_id = val
+            return self
+
+        def in_(self, key, values):
+            if key == "option_id":
+                # store as set of ids for filtering later
+                self._option_id = {str(v) for v in values}
+            return self
+
+        def order(self, column, desc=False):
+            self._order_col = column
+            self._order_desc = bool(desc)
+            return self
+
+        def insert(self, row):
+            self._insert_row = dict(row)
+            self._update_data = None
+            self._is_delete = False
+            return self
+
+        def update(self, data):
+            self._update_data = dict(data)
+            self._insert_row = None
+            self._is_delete = False
+            return self
+
+        def delete(self):
+            self._is_delete = True
+            self._insert_row = None
+            self._update_data = None
+            return self
+
+        def execute(self):
+            if self._insert_row is not None:
+                row = {
+                    "option_id": self._insert_row.get("option_id"),
+                    "location_id": self._insert_row.get("location_id"),
+                    "sort_order": int(self._insert_row.get("sort_order", 0)),
+                    "time_period": self._insert_row.get("time_period"),
+                    "trip_id": self._insert_row.get("trip_id"),
+                }
+                self._store.append(row)
+                return type("Result", (), {"data": [row]})()
+            if self._update_data is not None:
+                updated = []
+                for r in self._store:
+                    if self._option_id and str(r.get("option_id")) != self._option_id:
+                        continue
+                    if self._location_id and str(r.get("location_id")) != self._location_id:
+                        continue
+                    r.update(self._update_data)
+                    updated.append(r)
+                return type("Result", (), {"data": updated})()
+            if self._is_delete:
+                before = len(self._store)
+                self._store[:] = [
+                    r
+                    for r in self._store
+                    if not (
+                        (self._option_id is None or str(r.get("option_id")) == self._option_id)
+                        and (
+                            self._location_id is None
+                            or str(r.get("location_id")) == self._location_id
+                        )
+                    )
+                ]
+                deleted = before - len(self._store)
+                return type("Result", (), {"data": [] if deleted == 0 else [{}]})()
+            filtered = self._store
+
+            def _matches_option_id(row):
+                if self._option_id is None:
+                    return True
+                if isinstance(self._option_id, set):
+                    return str(row.get("option_id")) in self._option_id
+                return str(row.get("option_id")) == self._option_id
+
+            filtered = [r for r in filtered if _matches_option_id(r)]
+            if self._location_id is not None:
+                filtered = [r for r in filtered if str(r.get("location_id")) == self._location_id]
+            if self._order_col:
+                filtered = sorted(
+                    filtered,
+                    key=lambda x: (x.get(self._order_col) is not None, x.get(self._order_col)),
+                    reverse=self._order_desc,
+                )
+            return type("Result", (), {"data": filtered})()
+
+    class MockSupabaseTripsAndDays:
+        def __init__(self, trip_owners, user_id):
+            self._trip_owners = {str(k): str(v) for k, v in trip_owners.items()}
+            self._user_id = str(user_id)
+            self._trips_store = trips_store
+            self._days_store = trip_days_store
+            self._options_store = day_options_store
+            self._locations_store = locations_store
+            self._option_locations_store = option_locations_store
+
+        def table(self, name):
+            if name == "trips":
+                return _TripsTableForDays(self._trip_owners, self._user_id, self._trips_store)
+            if name == "trip_days":
+                return _TripDaysTable(self._days_store)
+            if name == "day_options":
+                return _DayOptionsTable(self._options_store)
+            if name == "locations":
+                return _LocationsTableForItinerary(self._locations_store)
+            if name == "option_locations":
+                return _OptionLocationsTable(self._option_locations_store)
+            return None
+
+    return trip_days_store, trips_store, MockSupabaseTripsAndDays

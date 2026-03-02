@@ -1,6 +1,7 @@
-"""Request/response schemas for trips API."""
+"""Request/response schemas for trips and locations APIs (including itinerary)."""
 
-from datetime import date
+from datetime import date as date_type
+from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -9,8 +10,8 @@ class CreateTripBody(BaseModel):
     """Request body for POST create-trip."""
 
     name: str = Field(..., min_length=1, description="Trip display name (required)")
-    start_date: date | None = None
-    end_date: date | None = None
+    start_date: date_type | None = None
+    end_date: date_type | None = None
 
 
 class TripResponse(BaseModel):
@@ -18,8 +19,8 @@ class TripResponse(BaseModel):
 
     id: str = Field(..., description="Trip UUID")
     name: str = Field(..., description="Trip display name")
-    start_date: date | None = None
-    end_date: date | None = None
+    start_date: date_type | None = None
+    end_date: date_type | None = None
 
 
 REQUIRES_BOOKING_VALUES = frozenset({"no", "yes", "yes_done"})
@@ -127,8 +128,8 @@ class UpdateTripBody(BaseModel):
     """Request body for PATCH update-trip."""
 
     name: str | None = Field(None, min_length=1, description="New trip display name")
-    start_date: date | None = None
-    end_date: date | None = None
+    start_date: date_type | None = None
+    end_date: date_type | None = None
 
 
 class UpdateLocationBody(_LocationFieldsMixin):
@@ -147,3 +148,187 @@ class UpdateLocationBody(_LocationFieldsMixin):
     working_hours: str | None = Field(None, max_length=_LOCATION_WORKING_HOURS_MAX)
     requires_booking: str | None = None
     category: str | None = None
+
+
+# -------- Itinerary schemas (trip_days, day_options, option_locations) --------
+
+
+class CreateDayBody(BaseModel):
+    """Request body for POST create-day.
+
+    Backend assigns sort_order; client does not send it.
+    """
+
+    date: date_type | None = None
+    starting_city: str | None = Field(None, max_length=255)
+    ending_city: str | None = Field(None, max_length=255)
+    created_by: str | None = Field(
+        None,
+        max_length=255,
+        description="Free-text creator label; not derived from JWT.",
+    )
+
+
+class UpdateDayBody(BaseModel):
+    """Request body for PATCH update-day."""
+
+    date: date_type | None = None
+    sort_order: int | None = Field(
+        None,
+        ge=0,
+        description="Optional for single-item move; reorder endpoint preferred.",
+    )
+    starting_city: str | None = Field(None, max_length=255)
+    ending_city: str | None = Field(None, max_length=255)
+    created_by: str | None = Field(None, max_length=255)
+
+
+class DayResponse(BaseModel):
+    """Response body for trip day operations."""
+
+    id: str = Field(..., description="Day UUID")
+    trip_id: str = Field(..., description="Parent trip UUID")
+    date: date_type | None = None
+    sort_order: int = Field(..., ge=0)
+    starting_city: str | None = None
+    ending_city: str | None = None
+    created_by: str | None = None
+    created_at: datetime | None = None
+
+
+class ReorderDaysBody(BaseModel):
+    """Request body for PATCH reorder-days."""
+
+    day_ids: list[str] = Field(..., min_length=1, description="Ordered list of day UUIDs")
+
+
+class CreateOptionBody(BaseModel):
+    """Request body for POST create-option.
+
+    Body is empty; backend assigns option_index.
+    """
+
+    # Intentionally empty for now; defined for symmetry and future extension.
+    pass
+
+
+class UpdateOptionBody(BaseModel):
+    """Request body for PATCH update-option (single-item move)."""
+
+    option_index: int | None = Field(
+        None,
+        ge=1,
+        description="New index within the day; 1 = main option.",
+    )
+
+
+class OptionResponse(BaseModel):
+    """Response body for day option operations."""
+
+    id: str = Field(..., description="Option UUID")
+    day_id: str = Field(..., description="Parent day UUID")
+    option_index: int = Field(..., ge=1)
+    created_at: datetime | None = None
+
+
+class ReorderOptionsBody(BaseModel):
+    """Request body for PATCH reorder options."""
+
+    option_ids: list[str] = Field(..., min_length=1, description="Ordered list of option UUIDs")
+
+
+class AddOptionLocationBody(BaseModel):
+    """Request body for POST add option-location (single)."""
+
+    location_id: str = Field(..., description="Location UUID to attach to this option")
+    sort_order: int = Field(..., ge=0, description="Order within the option")
+    time_period: str = Field(
+        ...,
+        description="One of: morning, afternoon, evening, night.",
+    )
+
+    @field_validator("time_period")
+    @classmethod
+    def validate_time_period(cls, v: str) -> str:
+        allowed = {"morning", "afternoon", "evening", "night"}
+        if v not in allowed:
+            raise ValueError(f"time_period must be one of: {sorted(allowed)}")
+        return v
+
+
+class UpdateOptionLocationBody(BaseModel):
+    """Request body for PATCH update option-location link."""
+
+    sort_order: int | None = Field(None, ge=0)
+    time_period: str | None = None
+
+    @field_validator("time_period")
+    @classmethod
+    def validate_time_period_optional(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        allowed = {"morning", "afternoon", "evening", "night"}
+        if v not in allowed:
+            raise ValueError(f"time_period must be one of: {sorted(allowed)}")
+        return v
+
+
+class LocationSummary(BaseModel):
+    """Minimal embedded location info used in itinerary views."""
+
+    id: str = Field(..., description="Location UUID")
+    name: str = Field(..., description="Location name")
+    city: str | None = None
+    address: str | None = None
+    google_link: str | None = None
+    category: str | None = None
+    note: str | None = None
+    working_hours: str | None = None
+    requires_booking: str | None = None
+
+
+class OptionLocationResponse(BaseModel):
+    """Response body for option-locations operations."""
+
+    option_id: str = Field(..., description="Option UUID")
+    location_id: str = Field(..., description="Location UUID")
+    sort_order: int = Field(..., ge=0)
+    time_period: str = Field(..., description="morning | afternoon | evening | night")
+    location: LocationSummary | None = None
+
+
+class ItineraryOptionLocation(BaseModel):
+    """Itinerary tree node: location entry inside an option."""
+
+    location_id: str
+    sort_order: int
+    time_period: str
+    location: LocationSummary
+
+
+class ItineraryOption(BaseModel):
+    """Itinerary tree node: option containing locations."""
+
+    id: str
+    option_index: int
+    created_at: datetime | None = None
+    locations: list[ItineraryOptionLocation] = Field(default_factory=list)
+
+
+class ItineraryDay(BaseModel):
+    """Itinerary tree node: day containing options."""
+
+    id: str
+    date: date_type | None = None
+    sort_order: int
+    starting_city: str | None = None
+    ending_city: str | None = None
+    created_by: str | None = None
+    created_at: datetime | None = None
+    options: list[ItineraryOption] = Field(default_factory=list)
+
+
+class ItineraryResponse(BaseModel):
+    """Full itinerary for a trip: list of days with nested options and locations."""
+
+    days: list[ItineraryDay] = Field(default_factory=list)

@@ -2,7 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { api, type Trip, type Location } from "@/lib/api";
+import {
+  api,
+  type Trip,
+  type Location,
+  type ItineraryResponse,
+} from "@/lib/api";
 import { LocationCard } from "@/components/locations/LocationCard";
 import { AddLocationForm } from "@/components/locations/AddLocationForm";
 import { EditLocationRow } from "@/components/locations/EditLocationRow";
@@ -12,6 +17,7 @@ import { LoadingSpinner } from "@/components/feedback/LoadingSpinner";
 import { ErrorBanner } from "@/components/feedback/ErrorBanner";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 function formatDate(dateStr: string): string {
@@ -52,6 +58,13 @@ export default function TripDetailPage() {
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [groupByCity, setGroupByCity] = useState(false);
 
+  const [activeTab, setActiveTab] = useState<"locations" | "itinerary">(
+    "locations"
+  );
+  const [itinerary, setItinerary] = useState<ItineraryResponse | null>(null);
+  const [itineraryLoading, setItineraryLoading] = useState(false);
+  const [itineraryError, setItineraryError] = useState<string | null>(null);
+
   async function fetchData() {
     setError(null);
     setLoading(true);
@@ -81,6 +94,29 @@ export default function TripDetailPage() {
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tripId]);
+
+  async function fetchItinerary() {
+    setItineraryError(null);
+    setItinerary(null);
+    setItineraryLoading(true);
+    try {
+      const data = await api.itinerary.get(tripId);
+      setItinerary(data);
+    } catch (err) {
+      setItineraryError(
+        err instanceof Error ? err.message : "Failed to load itinerary"
+      );
+    } finally {
+      setItineraryLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === "itinerary" && trip) {
+      fetchItinerary();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, tripId]);
 
   const categoryOptions = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -290,107 +326,237 @@ export default function TripDetailPage() {
         )}
       </div>
 
-      <section>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">
+      {/* Tabs: Locations | Itinerary */}
+      <div className="border-b border-border">
+        <nav className="flex gap-4" role="tablist" aria-label="Trip sections">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "locations"}
+            aria-controls="tab-panel-locations"
+            id="tab-locations"
+            className={cn(
+              "border-b-2 pb-2 text-sm font-medium transition-colors",
+              activeTab === "locations"
+                ? "border-primary text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+            onClick={() => setActiveTab("locations")}
+          >
             Locations
             {locations.length > 0 && (
-              <span className="ml-1.5 text-sm font-normal text-muted-foreground">
+              <span className="ml-1.5 font-normal text-muted-foreground">
                 ({locations.length})
               </span>
             )}
-          </h2>
-          <div className="flex items-center gap-2">
-            {cities.size >= 2 && (
-              <Button
-                variant={groupByCity ? "secondary" : "outline"}
-                size="sm"
-                onClick={() => setGroupByCity((v) => !v)}
-              >
-                {groupByCity ? "Ungroup" : "Group by city"}
-              </Button>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "itinerary"}
+            aria-controls="tab-panel-itinerary"
+            id="tab-itinerary"
+            className={cn(
+              "border-b-2 pb-2 text-sm font-medium transition-colors",
+              activeTab === "itinerary"
+                ? "border-primary text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
             )}
-            {!addingLocation && locations.length > 0 && (
-              <Button size="sm" onClick={() => setAddingLocation(true)}>
-                Add location
-              </Button>
-            )}
-          </div>
-        </div>
-
-        {/* Category filter chips */}
-        {categoryOptions.length >= 2 && (
-          <div
-            className="mb-3 flex flex-wrap gap-1.5"
-            role="toolbar"
-            aria-label="Filter locations by category"
+            onClick={() => setActiveTab("itinerary")}
           >
-            <button
-              className={cn(
-                "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                categoryFilter === null
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-background text-muted-foreground hover:bg-accent"
+            Itinerary
+          </button>
+        </nav>
+      </div>
+
+      {activeTab === "locations" && (
+        <section
+          id="tab-panel-locations"
+          role="tabpanel"
+          aria-labelledby="tab-locations"
+        >
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-lg font-semibold">
+              Locations
+              {locations.length > 0 && (
+                <span className="ml-1.5 text-sm font-normal text-muted-foreground">
+                  ({locations.length})
+                </span>
               )}
-              onClick={() => setCategoryFilter(null)}
+            </h2>
+            <div className="flex items-center gap-2">
+              {cities.size >= 2 && (
+                <Button
+                  variant={groupByCity ? "secondary" : "outline"}
+                  size="sm"
+                  onClick={() => setGroupByCity((v) => !v)}
+                >
+                  {groupByCity ? "Ungroup" : "Group by city"}
+                </Button>
+              )}
+              {!addingLocation && locations.length > 0 && (
+                <Button size="sm" onClick={() => setAddingLocation(true)}>
+                  Add location
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Category filter chips */}
+          {categoryOptions.length >= 2 && (
+            <div
+              className="mb-3 flex flex-wrap gap-1.5"
+              role="toolbar"
+              aria-label="Filter locations by category"
             >
-              All ({locations.length})
-            </button>
-            {categoryOptions.map(([cat, count]) => (
               <button
-                key={cat}
                 className={cn(
                   "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                  categoryFilter === cat
+                  categoryFilter === null
                     ? "border-primary bg-primary text-primary-foreground"
                     : "border-border bg-background text-muted-foreground hover:bg-accent"
                 )}
-                onClick={() =>
-                  setCategoryFilter(categoryFilter === cat ? null : cat)
-                }
+                onClick={() => setCategoryFilter(null)}
               >
-                {cat} ({count})
+                All ({locations.length})
               </button>
-            ))}
-          </div>
-        )}
+              {categoryOptions.map(([cat, count]) => (
+                <button
+                  key={cat}
+                  className={cn(
+                    "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                    categoryFilter === cat
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-background text-muted-foreground hover:bg-accent"
+                  )}
+                  onClick={() =>
+                    setCategoryFilter(categoryFilter === cat ? null : cat)
+                  }
+                >
+                  {cat} ({count})
+                </button>
+              ))}
+            </div>
+          )}
 
-        {addingLocation && (
-          <div className="mb-4">
-            <AddLocationForm
-              tripId={tripId}
-              onAdded={handleLocationAdded}
-              onCancel={() => setAddingLocation(false)}
-            />
-          </div>
-        )}
+          {addingLocation && (
+            <div className="mb-4">
+              <AddLocationForm
+                tripId={tripId}
+                onAdded={handleLocationAdded}
+                onCancel={() => setAddingLocation(false)}
+              />
+            </div>
+          )}
 
-        {locations.length === 0 && !addingLocation ? (
-          <EmptyState message="No locations added to this trip yet.">
-            <Button onClick={() => setAddingLocation(true)}>
-              Add a location
-            </Button>
-          </EmptyState>
-        ) : groupedLocations ? (
-          <div className="space-y-4">
-            {groupedLocations.map(([cityName, locs]) => (
-              <div key={cityName}>
-                <h3 className="mb-2 text-sm font-semibold text-muted-foreground">
-                  {cityName}{" "}
-                  <span className="font-normal">({locs.length})</span>
-                </h3>
-                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                  {locs.map(renderLocationCard)}
+          {locations.length === 0 && !addingLocation ? (
+            <EmptyState message="No locations added to this trip yet.">
+              <Button onClick={() => setAddingLocation(true)}>
+                Add a location
+              </Button>
+            </EmptyState>
+          ) : groupedLocations ? (
+            <div className="space-y-4">
+              {groupedLocations.map(([cityName, locs]) => (
+                <div key={cityName}>
+                  <h3 className="mb-2 text-sm font-semibold text-muted-foreground">
+                    {cityName}{" "}
+                    <span className="font-normal">({locs.length})</span>
+                  </h3>
+                  <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                    {locs.map(renderLocationCard)}
+                  </div>
                 </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+              {filteredLocations.map(renderLocationCard)}
+            </div>
+          )}
+        </section>
+      )}
+
+      {activeTab === "itinerary" && (
+        <section
+          id="tab-panel-itinerary"
+          role="tabpanel"
+          aria-labelledby="tab-itinerary"
+        >
+          {itineraryLoading && (
+            <div className="flex justify-center py-12">
+              <LoadingSpinner size="lg" />
+            </div>
+          )}
+          {itineraryError && !itineraryLoading && (
+            <ErrorBanner message={itineraryError} onRetry={fetchItinerary} />
+          )}
+          {!itineraryLoading &&
+            !itineraryError &&
+            itinerary?.days.length === 0 && (
+              <EmptyState message="No days yet. Add a day or generate days from your trip dates." />
+            )}
+          {!itineraryLoading &&
+            !itineraryError &&
+            itinerary &&
+            itinerary.days.length > 0 && (
+              <div className="space-y-4">
+                {itinerary.days.map((day) => {
+                  const mainOption =
+                    day.options.find((o) => o.option_index === 1) ??
+                    day.options[0];
+                  const dayLabel = day.date
+                    ? formatDate(day.date)
+                    : `Day ${day.sort_order + 1}`;
+                  return (
+                    <Card key={day.id}>
+                      <CardHeader className="pb-2">
+                        <h3 className="text-lg font-semibold">{dayLabel}</h3>
+                      </CardHeader>
+                      <CardContent className="pt-0">
+                        {mainOption ? (
+                          mainOption.locations.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">
+                              No locations
+                            </p>
+                          ) : (
+                            <ul className="space-y-1.5">
+                              {mainOption.locations
+                                .sort((a, b) => a.sort_order - b.sort_order)
+                                .map((ol) => (
+                                  <li
+                                    key={ol.location_id}
+                                    className="flex items-center gap-2 text-sm"
+                                  >
+                                    <span className="capitalize text-muted-foreground">
+                                      {ol.time_period}:
+                                    </span>
+                                    <span>
+                                      {ol.location.name}
+                                      {ol.location.city && (
+                                        <span className="text-muted-foreground">
+                                          {" "}
+                                          ({ol.location.city})
+                                        </span>
+                                      )}
+                                    </span>
+                                  </li>
+                                ))}
+                            </ul>
+                          )
+                        ) : (
+                          <p className="text-sm text-muted-foreground">
+                            No locations
+                          </p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-            {filteredLocations.map(renderLocationCard)}
-          </div>
-        )}
-      </section>
+            )}
+        </section>
+      )}
     </div>
   );
 }

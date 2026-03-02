@@ -75,6 +75,46 @@ export interface Location {
   category: string | null;
 }
 
+/** Minimal location info embedded in itinerary tree. */
+export interface LocationSummary {
+  id: string;
+  name: string;
+  city: string | null;
+  address: string | null;
+  google_link: string | null;
+  category: string | null;
+  note: string | null;
+  working_hours: string | null;
+  requires_booking: string | null;
+}
+
+export interface ItineraryOptionLocation {
+  location_id: string;
+  sort_order: number;
+  time_period: string;
+  location: LocationSummary;
+}
+
+export interface ItineraryOption {
+  id: string;
+  option_index: number;
+  locations: ItineraryOptionLocation[];
+}
+
+export interface ItineraryDay {
+  id: string;
+  date: string | null;
+  sort_order: number;
+  starting_city: string | null;
+  ending_city: string | null;
+  created_by: string | null;
+  options: ItineraryOption[];
+}
+
+export interface ItineraryResponse {
+  days: ItineraryDay[];
+}
+
 export const api = {
   trips: {
     list: () => request<Trip[]>("/api/v1/trips"),
@@ -171,5 +211,12 @@ export const api = {
       request<void>(`/api/v1/trips/${tripId}/locations/${locationId}`, {
         method: "DELETE",
       }),
+  },
+
+  itinerary: {
+    get: (tripId: string, includeEmptyOptions = false) =>
+      request<ItineraryResponse>(
+        `/api/v1/trips/${tripId}/itinerary?include_empty_options=${includeEmptyOptions}`
+      ),
   },
 };

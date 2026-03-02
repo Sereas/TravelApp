@@ -18,6 +18,7 @@ const mockDeleteTrip = vi.fn();
 const mockAddLocation = vi.fn();
 const mockUpdateLocation = vi.fn();
 const mockDeleteLocation = vi.fn();
+const mockGetItinerary = vi.fn();
 
 vi.mock("@/lib/api", () => ({
   api: {
@@ -31,6 +32,9 @@ vi.mock("@/lib/api", () => ({
       add: (...args: unknown[]) => mockAddLocation(...args),
       update: (...args: unknown[]) => mockUpdateLocation(...args),
       delete: (...args: unknown[]) => mockDeleteLocation(...args),
+    },
+    itinerary: {
+      get: (...args: unknown[]) => mockGetItinerary(...args),
     },
   },
   ApiError: class ApiError extends Error {
@@ -378,7 +382,10 @@ describe("TripDetailPage", () => {
     render(<TripDetailPage />);
 
     await screen.findByText("Eiffel Tower");
-    expect(screen.getByText("(2)")).toBeInTheDocument();
+    const tabpanel = screen.getByRole("tabpanel", {
+      name: /locations/i,
+    });
+    expect(tabpanel).toHaveTextContent("(2)");
   });
 
   it("shows category filter chips when 2+ categories exist", async () => {
@@ -621,5 +628,138 @@ describe("TripDetailPage", () => {
       expect(mockDeleteLocation).toHaveBeenCalled();
     });
     expect(await screen.findByText("Delete failed")).toBeInTheDocument();
+  });
+
+  // --- Slice 13: Itinerary tab (read-only) ---
+
+  it("shows Locations and Itinerary tabs", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue([]);
+    render(<TripDetailPage />);
+
+    await screen.findByText("Paris Summer");
+    expect(screen.getByRole("tab", { name: /locations/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /itinerary/i })).toBeInTheDocument();
+  });
+
+  it("fetches itinerary when Itinerary tab is selected", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue([]);
+    mockGetItinerary.mockResolvedValue({ days: [] });
+    render(<TripDetailPage />);
+
+    await screen.findByText("Paris Summer");
+    await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
+
+    await waitFor(() => {
+      expect(mockGetItinerary).toHaveBeenCalledWith("trip-1");
+    });
+  });
+
+  it("shows empty state when itinerary has no days", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue([]);
+    mockGetItinerary.mockResolvedValue({ days: [] });
+    render(<TripDetailPage />);
+
+    await screen.findByText("Paris Summer");
+    await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
+
+    expect(
+      await screen.findByText(/no days yet. add a day or generate days/i)
+    ).toBeInTheDocument();
+  });
+
+  it("renders days and locations in itinerary tab", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue([]);
+    mockGetItinerary.mockResolvedValue({
+      days: [
+        {
+          id: "day-1",
+          date: "2026-06-01",
+          sort_order: 0,
+          starting_city: null,
+          ending_city: null,
+          created_by: null,
+          options: [
+            {
+              id: "opt-1",
+              option_index: 1,
+              locations: [
+                {
+                  location_id: "loc-1",
+                  sort_order: 0,
+                  time_period: "morning",
+                  location: {
+                    id: "loc-1",
+                    name: "Eiffel Tower",
+                    city: "Paris",
+                    address: null,
+                    google_link: null,
+                    category: null,
+                    note: null,
+                    working_hours: null,
+                    requires_booking: null,
+                  },
+                },
+                {
+                  location_id: "loc-2",
+                  sort_order: 1,
+                  time_period: "afternoon",
+                  location: {
+                    id: "loc-2",
+                    name: "Louvre Museum",
+                    city: "Paris",
+                    address: null,
+                    google_link: null,
+                    category: null,
+                    note: null,
+                    working_hours: null,
+                    requires_booking: null,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    render(<TripDetailPage />);
+
+    await screen.findByText("Paris Summer");
+    await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
+
+    expect(await screen.findByText("Jun 1, 2026")).toBeInTheDocument();
+    expect(screen.getByText("Eiffel Tower")).toBeInTheDocument();
+    expect(screen.getByText("Louvre Museum")).toBeInTheDocument();
+    expect(screen.getByText(/morning:/i)).toBeInTheDocument();
+    expect(screen.getByText(/afternoon:/i)).toBeInTheDocument();
+  });
+
+  it("shows No locations for a day with empty option", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue([]);
+    mockGetItinerary.mockResolvedValue({
+      days: [
+        {
+          id: "day-1",
+          date: "2026-06-01",
+          sort_order: 0,
+          starting_city: null,
+          ending_city: null,
+          created_by: null,
+          options: [{ id: "opt-1", option_index: 1, locations: [] }],
+        },
+      ],
+    });
+    render(<TripDetailPage />);
+
+    await screen.findByText("Paris Summer");
+    await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
+
+    expect(await screen.findByText("Jun 1, 2026")).toBeInTheDocument();
+    const noLocationTexts = screen.getAllByText("No locations");
+    expect(noLocationTexts.length).toBeGreaterThanOrEqual(1);
   });
 });
