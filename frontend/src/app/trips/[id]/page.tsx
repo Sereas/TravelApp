@@ -14,6 +14,7 @@ import { LocationCard } from "@/components/locations/LocationCard";
 import { AddLocationForm } from "@/components/locations/AddLocationForm";
 import { EditLocationRow } from "@/components/locations/EditLocationRow";
 import { EditTripForm } from "@/components/trips/EditTripForm";
+import { AddLocationsToOptionDialog } from "@/components/itinerary/AddLocationsToOptionDialog";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { LoadingSpinner } from "@/components/feedback/LoadingSpinner";
 import { ErrorBanner } from "@/components/feedback/ErrorBanner";
@@ -291,6 +292,99 @@ export default function TripDetailPage() {
       if (found) return found;
     }
     return day.options.find((o) => o.option_index === 1) ?? day.options[0];
+  }
+
+  async function handleDeleteOption(dayId: string, optionId: string) {
+    setItineraryActionError(null);
+    try {
+      await api.itinerary.deleteOption(tripId, dayId, optionId);
+      setSelectedOptionByDay((prev) => {
+        const next = { ...prev };
+        delete next[dayId];
+        return next;
+      });
+      await fetchItinerary();
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to delete alternative";
+      setItineraryActionError(message);
+    }
+  }
+
+  async function handleAddLocationsToOption(
+    dayId: string,
+    optionId: string,
+    locationIds: string[]
+  ) {
+    setItineraryActionError(null);
+    const currentOption = itinerary?.days
+      .find((d) => d.id === dayId)
+      ?.options.find((o) => o.id === optionId);
+    const startOrder = currentOption?.locations.length ?? 0;
+
+    const items = locationIds.map((lid, i) => ({
+      location_id: lid,
+      sort_order: startOrder + i,
+      time_period: "morning" as const,
+    }));
+
+    try {
+      await api.itinerary.batchAddLocationsToOption(
+        tripId,
+        dayId,
+        optionId,
+        items
+      );
+      await fetchItinerary();
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to add locations";
+      setItineraryActionError(message);
+      throw err;
+    }
+  }
+
+  async function handleRemoveLocationFromOption(
+    dayId: string,
+    optionId: string,
+    locationId: string
+  ) {
+    setItineraryActionError(null);
+    try {
+      await api.itinerary.removeLocationFromOption(
+        tripId,
+        dayId,
+        optionId,
+        locationId
+      );
+      setItinerary((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          days: prev.days.map((d) =>
+            d.id === dayId
+              ? {
+                  ...d,
+                  options: d.options.map((o) =>
+                    o.id === optionId
+                      ? {
+                          ...o,
+                          locations: o.locations.filter(
+                            (l) => l.location_id !== locationId
+                          ),
+                        }
+                      : o
+                  ),
+                }
+              : d
+          ),
+        };
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to remove location";
+      setItineraryActionError(message);
+    }
   }
 
   const categoryOptions = useMemo(() => {
@@ -718,35 +812,74 @@ export default function TripDetailPage() {
                     ? formatDate(day.date)
                     : `Day ${day.sort_order + 1}`;
                   const hasMultipleOptions = day.options.length > 1;
+                  const alreadyAddedIds = new Set(
+                    currentOption?.locations.map((l) => l.location_id) ?? []
+                  );
+                  const canDeleteOption = day.options.length > 1;
 
                   return (
                     <Card key={day.id}>
                       <CardHeader className="pb-2">
                         <div className="flex items-center justify-between gap-2">
                           <h3 className="text-lg font-semibold">{dayLabel}</h3>
-                          {/* Option selector dropdown */}
-                          {hasMultipleOptions && (
-                            <select
-                              aria-label={`Select option for ${dayLabel}`}
-                              className="h-8 rounded-md border border-input bg-background px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                              value={currentOption?.id ?? ""}
-                              onChange={(e) =>
-                                setSelectedOptionByDay((prev) => ({
-                                  ...prev,
-                                  [day.id]: e.target.value,
-                                }))
-                              }
+                          <div className="flex items-center gap-2">
+                            {hasMultipleOptions && (
+                              <select
+                                aria-label={`Select option for ${dayLabel}`}
+                                className="h-8 rounded-md border border-input bg-background px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                value={currentOption?.id ?? ""}
+                                onChange={(e) =>
+                                  setSelectedOptionByDay((prev) => ({
+                                    ...prev,
+                                    [day.id]: e.target.value,
+                                  }))
+                                }
+                              >
+                                {day.options.map((opt) => (
+                                  <option key={opt.id} value={opt.id}>
+                                    {opt.option_index === 1
+                                      ? "Main plan"
+                                      : `Alternative ${opt.option_index - 1}`}
+                                    {opt.created_by
+                                      ? ` (${opt.created_by})`
+                                      : ""}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                            {canDeleteOption && currentOption && (
+                              <ConfirmDialog
+                                trigger={
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 px-2 text-destructive hover:text-destructive"
+                                    aria-label="Delete this alternative"
+                                  >
+                                    ✕
+                                  </Button>
+                                }
+                                title="Delete this plan?"
+                                description={`"${currentOption.option_index === 1 ? "Main plan" : `Alternative ${currentOption.option_index - 1}`}" and its locations will be removed. The next plan will become the main plan if needed.`}
+                                confirmLabel="Delete"
+                                variant="destructive"
+                                onConfirm={() =>
+                                  handleDeleteOption(day.id, currentOption.id)
+                                }
+                              />
+                            )}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 whitespace-nowrap"
+                              onClick={() => handleCreateAlternative(day.id)}
+                              disabled={createOptionLoading === day.id}
                             >
-                              {day.options.map((opt) => (
-                                <option key={opt.id} value={opt.id}>
-                                  {opt.option_index === 1
-                                    ? "Main plan"
-                                    : `Alternative ${opt.option_index - 1}`}
-                                  {opt.created_by ? ` (${opt.created_by})` : ""}
-                                </option>
-                              ))}
-                            </select>
-                          )}
+                              {createOptionLoading === day.id
+                                ? "Creating…"
+                                : "+ Alternative"}
+                            </Button>
+                          </div>
                         </div>
                       </CardHeader>
                       <CardContent className="pt-0">
@@ -815,34 +948,69 @@ export default function TripDetailPage() {
                               />
                             </div>
                             {currentOption.locations.length === 0 ? (
-                              <p className="text-sm text-muted-foreground">
-                                No locations
+                              <p className="py-2 text-sm text-muted-foreground">
+                                No locations yet — add some from your trip
+                                collection.
                               </p>
                             ) : (
-                              <ul className="space-y-1.5">
+                              <ul className="space-y-1">
                                 {currentOption.locations
                                   .sort((a, b) => a.sort_order - b.sort_order)
                                   .map((ol) => (
                                     <li
                                       key={ol.location_id}
-                                      className="flex items-center gap-2 text-sm"
+                                      className="group flex items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-accent/50"
                                     >
-                                      <span className="capitalize text-muted-foreground">
-                                        {ol.time_period}:
+                                      <span className="w-20 shrink-0 capitalize text-muted-foreground">
+                                        {ol.time_period}
                                       </span>
-                                      <span>
+                                      <span className="min-w-0 flex-1">
                                         {ol.location.name}
                                         {ol.location.city && (
                                           <span className="text-muted-foreground">
                                             {" "}
-                                            ({ol.location.city})
+                                            · {ol.location.city}
                                           </span>
                                         )}
                                       </span>
+                                      <button
+                                        type="button"
+                                        className="shrink-0 text-xs text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                                        aria-label={`Remove ${ol.location.name}`}
+                                        onClick={() =>
+                                          handleRemoveLocationFromOption(
+                                            day.id,
+                                            currentOption.id,
+                                            ol.location_id
+                                          )
+                                        }
+                                      >
+                                        ✕
+                                      </button>
                                     </li>
                                   ))}
                               </ul>
                             )}
+                            <div className="mt-3">
+                              <AddLocationsToOptionDialog
+                                trigger={
+                                  <Button variant="outline" size="sm">
+                                    + Add locations
+                                  </Button>
+                                }
+                                allLocations={locations}
+                                alreadyAddedIds={alreadyAddedIds}
+                                startingCity={currentOption.starting_city}
+                                endingCity={currentOption.ending_city}
+                                onConfirm={(ids) =>
+                                  handleAddLocationsToOption(
+                                    day.id,
+                                    currentOption.id,
+                                    ids
+                                  )
+                                }
+                              />
+                            </div>
                           </>
                         )}
                         {!currentOption && (
@@ -850,18 +1018,6 @@ export default function TripDetailPage() {
                             No locations
                           </p>
                         )}
-                        <div className="mt-3 border-t border-border pt-3">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleCreateAlternative(day.id)}
-                            disabled={createOptionLoading === day.id}
-                          >
-                            {createOptionLoading === day.id
-                              ? "Creating…"
-                              : "+ Add an alternative plan"}
-                          </Button>
-                        </div>
                       </CardContent>
                     </Card>
                   );
