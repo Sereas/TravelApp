@@ -5,6 +5,7 @@ import pytest
 from backend.app.models.schemas import (
     AddOptionLocationBody,
     CreateDayBody,
+    CreateOptionBody,
     ItineraryDay,
     ItineraryOption,
     ItineraryOptionLocation,
@@ -18,16 +19,8 @@ from backend.app.models.schemas import (
 
 
 def test_create_day_body_allows_optional_fields():
-    body = CreateDayBody(
-        date=date(2025, 1, 2),
-        starting_city="Paris",
-        ending_city="Lyon",
-        created_by="Alice",
-    )
+    body = CreateDayBody(date=date(2025, 1, 2))
     assert body.date == date(2025, 1, 2)
-    assert body.starting_city == "Paris"
-    assert body.ending_city == "Lyon"
-    assert body.created_by == "Alice"
 
 
 def test_update_day_body_validation_sort_order_non_negative():
@@ -44,6 +37,20 @@ def test_update_option_body_validates_option_index_ge_one():
 
     with pytest.raises(ValueError):
         UpdateOptionBody(option_index=0)
+
+
+def test_create_option_body_accepts_city_and_created_by():
+    body = CreateOptionBody(starting_city="Paris", ending_city="Lyon", created_by="Alice")
+    assert body.starting_city == "Paris"
+    assert body.ending_city == "Lyon"
+    assert body.created_by == "Alice"
+
+
+def test_update_option_body_accepts_city_and_created_by():
+    body = UpdateOptionBody(starting_city="Nice", created_by="Bob")
+    assert body.starting_city == "Nice"
+    assert body.created_by == "Bob"
+    assert body.option_index is None
 
 
 def test_add_option_location_body_time_period_enum_validation():
@@ -94,17 +101,18 @@ def test_itinerary_tree_models_compose_correctly():
     node = ItineraryOptionLocation(
         location_id="loc", sort_order=0, time_period="morning", location=summary
     )
-    opt = ItineraryOption(id="opt", option_index=1, locations=[node])
-    day = ItineraryDay(
-        id="day",
-        date=None,
-        sort_order=0,
-        starting_city=None,
-        ending_city=None,
-        created_by=None,
-        options=[opt],
+    opt = ItineraryOption(
+        id="opt",
+        option_index=1,
+        starting_city="Paris",
+        ending_city="Lyon",
+        created_by="Alice",
+        locations=[node],
     )
+    day = ItineraryDay(id="day", date=None, sort_order=0, options=[opt])
     itinerary = ItineraryResponse(days=[day])
 
     assert len(itinerary.days) == 1
+    assert itinerary.days[0].options[0].starting_city == "Paris"
+    assert itinerary.days[0].options[0].created_by == "Alice"
     assert itinerary.days[0].options[0].locations[0].location.name == "Name"

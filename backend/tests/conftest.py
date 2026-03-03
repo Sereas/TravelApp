@@ -539,9 +539,6 @@ def mock_supabase_trips_and_days():
                         "trip_id": base.get("trip_id"),
                         "date": base.get("date"),
                         "sort_order": int(base.get("sort_order", 0)),
-                        "starting_city": base.get("starting_city"),
-                        "ending_city": base.get("ending_city"),
-                        "created_by": base.get("created_by"),
                         "created_at": "2025-01-01T12:00:00Z",
                     }
                     self._store.append(row)
@@ -654,6 +651,9 @@ def mock_supabase_trips_and_days():
                     "option_id": option_id,
                     "day_id": self._insert_row.get("day_id"),
                     "option_index": int(self._insert_row.get("option_index", 1)),
+                    "starting_city": self._insert_row.get("starting_city"),
+                    "ending_city": self._insert_row.get("ending_city"),
+                    "created_by": self._insert_row.get("created_by"),
                     "created_at": "2025-01-01T12:00:00Z",
                 }
                 self._store.append(row)

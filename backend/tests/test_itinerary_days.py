@@ -65,9 +65,6 @@ def test_list_days_own_trip_with_days_returns_200_ordered(
             "trip_id": trip_id,
             "date": "2025-06-01",
             "sort_order": 1,
-            "starting_city": "Paris",
-            "ending_city": None,
-            "created_by": None,
             "created_at": "2025-01-01T12:00:00Z",
         }
     )
@@ -77,9 +74,6 @@ def test_list_days_own_trip_with_days_returns_200_ordered(
             "trip_id": trip_id,
             "date": "2025-06-02",
             "sort_order": 0,
-            "starting_city": None,
-            "ending_city": "Lyon",
-            "created_by": "Alice",
             "created_at": "2025-01-01T12:00:00Z",
         }
     )
@@ -96,8 +90,6 @@ def test_list_days_own_trip_with_days_returns_200_ordered(
         assert len(data) == 2
         assert data[0]["sort_order"] == 0
         assert data[1]["sort_order"] == 1
-        assert data[0]["ending_city"] == "Lyon"
-        assert data[1]["starting_city"] == "Paris"
     finally:
         app.dependency_overrides.clear()
 
@@ -174,23 +166,15 @@ def test_create_day_returns_201_and_assigns_sort_order(
     try:
         r = client.post(
             f"/api/v1/trips/{trip_id}/days",
-            json={
-                "date": "2025-06-01",
-                "starting_city": "Paris",
-                "ending_city": None,
-                "created_by": "Me",
-            },
+            json={"date": "2025-06-01"},
         )
         assert r.status_code == 201
         data = r.json()
         assert data["trip_id"] == trip_id
         assert data["sort_order"] == 0
-        assert data["starting_city"] == "Paris"
-        assert data["created_by"] == "Me"
         assert "id" in data
         assert len(days_store) == 1
         assert days_store[0]["sort_order"] == 0
-        # Second create appends with sort_order 1
         r2 = client.post(f"/api/v1/trips/{trip_id}/days", json={})
         assert r2.status_code == 201
         assert r2.json()["sort_order"] == 1
@@ -246,9 +230,6 @@ def test_get_day_own_trip_returns_200(
             "trip_id": trip_id,
             "date": "2025-06-01",
             "sort_order": 0,
-            "starting_city": "Paris",
-            "ending_city": None,
-            "created_by": None,
             "created_at": "2025-01-01T12:00:00Z",
         }
     )
@@ -324,9 +305,6 @@ def test_update_day_returns_200(
             "trip_id": trip_id,
             "date": "2025-06-01",
             "sort_order": 0,
-            "starting_city": "Paris",
-            "ending_city": None,
-            "created_by": None,
             "created_at": "2025-01-01T12:00:00Z",
         }
     )
@@ -339,11 +317,10 @@ def test_update_day_returns_200(
     try:
         r = client.patch(
             f"/api/v1/trips/{trip_id}/days/{day_id}",
-            json={"ending_city": "Lyon", "created_by": "Alice"},
+            json={"date": "2025-07-01"},
         )
         assert r.status_code == 200
-        assert r.json()["ending_city"] == "Lyon"
-        assert r.json()["created_by"] == "Alice"
+        assert r.json()["date"] == "2025-07-01"
     finally:
         app.dependency_overrides.clear()
 
@@ -373,9 +350,6 @@ def test_update_day_empty_body_returns_422(
             "trip_id": trip_id,
             "date": None,
             "sort_order": 0,
-            "starting_city": None,
-            "ending_city": None,
-            "created_by": None,
             "created_at": "2025-01-01T12:00:00Z",
         }
     )
@@ -417,9 +391,6 @@ def test_delete_day_returns_204(
             "trip_id": trip_id,
             "date": None,
             "sort_order": 0,
-            "starting_city": None,
-            "ending_city": None,
-            "created_by": None,
             "created_at": "2025-01-01T12:00:00Z",
         }
     )

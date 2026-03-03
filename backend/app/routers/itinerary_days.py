@@ -15,9 +15,7 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger("itinerary_days")
 
 router = APIRouter(prefix="/trips", tags=["itinerary-days"])
 
-_TRIP_DAYS_SELECT = (
-    "day_id, trip_id, date, sort_order, starting_city, ending_city, created_by, created_at"
-)
+_TRIP_DAYS_SELECT = "day_id, trip_id, date, sort_order, created_at"
 
 
 def _day_row_to_response(row: dict) -> DayResponse:
@@ -41,9 +39,6 @@ def _day_row_to_response(row: dict) -> DayResponse:
         trip_id=str(row["trip_id"]),
         date=d,
         sort_order=int(row.get("sort_order", 0)),
-        starting_city=row.get("starting_city"),
-        ending_city=row.get("ending_city"),
-        created_by=row.get("created_by"),
         created_at=created_at,
     )
 
@@ -104,9 +99,6 @@ async def create_day(
         "trip_id": str(trip_id),
         "date": body.date.isoformat() if body.date else None,
         "sort_order": next_order,
-        "starting_city": body.starting_city,
-        "ending_city": body.ending_city,
-        "created_by": body.created_by,
     }
     result = supabase.table("trip_days").insert(row).execute()
     if not result.data or len(result.data) == 0:
@@ -231,12 +223,6 @@ async def update_day(
         update_data["date"] = body.date.isoformat() if body.date else None
     if "sort_order" in body.model_fields_set:
         update_data["sort_order"] = body.sort_order
-    if "starting_city" in body.model_fields_set:
-        update_data["starting_city"] = body.starting_city
-    if "ending_city" in body.model_fields_set:
-        update_data["ending_city"] = body.ending_city
-    if "created_by" in body.model_fields_set:
-        update_data["created_by"] = body.created_by
     if not update_data:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -356,9 +342,6 @@ async def generate_days(
                 "trip_id": str(trip_id),
                 "date": current.isoformat(),
                 "sort_order": sort_order,
-                "starting_city": None,
-                "ending_city": None,
-                "created_by": None,
             }
         )
         current = current + timedelta(days=1)

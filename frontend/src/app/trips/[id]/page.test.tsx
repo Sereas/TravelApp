@@ -758,7 +758,16 @@ describe("TripDetailPage", () => {
           id: "day-1",
           date: "2026-06-01",
           sort_order: 0,
-          options: [{ id: "opt-1", option_index: 1, starting_city: null, ending_city: null, created_by: null, locations: [] }],
+          options: [
+            {
+              id: "opt-1",
+              option_index: 1,
+              starting_city: null,
+              ending_city: null,
+              created_by: null,
+              locations: [],
+            },
+          ],
         },
       ],
     });
@@ -821,7 +830,16 @@ describe("TripDetailPage", () => {
           id: "day-new",
           date: null,
           sort_order: 0,
-          options: [{ id: "opt-1", option_index: 1, starting_city: null, ending_city: null, created_by: null, locations: [] }],
+          options: [
+            {
+              id: "opt-1",
+              option_index: 1,
+              starting_city: null,
+              ending_city: null,
+              created_by: null,
+              locations: [],
+            },
+          ],
         },
       ],
     });
@@ -873,13 +891,31 @@ describe("TripDetailPage", () => {
           id: "day-1",
           date: "2026-06-01",
           sort_order: 0,
-          options: [{ id: "opt-1", option_index: 1, starting_city: null, ending_city: null, created_by: null, locations: [] }],
+          options: [
+            {
+              id: "opt-1",
+              option_index: 1,
+              starting_city: null,
+              ending_city: null,
+              created_by: null,
+              locations: [],
+            },
+          ],
         },
         {
           id: "day-2",
           date: "2026-06-02",
           sort_order: 1,
-          options: [{ id: "opt-2", option_index: 1, starting_city: null, ending_city: null, created_by: null, locations: [] }],
+          options: [
+            {
+              id: "opt-2",
+              option_index: 1,
+              starting_city: null,
+              ending_city: null,
+              created_by: null,
+              locations: [],
+            },
+          ],
         },
       ],
     });
@@ -944,7 +980,16 @@ describe("TripDetailPage", () => {
           id: "day-1",
           date: "2026-06-01",
           sort_order: 0,
-          options: [{ id: "opt-1", option_index: 1, starting_city: null, ending_city: null, created_by: null, locations: [] }],
+          options: [
+            {
+              id: "opt-1",
+              option_index: 1,
+              starting_city: null,
+              ending_city: null,
+              created_by: null,
+              locations: [],
+            },
+          ],
         },
       ],
     });
@@ -968,7 +1013,16 @@ describe("TripDetailPage", () => {
           id: "day-1",
           date: "2026-06-01",
           sort_order: 0,
-          options: [{ id: "opt-1", option_index: 1, starting_city: "Paris", ending_city: "Lyon", created_by: null, locations: [] }],
+          options: [
+            {
+              id: "opt-1",
+              option_index: 1,
+              starting_city: "Paris",
+              ending_city: "Lyon",
+              created_by: null,
+              locations: [],
+            },
+          ],
         },
       ],
     });
