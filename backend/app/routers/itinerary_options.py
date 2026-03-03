@@ -13,6 +13,7 @@ from backend.app.models.schemas import (
     ReorderOptionsBody,
     UpdateOptionBody,
 )
+from backend.app.routers.trip_ownership import _ensure_trip_owned
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger("itinerary_options")
 
@@ -35,20 +36,6 @@ def _option_row_to_response(row: dict) -> OptionResponse:
         option_index=int(row.get("option_index", 1)),
         created_at=created_at,
     )
-
-
-def _ensure_trip_owned(supabase, trip_id: UUID, user_id: UUID) -> None:
-    """Raise 404 if trip does not exist or is not owned by user."""
-    result = (
-        supabase.table("trips").select("trip_id, user_id").eq("trip_id", str(trip_id)).execute()
-    )
-    if not result.data or len(result.data) == 0:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found")
-    if result.data[0].get("user_id") != str(user_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Trip not owned by user",
-        )
 
 
 def _ensure_day_in_trip(supabase, trip_id: UUID, day_id: UUID) -> None:

@@ -64,6 +64,12 @@ export default function TripDetailPage() {
   const [itinerary, setItinerary] = useState<ItineraryResponse | null>(null);
   const [itineraryLoading, setItineraryLoading] = useState(false);
   const [itineraryError, setItineraryError] = useState<string | null>(null);
+  const [addDayLoading, setAddDayLoading] = useState(false);
+  const [generateDaysLoading, setGenerateDaysLoading] = useState(false);
+  const [itineraryActionError, setItineraryActionError] = useState<
+    string | null
+  >(null);
+  const [updatingDayId, setUpdatingDayId] = useState<string | null>(null);
 
   async function fetchData() {
     setError(null);
@@ -117,6 +123,90 @@ export default function TripDetailPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, tripId]);
+
+  async function handleAddDay() {
+    setItineraryActionError(null);
+    setAddDayLoading(true);
+    try {
+      await api.itinerary.createDay(tripId);
+      await fetchItinerary();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to add day";
+      setItineraryActionError(message);
+    } finally {
+      setAddDayLoading(false);
+    }
+  }
+
+  async function handleGenerateDays() {
+    setItineraryActionError(null);
+    setGenerateDaysLoading(true);
+    try {
+      await api.itinerary.generateDays(tripId);
+      await fetchItinerary();
+    } catch (err) {
+      if (
+        err &&
+        typeof err === "object" &&
+        "status" in err &&
+        (err as { status: number }).status === 409
+      ) {
+        setItineraryActionError(
+          "Trip already has days. Cannot generate from dates."
+        );
+      } else {
+        const message =
+          err instanceof Error ? err.message : "Failed to generate days";
+        setItineraryActionError(message);
+      }
+    } finally {
+      setGenerateDaysLoading(false);
+    }
+  }
+
+  async function handleSaveDayDetails(
+    dayId: string,
+    updates: {
+      starting_city?: string | null;
+      ending_city?: string | null;
+    }
+  ) {
+    // No-op if nothing to update
+    if (!("starting_city" in updates) && !("ending_city" in updates)) {
+      return;
+    }
+    setItineraryActionError(null);
+    setUpdatingDayId(dayId);
+    try {
+      await api.itinerary.updateDay(tripId, dayId, updates);
+      // Optimistically update local itinerary state instead of refetching.
+      setItinerary((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          days: prev.days.map((d) =>
+            d.id === dayId
+              ? {
+                  ...d,
+                  ...(updates.starting_city !== undefined && {
+                    starting_city: updates.starting_city,
+                  }),
+                  ...(updates.ending_city !== undefined && {
+                    ending_city: updates.ending_city,
+                  }),
+                }
+              : d
+          ),
+        };
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to update day details";
+      setItineraryActionError(message);
+    } finally {
+      setUpdatingDayId(null);
+    }
+  }
 
   const categoryOptions = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -491,16 +581,52 @@ export default function TripDetailPage() {
           {itineraryError && !itineraryLoading && (
             <ErrorBanner message={itineraryError} onRetry={fetchItinerary} />
           )}
+          {itineraryActionError && !itineraryLoading && (
+            <ErrorBanner
+              message={itineraryActionError}
+              onRetry={() => setItineraryActionError(null)}
+            />
+          )}
           {!itineraryLoading &&
             !itineraryError &&
             itinerary?.days.length === 0 && (
-              <EmptyState message="No days yet. Add a day or generate days from your trip dates." />
+              <EmptyState message="No days yet. Add a day or generate days from your trip dates.">
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    onClick={handleAddDay}
+                    disabled={addDayLoading || generateDaysLoading}
+                  >
+                    {addDayLoading ? "Adding…" : "Add day"}
+                  </Button>
+                  {trip.start_date && trip.end_date && (
+                    <Button
+                      variant="outline"
+                      onClick={handleGenerateDays}
+                      disabled={addDayLoading || generateDaysLoading}
+                    >
+                      {generateDaysLoading
+                        ? "Generating…"
+                        : "Generate days from dates"}
+                    </Button>
+                  )}
+                </div>
+              </EmptyState>
             )}
           {!itineraryLoading &&
             !itineraryError &&
             itinerary &&
             itinerary.days.length > 0 && (
               <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold">Days</h2>
+                  <Button
+                    size="sm"
+                    onClick={handleAddDay}
+                    disabled={addDayLoading || generateDaysLoading}
+                  >
+                    {addDayLoading ? "Adding…" : "Add day"}
+                  </Button>
+                </div>
                 {itinerary.days.map((day) => {
                   const mainOption =
                     day.options.find((o) => o.option_index === 1) ??
@@ -514,6 +640,74 @@ export default function TripDetailPage() {
                         <h3 className="text-lg font-semibold">{dayLabel}</h3>
                       </CardHeader>
                       <CardContent className="pt-0">
+                        <div className="mb-4 flex flex-wrap items-end gap-3">
+                          <div className="flex w-full flex-col gap-1 sm:w-48">
+                            <label
+                              htmlFor={`starting-city-${day.id}`}
+                              className="text-xs font-medium text-muted-foreground"
+                            >
+                              Start City
+                            </label>
+                            <input
+                              id={`starting-city-${day.id}`}
+                              name="starting_city"
+                              defaultValue={day.starting_city ?? ""}
+                              autoComplete="off"
+                              className="h-8 rounded-md border border-input bg-background px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                              placeholder="e.g. Paris"
+                              onBlur={async (e) => {
+                                const value = e.target.value.trim();
+                                const normalized = value === "" ? null : value;
+                                if (
+                                  normalized === (day.starting_city ?? null)
+                                ) {
+                                  return;
+                                }
+                                await handleSaveDayDetails(day.id, {
+                                  starting_city: normalized,
+                                });
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  (e.currentTarget as HTMLInputElement).blur();
+                                }
+                              }}
+                            />
+                          </div>
+                          <div className="flex w-full flex-col gap-1 sm:w-48">
+                            <label
+                              htmlFor={`ending-city-${day.id}`}
+                              className="text-xs font-medium text-muted-foreground"
+                            >
+                              End City
+                            </label>
+                            <input
+                              id={`ending-city-${day.id}`}
+                              name="ending_city"
+                              defaultValue={day.ending_city ?? ""}
+                              autoComplete="off"
+                              className="h-8 rounded-md border border-input bg-background px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                              placeholder="e.g. Nice"
+                              onBlur={async (e) => {
+                                const value = e.target.value.trim();
+                                const normalized = value === "" ? null : value;
+                                if (normalized === (day.ending_city ?? null)) {
+                                  return;
+                                }
+                                await handleSaveDayDetails(day.id, {
+                                  ending_city: normalized,
+                                });
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  (e.currentTarget as HTMLInputElement).blur();
+                                }
+                              }}
+                            />
+                          </div>
+                        </div>
                         {mainOption ? (
                           mainOption.locations.length === 0 ? (
                             <p className="text-sm text-muted-foreground">

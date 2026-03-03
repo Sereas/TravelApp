@@ -13,7 +13,8 @@ from backend.app.models.schemas import (
     OptionLocationResponse,
     UpdateOptionLocationBody,
 )
-from backend.app.routers.itinerary_options import _ensure_day_in_trip, _ensure_trip_owned
+from backend.app.routers.itinerary_options import _ensure_day_in_trip
+from backend.app.routers.trip_ownership import _ensure_trip_owned
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger("itinerary_option_locations")
 

@@ -14,7 +14,7 @@ from backend.app.models.schemas import (
     ItineraryResponse,
     LocationSummary,
 )
-from backend.app.routers.itinerary_days import _ensure_trip_owned
+from backend.app.routers.trip_ownership import _ensure_trip_owned
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger("itinerary_tree")
 

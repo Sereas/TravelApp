@@ -111,6 +111,18 @@ export interface ItineraryDay {
   options: ItineraryOption[];
 }
 
+/** Flat day from days API (create/generate/list); no options. */
+export interface DayResponse {
+  id: string;
+  trip_id: string;
+  date: string | null;
+  sort_order: number;
+  starting_city: string | null;
+  ending_city: string | null;
+  created_by: string | null;
+  created_at: string | null;
+}
+
 export interface ItineraryResponse {
   days: ItineraryDay[];
 }
@@ -218,5 +230,43 @@ export const api = {
       request<ItineraryResponse>(
         `/api/v1/trips/${tripId}/itinerary?include_empty_options=${includeEmptyOptions}`
       ),
+
+    /** Create one day (append). Backend assigns sort_order. */
+    createDay: (
+      tripId: string,
+      body: {
+        date?: string | null;
+        starting_city?: string | null;
+        ending_city?: string | null;
+        created_by?: string | null;
+      } = {}
+    ) =>
+      request<DayResponse>(`/api/v1/trips/${tripId}/days`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+
+    /** Update a day (e.g. starting/ending city). */
+    updateDay: (
+      tripId: string,
+      dayId: string,
+      body: {
+        date?: string | null;
+        sort_order?: number;
+        starting_city?: string | null;
+        ending_city?: string | null;
+        created_by?: string | null;
+      }
+    ) =>
+      request<DayResponse>(`/api/v1/trips/${tripId}/days/${dayId}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }),
+
+    /** Generate days from trip start_date/end_date. 409 if trip already has days. */
+    generateDays: (tripId: string) =>
+      request<DayResponse[]>(`/api/v1/trips/${tripId}/days/generate`, {
+        method: "POST",
+      }),
   },
 };
