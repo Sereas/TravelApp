@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from backend.app.db.supabase import get_supabase_client
 from backend.app.dependencies import get_current_user_id
 from backend.app.models.schemas import (
+    CreateOptionBody,
     OptionResponse,
     ReorderOptionsBody,
     UpdateOptionBody,
@@ -19,7 +20,9 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger("itinerary_options")
 
 router = APIRouter(prefix="/trips", tags=["itinerary-options"])
 
-_DAY_OPTIONS_SELECT = "option_id, day_id, option_index, created_at"
+_DAY_OPTIONS_SELECT = (
+    "option_id, day_id, option_index, starting_city, ending_city, created_by, created_at"
+)
 
 
 def _option_row_to_response(row: dict) -> OptionResponse:
@@ -34,6 +37,9 @@ def _option_row_to_response(row: dict) -> OptionResponse:
         id=str(row["option_id"]),
         day_id=str(row["day_id"]),
         option_index=int(row.get("option_index", 1)),
+        starting_city=row.get("starting_city"),
+        ending_city=row.get("ending_city"),
+        created_by=row.get("created_by"),
         created_at=created_at,
     )
 
@@ -85,6 +91,7 @@ async def list_options(
 async def create_option(
     trip_id: UUID,
     day_id: UUID,
+    body: CreateOptionBody | None = None,
     user_id: UUID = Depends(get_current_user_id),
     supabase=Depends(get_supabase_client),
 ):
@@ -105,7 +112,14 @@ async def create_option(
     next_index = 1
     if max_result.data and len(max_result.data) > 0:
         next_index = int(max_result.data[0].get("option_index", 0)) + 1
-    row = {"day_id": str(day_id), "option_index": next_index}
+    row: dict[str, object] = {"day_id": str(day_id), "option_index": next_index}
+    if body:
+        if body.starting_city is not None:
+            row["starting_city"] = body.starting_city
+        if body.ending_city is not None:
+            row["ending_city"] = body.ending_city
+        if body.created_by is not None:
+            row["created_by"] = body.created_by
     result = supabase.table("day_options").insert(row).execute()
     if not result.data or len(result.data) == 0:
         logger.error("option_insert_failed", day_id=str(day_id))
@@ -243,7 +257,6 @@ async def update_option(
         )
     update_data: dict[str, object] = {}
     if "option_index" in body.model_fields_set and body.option_index is not None:
-        # Conflict check: another option in this day already has this index.
         conflict = (
             supabase.table("day_options")
             .select("option_id")
@@ -259,6 +272,12 @@ async def update_option(
                         detail="Another option already uses this option_index in this day",
                     )
         update_data["option_index"] = body.option_index
+    if "starting_city" in body.model_fields_set:
+        update_data["starting_city"] = body.starting_city
+    if "ending_city" in body.model_fields_set:
+        update_data["ending_city"] = body.ending_city
+    if "created_by" in body.model_fields_set:
+        update_data["created_by"] = body.created_by
     if not update_data:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

@@ -42,9 +42,6 @@ def test_reorder_days_happy_path_updates_sort_order(
             "trip_id": trip_id,
             "date": "2025-06-01",
             "sort_order": 0,
-            "starting_city": None,
-            "ending_city": None,
-            "created_by": None,
             "created_at": "2025-01-01T12:00:00Z",
         }
     )
@@ -54,9 +51,6 @@ def test_reorder_days_happy_path_updates_sort_order(
             "trip_id": trip_id,
             "date": "2025-06-02",
             "sort_order": 1,
-            "starting_city": None,
-            "ending_city": None,
-            "created_by": None,
             "created_at": "2025-01-01T12:00:00Z",
         }
     )
@@ -182,9 +176,6 @@ def test_generate_days_when_days_already_exist_returns_409(
             "trip_id": trip_id,
             "date": "2025-06-01",
             "sort_order": 0,
-            "starting_city": None,
-            "ending_city": None,
-            "created_by": None,
             "created_at": "2025-01-01T12:00:00Z",
         }
     )

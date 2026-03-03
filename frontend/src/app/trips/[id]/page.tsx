@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   api,
   type Trip,
   type Location,
   type ItineraryResponse,
+  type ItineraryDay,
+  type ItineraryOption,
 } from "@/lib/api";
 import { LocationCard } from "@/components/locations/LocationCard";
 import { AddLocationForm } from "@/components/locations/AddLocationForm";
@@ -19,6 +21,58 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+
+function AutosaveInput({
+  id,
+  label,
+  placeholder,
+  initialValue,
+  onSave,
+}: {
+  id: string;
+  label: string;
+  placeholder: string;
+  initialValue: string;
+  onSave: (value: string) => Promise<void>;
+}) {
+  const [value, setValue] = useState(initialValue);
+  const savedRef = useRef(initialValue);
+
+  useEffect(() => {
+    setValue(initialValue);
+    savedRef.current = initialValue;
+  }, [initialValue]);
+
+  const commitValue = useCallback(async () => {
+    const trimmed = value.trim();
+    if (trimmed === savedRef.current) return;
+    savedRef.current = trimmed;
+    await onSave(trimmed);
+  }, [value, onSave]);
+
+  return (
+    <div className="flex w-full flex-col gap-1 sm:w-48">
+      <label htmlFor={id} className="text-xs font-medium text-muted-foreground">
+        {label}
+      </label>
+      <input
+        id={id}
+        autoComplete="off"
+        className="h-8 rounded-md border border-input bg-background px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={() => void commitValue()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            (e.currentTarget as HTMLInputElement).blur();
+          }
+        }}
+      />
+    </div>
+  );
+}
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr + "T00:00:00");
@@ -70,6 +124,12 @@ export default function TripDetailPage() {
     string | null
   >(null);
   const [updatingDayId, setUpdatingDayId] = useState<string | null>(null);
+  const [selectedOptionByDay, setSelectedOptionByDay] = useState<
+    Record<string, string>
+  >({});
+  const [createOptionLoading, setCreateOptionLoading] = useState<string | null>(
+    null
+  );
 
   async function fetchData() {
     setError(null);
@@ -164,22 +224,26 @@ export default function TripDetailPage() {
     }
   }
 
-  async function handleSaveDayDetails(
+  async function handleSaveOptionDetails(
     dayId: string,
+    optionId: string,
     updates: {
       starting_city?: string | null;
       ending_city?: string | null;
+      created_by?: string | null;
     }
   ) {
-    // No-op if nothing to update
-    if (!("starting_city" in updates) && !("ending_city" in updates)) {
+    if (
+      !("starting_city" in updates) &&
+      !("ending_city" in updates) &&
+      !("created_by" in updates)
+    ) {
       return;
     }
     setItineraryActionError(null);
     setUpdatingDayId(dayId);
     try {
-      await api.itinerary.updateDay(tripId, dayId, updates);
-      // Optimistically update local itinerary state instead of refetching.
+      await api.itinerary.updateOption(tripId, dayId, optionId, updates);
       setItinerary((prev) => {
         if (!prev) return prev;
         return {
@@ -188,12 +252,9 @@ export default function TripDetailPage() {
             d.id === dayId
               ? {
                   ...d,
-                  ...(updates.starting_city !== undefined && {
-                    starting_city: updates.starting_city,
-                  }),
-                  ...(updates.ending_city !== undefined && {
-                    ending_city: updates.ending_city,
-                  }),
+                  options: d.options.map((o) =>
+                    o.id === optionId ? { ...o, ...updates } : o
+                  ),
                 }
               : d
           ),
@@ -201,11 +262,35 @@ export default function TripDetailPage() {
       });
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : "Failed to update day details";
+        err instanceof Error ? err.message : "Failed to update option details";
       setItineraryActionError(message);
     } finally {
       setUpdatingDayId(null);
     }
+  }
+
+  async function handleCreateAlternative(dayId: string) {
+    setItineraryActionError(null);
+    setCreateOptionLoading(dayId);
+    try {
+      await api.itinerary.createOption(tripId, dayId);
+      await fetchItinerary();
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to create alternative";
+      setItineraryActionError(message);
+    } finally {
+      setCreateOptionLoading(null);
+    }
+  }
+
+  function getSelectedOption(day: ItineraryDay): ItineraryOption | undefined {
+    const selId = selectedOptionByDay[day.id];
+    if (selId) {
+      const found = day.options.find((o) => o.id === selId);
+      if (found) return found;
+    }
+    return day.options.find((o) => o.option_index === 1) ?? day.options[0];
   }
 
   const categoryOptions = useMemo(() => {
@@ -628,121 +713,155 @@ export default function TripDetailPage() {
                   </Button>
                 </div>
                 {itinerary.days.map((day) => {
-                  const mainOption =
-                    day.options.find((o) => o.option_index === 1) ??
-                    day.options[0];
+                  const currentOption = getSelectedOption(day);
                   const dayLabel = day.date
                     ? formatDate(day.date)
                     : `Day ${day.sort_order + 1}`;
+                  const hasMultipleOptions = day.options.length > 1;
+
                   return (
                     <Card key={day.id}>
                       <CardHeader className="pb-2">
-                        <h3 className="text-lg font-semibold">{dayLabel}</h3>
+                        <div className="flex items-center justify-between gap-2">
+                          <h3 className="text-lg font-semibold">{dayLabel}</h3>
+                          {/* Option selector dropdown */}
+                          {hasMultipleOptions && (
+                            <select
+                              aria-label={`Select option for ${dayLabel}`}
+                              className="h-8 rounded-md border border-input bg-background px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                              value={currentOption?.id ?? ""}
+                              onChange={(e) =>
+                                setSelectedOptionByDay((prev) => ({
+                                  ...prev,
+                                  [day.id]: e.target.value,
+                                }))
+                              }
+                            >
+                              {day.options.map((opt) => (
+                                <option key={opt.id} value={opt.id}>
+                                  {opt.option_index === 1
+                                    ? "Main plan"
+                                    : `Alternative ${opt.option_index - 1}`}
+                                  {opt.created_by ? ` (${opt.created_by})` : ""}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
                       </CardHeader>
                       <CardContent className="pt-0">
-                        <div className="mb-4 flex flex-wrap items-end gap-3">
-                          <div className="flex w-full flex-col gap-1 sm:w-48">
-                            <label
-                              htmlFor={`starting-city-${day.id}`}
-                              className="text-xs font-medium text-muted-foreground"
-                            >
-                              Start City
-                            </label>
-                            <input
-                              id={`starting-city-${day.id}`}
-                              name="starting_city"
-                              defaultValue={day.starting_city ?? ""}
-                              autoComplete="off"
-                              className="h-8 rounded-md border border-input bg-background px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                              placeholder="e.g. Paris"
-                              onBlur={async (e) => {
-                                const value = e.target.value.trim();
-                                const normalized = value === "" ? null : value;
-                                if (
-                                  normalized === (day.starting_city ?? null)
-                                ) {
-                                  return;
-                                }
-                                await handleSaveDayDetails(day.id, {
-                                  starting_city: normalized,
-                                });
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                  e.preventDefault();
-                                  (e.currentTarget as HTMLInputElement).blur();
-                                }
-                              }}
-                            />
-                          </div>
-                          <div className="flex w-full flex-col gap-1 sm:w-48">
-                            <label
-                              htmlFor={`ending-city-${day.id}`}
-                              className="text-xs font-medium text-muted-foreground"
-                            >
-                              End City
-                            </label>
-                            <input
-                              id={`ending-city-${day.id}`}
-                              name="ending_city"
-                              defaultValue={day.ending_city ?? ""}
-                              autoComplete="off"
-                              className="h-8 rounded-md border border-input bg-background px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                              placeholder="e.g. Nice"
-                              onBlur={async (e) => {
-                                const value = e.target.value.trim();
-                                const normalized = value === "" ? null : value;
-                                if (normalized === (day.ending_city ?? null)) {
-                                  return;
-                                }
-                                await handleSaveDayDetails(day.id, {
-                                  ending_city: normalized,
-                                });
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                  e.preventDefault();
-                                  (e.currentTarget as HTMLInputElement).blur();
-                                }
-                              }}
-                            />
-                          </div>
-                        </div>
-                        {mainOption ? (
-                          mainOption.locations.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">
-                              No locations
-                            </p>
-                          ) : (
-                            <ul className="space-y-1.5">
-                              {mainOption.locations
-                                .sort((a, b) => a.sort_order - b.sort_order)
-                                .map((ol) => (
-                                  <li
-                                    key={ol.location_id}
-                                    className="flex items-center gap-2 text-sm"
-                                  >
-                                    <span className="capitalize text-muted-foreground">
-                                      {ol.time_period}:
-                                    </span>
-                                    <span>
-                                      {ol.location.name}
-                                      {ol.location.city && (
-                                        <span className="text-muted-foreground">
-                                          {" "}
-                                          ({ol.location.city})
-                                        </span>
-                                      )}
-                                    </span>
-                                  </li>
-                                ))}
-                            </ul>
-                          )
-                        ) : (
+                        {currentOption && (
+                          <>
+                            <div className="mb-4 flex flex-wrap items-end gap-3">
+                              <AutosaveInput
+                                key={`start-${currentOption.id}`}
+                                id={`starting-city-${currentOption.id}`}
+                                label="Start City"
+                                placeholder="e.g. Paris"
+                                initialValue={currentOption.starting_city ?? ""}
+                                onSave={async (val) => {
+                                  const normalized = val === "" ? null : val;
+                                  if (
+                                    normalized ===
+                                    (currentOption.starting_city ?? null)
+                                  )
+                                    return;
+                                  await handleSaveOptionDetails(
+                                    day.id,
+                                    currentOption.id,
+                                    { starting_city: normalized }
+                                  );
+                                }}
+                              />
+                              <AutosaveInput
+                                key={`end-${currentOption.id}`}
+                                id={`ending-city-${currentOption.id}`}
+                                label="End City"
+                                placeholder="e.g. Nice"
+                                initialValue={currentOption.ending_city ?? ""}
+                                onSave={async (val) => {
+                                  const normalized = val === "" ? null : val;
+                                  if (
+                                    normalized ===
+                                    (currentOption.ending_city ?? null)
+                                  )
+                                    return;
+                                  await handleSaveOptionDetails(
+                                    day.id,
+                                    currentOption.id,
+                                    { ending_city: normalized }
+                                  );
+                                }}
+                              />
+                              <AutosaveInput
+                                key={`creator-${currentOption.id}`}
+                                id={`created-by-${currentOption.id}`}
+                                label="Created by"
+                                placeholder="e.g. Alice"
+                                initialValue={currentOption.created_by ?? ""}
+                                onSave={async (val) => {
+                                  const normalized = val === "" ? null : val;
+                                  if (
+                                    normalized ===
+                                    (currentOption.created_by ?? null)
+                                  )
+                                    return;
+                                  await handleSaveOptionDetails(
+                                    day.id,
+                                    currentOption.id,
+                                    { created_by: normalized }
+                                  );
+                                }}
+                              />
+                            </div>
+                            {currentOption.locations.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">
+                                No locations
+                              </p>
+                            ) : (
+                              <ul className="space-y-1.5">
+                                {currentOption.locations
+                                  .sort((a, b) => a.sort_order - b.sort_order)
+                                  .map((ol) => (
+                                    <li
+                                      key={ol.location_id}
+                                      className="flex items-center gap-2 text-sm"
+                                    >
+                                      <span className="capitalize text-muted-foreground">
+                                        {ol.time_period}:
+                                      </span>
+                                      <span>
+                                        {ol.location.name}
+                                        {ol.location.city && (
+                                          <span className="text-muted-foreground">
+                                            {" "}
+                                            ({ol.location.city})
+                                          </span>
+                                        )}
+                                      </span>
+                                    </li>
+                                  ))}
+                              </ul>
+                            )}
+                          </>
+                        )}
+                        {!currentOption && (
                           <p className="text-sm text-muted-foreground">
                             No locations
                           </p>
                         )}
+                        <div className="mt-3 border-t border-border pt-3">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleCreateAlternative(day.id)}
+                            disabled={createOptionLoading === day.id}
+                          >
+                            {createOptionLoading === day.id
+                              ? "Creating…"
+                              : "+ Add an alternative plan"}
+                          </Button>
+                        </div>
                       </CardContent>
                     </Card>
                   );

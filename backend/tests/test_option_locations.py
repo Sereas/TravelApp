@@ -32,9 +32,6 @@ def _setup_trip_day_option_and_location(mock_supabase_trips_and_days, mock_user_
             "trip_id": trip_id,
             "date": "2025-06-01",
             "sort_order": 0,
-            "starting_city": None,
-            "ending_city": None,
-            "created_by": None,
             "created_at": "2025-01-01T12:00:00Z",
         }
     )

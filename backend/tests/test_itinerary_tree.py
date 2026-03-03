@@ -31,9 +31,6 @@ def _setup_full_itinerary(mock_supabase_trips_and_days, mock_user_id):
             "trip_id": trip_id,
             "date": "2025-06-01",
             "sort_order": 1,
-            "starting_city": "Paris",
-            "ending_city": None,
-            "created_by": "Alice",
             "created_at": "2025-01-01T12:00:00Z",
         }
     )
@@ -43,13 +40,10 @@ def _setup_full_itinerary(mock_supabase_trips_and_days, mock_user_id):
             "trip_id": trip_id,
             "date": "2025-06-02",
             "sort_order": 0,
-            "starting_city": None,
-            "ending_city": "Lyon",
-            "created_by": None,
             "created_at": "2025-01-01T12:00:00Z",
         }
     )
-    # Options
+    # Options (cities and created_by now live here)
     opt_store = mock_sb._options_store
     option1 = str(uuid4())
     option2 = str(uuid4())
@@ -58,6 +52,9 @@ def _setup_full_itinerary(mock_supabase_trips_and_days, mock_user_id):
             "option_id": option1,
             "day_id": day1,
             "option_index": 2,
+            "starting_city": None,
+            "ending_city": None,
+            "created_by": None,
             "created_at": "2025-01-01T12:00:00Z",
         }
     )
@@ -66,6 +63,9 @@ def _setup_full_itinerary(mock_supabase_trips_and_days, mock_user_id):
             "option_id": option2,
             "day_id": day1,
             "option_index": 1,
+            "starting_city": "Paris",
+            "ending_city": None,
+            "created_by": "Alice",
             "created_at": "2025-01-01T12:00:00Z",
         }
     )

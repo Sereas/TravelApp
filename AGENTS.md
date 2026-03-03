@@ -10,24 +10,24 @@ TravelApp is a Python/FastAPI backend API and a Next.js Web frontend for travel 
 
 The project uses a **dedicated venv** for backend work. Use it for all Python and pytest commands so dependencies (e.g. pytest) are available.
 
-- **Path:** `/Users/olegdylevich/PycharmProjects/VirtualEnvironments/travelApp`
-- **Activate (optional):** `source /Users/olegdylevich/PycharmProjects/VirtualEnvironments/travelApp/bin/activate`
-- **Run without activating:** use the venv’s Python explicitly, e.g.:
-  - Backend tests: `/Users/olegdylevich/PycharmProjects/VirtualEnvironments/travelApp/bin/python -m pytest backend/tests -v`
-  - Uvicorn: same `bin/python -m uvicorn backend.app.main:app --reload ...`
+- **Path:** `.venv` at the workspace root (created via `python3 -m venv .venv`)
+- **Activate (optional):** `source .venv/bin/activate`
+- **Run without activating:** use the venv's Python explicitly, e.g.:
+  - Backend tests: `.venv/bin/python -m pytest backend/tests -v`
+  - Uvicorn: `.venv/bin/python -m uvicorn backend.app.main:app --reload ...`
 
-If `python3 -m pytest` fails with "No module named pytest", install deps into this venv:  
-`/Users/olegdylevich/PycharmProjects/VirtualEnvironments/travelApp/bin/pip install -r requirements.txt`
+If `python3 -m pytest` fails with "No module named pytest", install deps into the venv:
+`.venv/bin/pip install -r requirements.txt`
 
 ### Running tests
 
 **Backend:** (use the project venv; see above)
 ```bash
-/Users/olegdylevich/PycharmProjects/VirtualEnvironments/travelApp/bin/python -m pytest backend/tests -v
+.venv/bin/python -m pytest backend/tests -v
 ```
 Or after activating the venv: `python -m pytest backend/tests -v`.
 
-All tests mock Supabase entirely — no real Supabase instance is needed to run the test suite (89 backend tests pass, 1 RLS integration test skipped by default).
+All tests mock Supabase entirely -- no real Supabase instance is needed to run the test suite (143 backend tests pass, 1 RLS integration test skipped by default).
 
 **Frontend:** From repo root, `cd frontend` then:
 ```bash
@@ -48,9 +48,9 @@ A `.env` file with `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_JW
 ### Supabase connection
 
 The app connects to a hosted Supabase instance. Required env vars (from `config.py`):
-- `SUPABASE_URL` — project URL (required for both DB access and JWT verification via JWKS)
-- `SUPABASE_SERVICE_ROLE_KEY` — service role key (bypasses RLS, used by backend)
-- `SUPABASE_JWT_SECRET` — **optional** fallback for HS256 JWT verification; not needed when `SUPABASE_URL` is set (ES256 via JWKS is the primary method)
+- `SUPABASE_URL` -- project URL (required for both DB access and JWT verification via JWKS)
+- `SUPABASE_SERVICE_ROLE_KEY` -- service role key (bypasses RLS, used by backend)
+- `SUPABASE_JWT_SECRET` -- **optional** fallback for HS256 JWT verification; not needed when `SUPABASE_URL` is set (ES256 via JWKS is the primary method)
 
 **JWT verification**: Supabase uses ES256 (asymmetric) JWTs. The backend verifies tokens via the JWKS endpoint at `{SUPABASE_URL}/auth/v1/.well-known/jwks.json`. HS256 with `SUPABASE_JWT_SECRET` is only used as a fallback (e.g. in tests or legacy setups).
 
@@ -83,19 +83,23 @@ Full spec: **`docs/features/itinerary-api.md`**. Use it for URL design, request/
 
 **Two main entry points for agents:**
 
-1. **Tree (read-only view)** — `GET /api/v1/trips/{trip_id}/itinerary?include_empty_options=false`. Returns full structure: days → options → locations with embedded `LocationSummary`. Default omits options that have no locations; use `include_empty_options=true` when the UI needs empty option slots (e.g. “Add first location”).
-2. **Option-locations CRUD (edit)** — `GET/POST/PATCH/DELETE /api/v1/trips/{trip_id}/days/{day_id}/options/{option_id}/locations` (and `.../locations/{location_id}` for update/delete, plus `POST .../locations/batch`). Every response includes the same `LocationSummary` as the tree; use this for “edit this option’s locations” screens so the frontend does not need to call the tree endpoint for editing.
+1. **Tree (read-only view)** -- `GET /api/v1/trips/{trip_id}/itinerary?include_empty_options=true`. Returns full structure: days -> options -> locations with embedded `LocationSummary`. Default includes empty options so the UI can render alternative plan selectors.
+2. **Option-locations CRUD (edit)** -- `GET/POST/PATCH/DELETE /api/v1/trips/{trip_id}/days/{day_id}/options/{option_id}/locations` (and `.../locations/{location_id}` for update/delete, plus `POST .../locations/batch`). Every response includes the same `LocationSummary` as the tree.
 
-**Error policy (consistent across itinerary endpoints):** `401` missing/invalid JWT; `404` trip/day/option/link not found or not owned (including reorder when an id in the body is not in scope); `409` conflict (e.g. location already in option, option_index already used, trip already has days); `400` precondition (e.g. location not in trip, trip missing dates); `422` validation (empty body, duplicate ids, invalid `time_period`). Frontend can map status + `detail` string for user feedback.
+**Schema note (column move):** `starting_city`, `ending_city`, and `created_by` live on the `day_options` table (not `trip_days`). Each option tracks its own cities and creator. The `CreateOptionBody` and `UpdateOptionBody` schemas accept these fields; `CreateDayBody` and `UpdateDayBody` do not.
+
+**Error policy (consistent across itinerary endpoints):** `401` missing/invalid JWT; `404` trip/day/option/link not found or not owned; `409` conflict (e.g. location already in option, option_index already used, trip already has days); `400` precondition (e.g. location not in trip, trip missing dates); `422` validation (empty body, duplicate ids, invalid `time_period`).
 
 ### Key caveats
 
 - The `python3` binary is available (not `python`). Use `python3 -m pytest` and `python3 -m uvicorn ...` or ensure `$HOME/.local/bin` is on `PATH` for the `uvicorn`/`pytest` CLI commands.
-- The `.env` file is gitignored — create it locally with dummy or real Supabase credentials. In Cursor Cloud, secrets are injected as environment variables automatically.
+- The `.env` file is gitignored -- create it locally with dummy or real Supabase credentials. In Cursor Cloud, secrets are injected as environment variables automatically.
 - `config.py` uses `@lru_cache` for settings. Tests clear this cache via the `reset_settings_cache` autouse fixture. If you modify env vars in a test, ensure you call `get_settings.cache_clear()`.
 - **Linting/formatting**: `ruff` is configured in `pyproject.toml`. Run `ruff check .` and `ruff format --check .` to verify. Use `ruff check --fix .` and `ruff format .` to auto-fix. Rule B008 is ignored (needed for FastAPI `Depends()`).
 - **Frontend `.env.local`**: The frontend dev server needs `frontend/.env.local` with `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `NEXT_PUBLIC_API_URL=http://localhost:8000`. In Cursor Cloud, create this from injected secrets: `SUPABASE_URL` maps to `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_KEY` maps to `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
 - **`docs/` is gitignored**: The `docs/` directory is listed in `.gitignore`. Use `git add -f docs/` when committing new documentation files like `docs/CHANGELOG.md`.
+- **Supabase DDL cannot be run from Cloud Agent VMs** -- direct database connections (port 5432/6543) are blocked. Use the Supabase SQL Editor in the dashboard for schema migrations. Migration files are in `docs/migrations/`.
+- **In Cursor Cloud** the venv requires `python3.12-venv` apt package. The update script handles this.
 
 ### E2E testing with a real Supabase instance
 

@@ -22,6 +22,9 @@ const mockGetItinerary = vi.fn();
 const mockCreateDay = vi.fn();
 const mockGenerateDays = vi.fn();
 const mockUpdateDay = vi.fn();
+const mockCreateOption = vi.fn();
+const mockUpdateOption = vi.fn();
+const mockDeleteOption = vi.fn();
 
 vi.mock("@/lib/api", () => ({
   api: {
@@ -41,6 +44,9 @@ vi.mock("@/lib/api", () => ({
       createDay: (...args: unknown[]) => mockCreateDay(...args),
       generateDays: (...args: unknown[]) => mockGenerateDays(...args),
       updateDay: (...args: unknown[]) => mockUpdateDay(...args),
+      createOption: (...args: unknown[]) => mockCreateOption(...args),
+      updateOption: (...args: unknown[]) => mockUpdateOption(...args),
+      deleteOption: (...args: unknown[]) => mockDeleteOption(...args),
     },
   },
   ApiError: class ApiError extends Error {
@@ -685,13 +691,13 @@ describe("TripDetailPage", () => {
           id: "day-1",
           date: "2026-06-01",
           sort_order: 0,
-          starting_city: null,
-          ending_city: null,
-          created_by: null,
           options: [
             {
               id: "opt-1",
               option_index: 1,
+              starting_city: null,
+              ending_city: null,
+              created_by: null,
               locations: [
                 {
                   location_id: "loc-1",
@@ -752,10 +758,16 @@ describe("TripDetailPage", () => {
           id: "day-1",
           date: "2026-06-01",
           sort_order: 0,
-          starting_city: null,
-          ending_city: null,
-          created_by: null,
-          options: [{ id: "opt-1", option_index: 1, locations: [] }],
+          options: [
+            {
+              id: "opt-1",
+              option_index: 1,
+              starting_city: null,
+              ending_city: null,
+              created_by: null,
+              locations: [],
+            },
+          ],
         },
       ],
     });
@@ -818,10 +830,16 @@ describe("TripDetailPage", () => {
           id: "day-new",
           date: null,
           sort_order: 0,
-          starting_city: null,
-          ending_city: null,
-          created_by: null,
-          options: [{ id: "opt-1", option_index: 1, locations: [] }],
+          options: [
+            {
+              id: "opt-1",
+              option_index: 1,
+              starting_city: null,
+              ending_city: null,
+              created_by: null,
+              locations: [],
+            },
+          ],
         },
       ],
     });
@@ -830,9 +848,6 @@ describe("TripDetailPage", () => {
       trip_id: "trip-1",
       date: null,
       sort_order: 0,
-      starting_city: null,
-      ending_city: null,
-      created_by: null,
       created_at: null,
     });
     render(<TripDetailPage />);
@@ -860,9 +875,6 @@ describe("TripDetailPage", () => {
         trip_id: "trip-1",
         date: "2026-06-01",
         sort_order: 0,
-        starting_city: null,
-        ending_city: null,
-        created_by: null,
         created_at: null,
       },
       {
@@ -870,9 +882,6 @@ describe("TripDetailPage", () => {
         trip_id: "trip-1",
         date: "2026-06-02",
         sort_order: 1,
-        starting_city: null,
-        ending_city: null,
-        created_by: null,
         created_at: null,
       },
     ];
@@ -882,19 +891,31 @@ describe("TripDetailPage", () => {
           id: "day-1",
           date: "2026-06-01",
           sort_order: 0,
-          starting_city: null,
-          ending_city: null,
-          created_by: null,
-          options: [{ id: "opt-1", option_index: 1, locations: [] }],
+          options: [
+            {
+              id: "opt-1",
+              option_index: 1,
+              starting_city: null,
+              ending_city: null,
+              created_by: null,
+              locations: [],
+            },
+          ],
         },
         {
           id: "day-2",
           date: "2026-06-02",
           sort_order: 1,
-          starting_city: null,
-          ending_city: null,
-          created_by: null,
-          options: [{ id: "opt-2", option_index: 1, locations: [] }],
+          options: [
+            {
+              id: "opt-2",
+              option_index: 1,
+              starting_city: null,
+              ending_city: null,
+              created_by: null,
+              locations: [],
+            },
+          ],
         },
       ],
     });
@@ -959,10 +980,16 @@ describe("TripDetailPage", () => {
           id: "day-1",
           date: "2026-06-01",
           sort_order: 0,
-          starting_city: null,
-          ending_city: null,
-          created_by: null,
-          options: [{ id: "opt-1", option_index: 1, locations: [] }],
+          options: [
+            {
+              id: "opt-1",
+              option_index: 1,
+              starting_city: null,
+              ending_city: null,
+              created_by: null,
+              locations: [],
+            },
+          ],
         },
       ],
     });
@@ -986,22 +1013,26 @@ describe("TripDetailPage", () => {
           id: "day-1",
           date: "2026-06-01",
           sort_order: 0,
-          starting_city: "Paris",
-          ending_city: "Lyon",
-          created_by: null,
-          options: [{ id: "opt-1", option_index: 1, locations: [] }],
+          options: [
+            {
+              id: "opt-1",
+              option_index: 1,
+              starting_city: "Paris",
+              ending_city: "Lyon",
+              created_by: null,
+              locations: [],
+            },
+          ],
         },
       ],
     });
-    mockUpdateDay.mockResolvedValue({
-      id: "day-1",
-      trip_id: "trip-1",
-      date: "2026-06-01",
-      sort_order: 0,
+    mockUpdateOption.mockResolvedValue({
+      id: "opt-1",
+      day_id: "day-1",
+      option_index: 1,
       starting_city: "Paris",
       ending_city: "Nice",
       created_by: null,
-      created_at: null,
     });
     render(<TripDetailPage />);
 
@@ -1022,9 +1053,10 @@ describe("TripDetailPage", () => {
     await userEvent.tab();
 
     await waitFor(() => {
-      expect(mockUpdateDay).toHaveBeenCalledWith(
+      expect(mockUpdateOption).toHaveBeenCalledWith(
         "trip-1",
         "day-1",
+        "opt-1",
         {
           ending_city: "Nice",
         }

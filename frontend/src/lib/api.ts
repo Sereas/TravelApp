@@ -98,6 +98,9 @@ export interface ItineraryOptionLocation {
 export interface ItineraryOption {
   id: string;
   option_index: number;
+  starting_city: string | null;
+  ending_city: string | null;
+  created_by: string | null;
   locations: ItineraryOptionLocation[];
 }
 
@@ -105,9 +108,6 @@ export interface ItineraryDay {
   id: string;
   date: string | null;
   sort_order: number;
-  starting_city: string | null;
-  ending_city: string | null;
-  created_by: string | null;
   options: ItineraryOption[];
 }
 
@@ -117,6 +117,14 @@ export interface DayResponse {
   trip_id: string;
   date: string | null;
   sort_order: number;
+  created_at: string | null;
+}
+
+/** Flat option from options API (create/update); no locations. */
+export interface OptionResponse {
+  id: string;
+  day_id: string;
+  option_index: number;
   starting_city: string | null;
   ending_city: string | null;
   created_by: string | null;
@@ -226,37 +234,23 @@ export const api = {
   },
 
   itinerary: {
-    get: (tripId: string, includeEmptyOptions = false) =>
+    get: (tripId: string, includeEmptyOptions = true) =>
       request<ItineraryResponse>(
         `/api/v1/trips/${tripId}/itinerary?include_empty_options=${includeEmptyOptions}`
       ),
 
     /** Create one day (append). Backend assigns sort_order. */
-    createDay: (
-      tripId: string,
-      body: {
-        date?: string | null;
-        starting_city?: string | null;
-        ending_city?: string | null;
-        created_by?: string | null;
-      } = {}
-    ) =>
+    createDay: (tripId: string, body: { date?: string | null } = {}) =>
       request<DayResponse>(`/api/v1/trips/${tripId}/days`, {
         method: "POST",
         body: JSON.stringify(body),
       }),
 
-    /** Update a day (e.g. starting/ending city). */
+    /** Update a day (date, sort_order). */
     updateDay: (
       tripId: string,
       dayId: string,
-      body: {
-        date?: string | null;
-        sort_order?: number;
-        starting_city?: string | null;
-        ending_city?: string | null;
-        created_by?: string | null;
-      }
+      body: { date?: string | null; sort_order?: number }
     ) =>
       request<DayResponse>(`/api/v1/trips/${tripId}/days/${dayId}`, {
         method: "PATCH",
@@ -268,5 +262,44 @@ export const api = {
       request<DayResponse[]>(`/api/v1/trips/${tripId}/days/generate`, {
         method: "POST",
       }),
+
+    /** Create a new option for a day. Backend assigns option_index. */
+    createOption: (
+      tripId: string,
+      dayId: string,
+      body: {
+        starting_city?: string | null;
+        ending_city?: string | null;
+        created_by?: string | null;
+      } = {}
+    ) =>
+      request<OptionResponse>(`/api/v1/trips/${tripId}/days/${dayId}/options`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+
+    /** Update an option (starting/ending city, created_by, option_index). */
+    updateOption: (
+      tripId: string,
+      dayId: string,
+      optionId: string,
+      body: {
+        option_index?: number;
+        starting_city?: string | null;
+        ending_city?: string | null;
+        created_by?: string | null;
+      }
+    ) =>
+      request<OptionResponse>(
+        `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}`,
+        { method: "PATCH", body: JSON.stringify(body) }
+      ),
+
+    /** Delete an option. */
+    deleteOption: (tripId: string, dayId: string, optionId: string) =>
+      request<void>(
+        `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}`,
+        { method: "DELETE" }
+      ),
   },
 };

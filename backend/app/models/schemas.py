@@ -160,13 +160,6 @@ class CreateDayBody(BaseModel):
     """
 
     date: date_type | None = None
-    starting_city: str | None = Field(None, max_length=255)
-    ending_city: str | None = Field(None, max_length=255)
-    created_by: str | None = Field(
-        None,
-        max_length=255,
-        description="Free-text creator label; not derived from JWT.",
-    )
 
 
 class UpdateDayBody(BaseModel):
@@ -178,9 +171,6 @@ class UpdateDayBody(BaseModel):
         ge=0,
         description="Optional for single-item move; reorder endpoint preferred.",
     )
-    starting_city: str | None = Field(None, max_length=255)
-    ending_city: str | None = Field(None, max_length=255)
-    created_by: str | None = Field(None, max_length=255)
 
 
 class DayResponse(BaseModel):
@@ -190,9 +180,6 @@ class DayResponse(BaseModel):
     trip_id: str = Field(..., description="Parent trip UUID")
     date: date_type | None = None
     sort_order: int = Field(..., ge=0)
-    starting_city: str | None = None
-    ending_city: str | None = None
-    created_by: str | None = None
     created_at: datetime | None = None
 
 
@@ -205,21 +192,29 @@ class ReorderDaysBody(BaseModel):
 class CreateOptionBody(BaseModel):
     """Request body for POST create-option.
 
-    Body is empty; backend assigns option_index.
+    Backend assigns option_index. Cities and created_by are optional.
     """
 
-    # Intentionally empty for now; defined for symmetry and future extension.
-    pass
+    starting_city: str | None = Field(None, max_length=255)
+    ending_city: str | None = Field(None, max_length=255)
+    created_by: str | None = Field(
+        None,
+        max_length=255,
+        description="Free-text creator label; not derived from JWT.",
+    )
 
 
 class UpdateOptionBody(BaseModel):
-    """Request body for PATCH update-option (single-item move)."""
+    """Request body for PATCH update-option."""
 
     option_index: int | None = Field(
         None,
         ge=1,
         description="New index within the day; 1 = main option.",
     )
+    starting_city: str | None = Field(None, max_length=255)
+    ending_city: str | None = Field(None, max_length=255)
+    created_by: str | None = Field(None, max_length=255)
 
 
 class OptionResponse(BaseModel):
@@ -228,6 +223,9 @@ class OptionResponse(BaseModel):
     id: str = Field(..., description="Option UUID")
     day_id: str = Field(..., description="Parent day UUID")
     option_index: int = Field(..., ge=1)
+    starting_city: str | None = None
+    ending_city: str | None = None
+    created_by: str | None = None
     created_at: datetime | None = None
 
 
@@ -311,6 +309,9 @@ class ItineraryOption(BaseModel):
 
     id: str
     option_index: int
+    starting_city: str | None = None
+    ending_city: str | None = None
+    created_by: str | None = None
     created_at: datetime | None = None
     locations: list[ItineraryOptionLocation] = Field(default_factory=list)
 
@@ -321,9 +322,6 @@ class ItineraryDay(BaseModel):
     id: str
     date: date_type | None = None
     sort_order: int
-    starting_city: str | None = None
-    ending_city: str | None = None
-    created_by: str | None = None
     created_at: datetime | None = None
     options: list[ItineraryOption] = Field(default_factory=list)
 

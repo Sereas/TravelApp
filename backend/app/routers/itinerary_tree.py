@@ -47,9 +47,7 @@ async def get_itinerary(
     # Fetch days
     days_result = (
         supabase.table("trip_days")
-        .select(
-            "day_id, trip_id, date, sort_order, starting_city, ending_city, created_by, created_at"
-        )
+        .select("day_id, trip_id, date, sort_order, created_at")
         .eq("trip_id", trip_id_str)
         .order("sort_order")
         .execute()
@@ -63,7 +61,9 @@ async def get_itinerary(
     # Fetch options for these days
     options_result = (
         supabase.table("day_options")
-        .select("option_id, day_id, option_index, created_at")
+        .select(
+            "option_id, day_id, option_index, starting_city, ending_city, created_by, created_at"
+        )
         .in_("day_id", day_ids)
         .execute()
     )
@@ -108,6 +108,9 @@ async def get_itinerary(
         opt = ItineraryOption(
             id=str(row["option_id"]),
             option_index=int(row.get("option_index", 1)),
+            starting_city=row.get("starting_city"),
+            ending_city=row.get("ending_city"),
+            created_by=row.get("created_by"),
             created_at=row.get("created_at"),
             locations=[],
         )
@@ -163,9 +166,6 @@ async def get_itinerary(
                 id=did,
                 date=d.get("date"),
                 sort_order=int(d.get("sort_order", 0)),
-                starting_city=d.get("starting_city"),
-                ending_city=d.get("ending_city"),
-                created_by=d.get("created_by"),
                 created_at=d.get("created_at"),
                 options=opts_with_locations,
             )
