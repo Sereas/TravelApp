@@ -183,7 +183,6 @@ async def add_location_to_option(
         "location_id": str(body.location_id),
         "sort_order": body.sort_order,
         "time_period": body.time_period,
-        "trip_id": str(trip_id),
     }
     result = supabase.table("option_locations").insert(row).execute()
     if not result.data or len(result.data) == 0:
@@ -399,7 +398,6 @@ async def batch_add_locations_to_option(
             "location_id": str(item.location_id),
             "sort_order": item.sort_order,
             "time_period": item.time_period,
-            "trip_id": str(trip_id),
         }
         result = supabase.table("option_locations").insert(row).execute()
         if not result.data or len(result.data) == 0:
