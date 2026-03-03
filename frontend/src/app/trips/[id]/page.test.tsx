@@ -25,6 +25,8 @@ const mockUpdateDay = vi.fn();
 const mockCreateOption = vi.fn();
 const mockUpdateOption = vi.fn();
 const mockDeleteOption = vi.fn();
+const mockBatchAddLocationsToOption = vi.fn();
+const mockRemoveLocationFromOption = vi.fn();
 
 vi.mock("@/lib/api", () => ({
   api: {
@@ -47,6 +49,10 @@ vi.mock("@/lib/api", () => ({
       createOption: (...args: unknown[]) => mockCreateOption(...args),
       updateOption: (...args: unknown[]) => mockUpdateOption(...args),
       deleteOption: (...args: unknown[]) => mockDeleteOption(...args),
+      batchAddLocationsToOption: (...args: unknown[]) =>
+        mockBatchAddLocationsToOption(...args),
+      removeLocationFromOption: (...args: unknown[]) =>
+        mockRemoveLocationFromOption(...args),
     },
   },
   ApiError: class ApiError extends Error {
@@ -745,8 +751,8 @@ describe("TripDetailPage", () => {
     expect(await screen.findByText("Jun 1, 2026")).toBeInTheDocument();
     expect(screen.getByText("Eiffel Tower")).toBeInTheDocument();
     expect(screen.getByText("Louvre Museum")).toBeInTheDocument();
-    expect(screen.getByText(/morning:/i)).toBeInTheDocument();
-    expect(screen.getByText(/afternoon:/i)).toBeInTheDocument();
+    expect(screen.getByText(/morning/i)).toBeInTheDocument();
+    expect(screen.getByText(/afternoon/i)).toBeInTheDocument();
   });
 
   it("shows No locations for a day with empty option", async () => {
@@ -777,8 +783,7 @@ describe("TripDetailPage", () => {
     await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
 
     expect(await screen.findByText("Jun 1, 2026")).toBeInTheDocument();
-    const noLocationTexts = screen.getAllByText("No locations");
-    expect(noLocationTexts.length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/no locations yet/i)).toBeInTheDocument();
   });
 
   // --- Slice 14: Add day and generate days ---
@@ -1062,5 +1067,249 @@ describe("TripDetailPage", () => {
         }
       );
     });
+  });
+
+  // --- Alternative plan management ---
+
+  it("shows '+ Alternative' button in card header", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue([]);
+    mockGetItinerary.mockResolvedValue({
+      days: [
+        {
+          id: "day-1",
+          date: "2026-06-01",
+          sort_order: 0,
+          options: [
+            {
+              id: "opt-1",
+              option_index: 1,
+              starting_city: null,
+              ending_city: null,
+              created_by: null,
+              locations: [],
+            },
+          ],
+        },
+      ],
+    });
+    render(<TripDetailPage />);
+
+    await screen.findByText("Paris Summer");
+    await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
+
+    expect(
+      await screen.findByRole("button", { name: /alternative/i })
+    ).toBeInTheDocument();
+  });
+
+  it("calls createOption when '+ Alternative' is clicked", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue([]);
+    mockGetItinerary
+      .mockResolvedValueOnce({
+        days: [
+          {
+            id: "day-1",
+            date: "2026-06-01",
+            sort_order: 0,
+            options: [
+              {
+                id: "opt-1",
+                option_index: 1,
+                starting_city: null,
+                ending_city: null,
+                created_by: null,
+                locations: [],
+              },
+            ],
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        days: [
+          {
+            id: "day-1",
+            date: "2026-06-01",
+            sort_order: 0,
+            options: [
+              {
+                id: "opt-1",
+                option_index: 1,
+                starting_city: null,
+                ending_city: null,
+                created_by: null,
+                locations: [],
+              },
+              {
+                id: "opt-2",
+                option_index: 2,
+                starting_city: null,
+                ending_city: null,
+                created_by: null,
+                locations: [],
+              },
+            ],
+          },
+        ],
+      });
+    mockCreateOption.mockResolvedValue({
+      id: "opt-2",
+      day_id: "day-1",
+      option_index: 2,
+      starting_city: null,
+      ending_city: null,
+      created_by: null,
+      created_at: null,
+    });
+    render(<TripDetailPage />);
+
+    await screen.findByText("Paris Summer");
+    await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /alternative/i })
+    );
+
+    await waitFor(() => {
+      expect(mockCreateOption).toHaveBeenCalledWith("trip-1", "day-1");
+    });
+  });
+
+  it("shows delete button only when multiple options exist", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue([]);
+    mockGetItinerary.mockResolvedValue({
+      days: [
+        {
+          id: "day-1",
+          date: "2026-06-01",
+          sort_order: 0,
+          options: [
+            {
+              id: "opt-1",
+              option_index: 1,
+              starting_city: null,
+              ending_city: null,
+              created_by: null,
+              locations: [],
+            },
+          ],
+        },
+      ],
+    });
+    render(<TripDetailPage />);
+
+    await screen.findByText("Paris Summer");
+    await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
+    await screen.findByText("Jun 1, 2026");
+
+    expect(
+      screen.queryByRole("button", { name: /delete this alternative/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows delete button when multiple options exist and calls deleteOption on confirm", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue([]);
+    mockGetItinerary
+      .mockResolvedValueOnce({
+        days: [
+          {
+            id: "day-1",
+            date: "2026-06-01",
+            sort_order: 0,
+            options: [
+              {
+                id: "opt-1",
+                option_index: 1,
+                starting_city: null,
+                ending_city: null,
+                created_by: null,
+                locations: [],
+              },
+              {
+                id: "opt-2",
+                option_index: 2,
+                starting_city: null,
+                ending_city: null,
+                created_by: null,
+                locations: [],
+              },
+            ],
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        days: [
+          {
+            id: "day-1",
+            date: "2026-06-01",
+            sort_order: 0,
+            options: [
+              {
+                id: "opt-2",
+                option_index: 1,
+                starting_city: null,
+                ending_city: null,
+                created_by: null,
+                locations: [],
+              },
+            ],
+          },
+        ],
+      });
+    mockDeleteOption.mockResolvedValue(undefined);
+    render(<TripDetailPage />);
+
+    await screen.findByText("Paris Summer");
+    await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
+    await screen.findByText("Jun 1, 2026");
+
+    const deleteBtn = screen.getByRole("button", {
+      name: /delete this alternative/i,
+    });
+    expect(deleteBtn).toBeInTheDocument();
+
+    await userEvent.click(deleteBtn);
+    expect(screen.getByText("Delete this plan?")).toBeInTheDocument();
+
+    const confirmBtns = screen.getAllByRole("button", { name: /delete/i });
+    await userEvent.click(confirmBtns[confirmBtns.length - 1]);
+
+    await waitFor(() => {
+      expect(mockDeleteOption).toHaveBeenCalledWith("trip-1", "day-1", "opt-1");
+    });
+  });
+
+  it("shows '+ Add locations' button on each option", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue(sampleLocations);
+    mockGetItinerary.mockResolvedValue({
+      days: [
+        {
+          id: "day-1",
+          date: "2026-06-01",
+          sort_order: 0,
+          options: [
+            {
+              id: "opt-1",
+              option_index: 1,
+              starting_city: null,
+              ending_city: null,
+              created_by: null,
+              locations: [],
+            },
+          ],
+        },
+      ],
+    });
+    render(<TripDetailPage />);
+
+    await screen.findByText("Paris Summer");
+    await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
+
+    expect(
+      await screen.findByRole("button", { name: /add locations/i })
+    ).toBeInTheDocument();
   });
 });

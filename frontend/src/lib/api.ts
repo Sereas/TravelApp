@@ -131,6 +131,14 @@ export interface OptionResponse {
   created_at: string | null;
 }
 
+export interface OptionLocationResponse {
+  option_id: string;
+  location_id: string;
+  sort_order: number;
+  time_period: string;
+  location: LocationSummary | null;
+}
+
 export interface ItineraryResponse {
   days: ItineraryDay[];
 }
@@ -299,6 +307,46 @@ export const api = {
     deleteOption: (tripId: string, dayId: string, optionId: string) =>
       request<void>(
         `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}`,
+        { method: "DELETE" }
+      ),
+
+    /** Add a location to an option. */
+    addLocationToOption: (
+      tripId: string,
+      dayId: string,
+      optionId: string,
+      body: { location_id: string; sort_order: number; time_period: string }
+    ) =>
+      request<OptionLocationResponse>(
+        `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/locations`,
+        { method: "POST", body: JSON.stringify(body) }
+      ),
+
+    /** Batch-add locations to an option. */
+    batchAddLocationsToOption: (
+      tripId: string,
+      dayId: string,
+      optionId: string,
+      body: Array<{
+        location_id: string;
+        sort_order: number;
+        time_period: string;
+      }>
+    ) =>
+      request<OptionLocationResponse[]>(
+        `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/locations/batch`,
+        { method: "POST", body: JSON.stringify(body) }
+      ),
+
+    /** Remove a location from an option. */
+    removeLocationFromOption: (
+      tripId: string,
+      dayId: string,
+      optionId: string,
+      locationId: string
+    ) =>
+      request<void>(
+        `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/locations/${locationId}`,
         { method: "DELETE" }
       ),
   },
