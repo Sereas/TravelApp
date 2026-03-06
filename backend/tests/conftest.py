@@ -864,6 +864,118 @@ def mock_supabase_trips_and_days():
                 )
             return type("Result", (), {"data": filtered})()
 
+    def _build_rpc_itinerary_rows(trip_id_str, days_store, options_store, ol_store, loc_store):
+        """Build flat rows in get_itinerary_tree RPC shape for the mock."""
+        days = sorted(
+            [d for d in days_store if str(d.get("trip_id")) == trip_id_str],
+            key=lambda x: (x.get("sort_order") is None, x.get("sort_order")),
+        )
+        loc_by_id = {
+            str(loc["location_id"]): loc
+            for loc in loc_store
+            if str(loc.get("trip_id")) == trip_id_str
+        }
+        rows = []
+        for d in days:
+            day_id = d.get("day_id")
+            opts = sorted(
+                [o for o in options_store if str(o.get("day_id")) == str(day_id)],
+                key=lambda x: (x.get("option_index") is None, x.get("option_index")),
+            )
+            if not opts:
+                rows.append(
+                    {
+                        "day_id": day_id,
+                        "day_date": d.get("date"),
+                        "day_sort_order": d.get("sort_order", 0),
+                        "day_created_at": d.get("created_at"),
+                        "option_id": None,
+                        "option_index": None,
+                        "option_starting_city": None,
+                        "option_ending_city": None,
+                        "option_created_by": None,
+                        "option_created_at": None,
+                        "location_id": None,
+                        "ol_sort_order": None,
+                        "time_period": None,
+                        "loc_name": None,
+                        "loc_city": None,
+                        "loc_address": None,
+                        "loc_google_link": None,
+                        "loc_category": None,
+                        "loc_note": None,
+                        "loc_working_hours": None,
+                        "loc_requires_booking": None,
+                    }
+                )
+                continue
+            for o in opts:
+                oid = o.get("option_id")
+                ols = sorted(
+                    [ol for ol in ol_store if str(ol.get("option_id")) == str(oid)],
+                    key=lambda x: (x.get("sort_order") is None, x.get("sort_order")),
+                )
+                if not ols:
+                    rows.append(
+                        {
+                            "day_id": day_id,
+                            "day_date": d.get("date"),
+                            "day_sort_order": d.get("sort_order", 0),
+                            "day_created_at": d.get("created_at"),
+                            "option_id": oid,
+                            "option_index": o.get("option_index", 1),
+                            "option_starting_city": o.get("starting_city"),
+                            "option_ending_city": o.get("ending_city"),
+                            "option_created_by": o.get("created_by"),
+                            "option_created_at": o.get("created_at"),
+                            "location_id": None,
+                            "ol_sort_order": None,
+                            "time_period": None,
+                            "loc_name": None,
+                            "loc_city": None,
+                            "loc_address": None,
+                            "loc_google_link": None,
+                            "loc_category": None,
+                            "loc_note": None,
+                            "loc_working_hours": None,
+                            "loc_requires_booking": None,
+                        }
+                    )
+                    continue
+                for ol in ols:
+                    lid = ol.get("location_id")
+                    loc = loc_by_id.get(str(lid), {}) if lid else {}
+                    rows.append(
+                        {
+                            "day_id": day_id,
+                            "day_date": d.get("date"),
+                            "day_sort_order": d.get("sort_order", 0),
+                            "day_created_at": d.get("created_at"),
+                            "option_id": oid,
+                            "option_index": o.get("option_index", 1),
+                            "option_starting_city": o.get("starting_city"),
+                            "option_ending_city": o.get("ending_city"),
+                            "option_created_by": o.get("created_by"),
+                            "option_created_at": o.get("created_at"),
+                            "location_id": lid,
+                            "ol_sort_order": ol.get("sort_order", 0),
+                            "time_period": ol.get("time_period") or "",
+                            "loc_name": loc.get("name"),
+                            "loc_city": loc.get("city"),
+                            "loc_address": loc.get("address"),
+                            "loc_google_link": loc.get("google_link"),
+                            "loc_category": loc.get("category"),
+                            "loc_note": loc.get("note"),
+                            "loc_working_hours": loc.get("working_hours"),
+                            "loc_requires_booking": loc.get("requires_booking"),
+                        }
+                    )
+        return rows
+
+    class _RpcResult:
+        def __init__(self, data):
+            self.data = data
+
     class MockSupabaseTripsAndDays:
         def __init__(self, trip_owners, user_id):
             self._trip_owners = {str(k): str(v) for k, v in trip_owners.items()}
@@ -886,5 +998,18 @@ def mock_supabase_trips_and_days():
             if name == "option_locations":
                 return _OptionLocationsTable(self._option_locations_store)
             return None
+
+        def rpc(self, name, params):
+            if name == "get_itinerary_tree":
+                trip_id_str = str(params.get("p_trip_id", ""))
+                data = _build_rpc_itinerary_rows(
+                    trip_id_str,
+                    self._days_store,
+                    self._options_store,
+                    self._option_locations_store,
+                    self._locations_store,
+                )
+                return type("RpcChain", (), {"execute": lambda _: _RpcResult(data)})()
+            return type("RpcChain", (), {"execute": lambda _: _RpcResult([])})()
 
     return trip_days_store, trips_store, MockSupabaseTripsAndDays

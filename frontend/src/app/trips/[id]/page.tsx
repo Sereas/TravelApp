@@ -22,14 +22,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import {
-  Sunrise,
-  Sun,
-  Sunset,
-  Moon,
-  ExternalLink,
-  Ticket,
-} from "lucide-react";
+import { Sunrise, Sun, Sunset, Moon, ExternalLink, Ticket } from "lucide-react";
 
 function AutosaveInput({
   id,
@@ -177,6 +170,14 @@ export default function TripDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tripId]);
 
+  // Prefetch itinerary as soon as we have the trip so the Itinerary tab is ready when opened.
+  useEffect(() => {
+    if (trip && tripId) {
+      fetchItinerary();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trip?.id, tripId]);
+
   async function fetchItinerary() {
     setItineraryError(null);
     setItinerary(null);
@@ -193,8 +194,14 @@ export default function TripDetailPage() {
     }
   }
 
+  // Refetch itinerary when switching to tab if we don't have data (e.g. prefetch failed or was skipped).
   useEffect(() => {
-    if (activeTab === "itinerary" && trip) {
+    if (
+      activeTab === "itinerary" &&
+      trip &&
+      itinerary === null &&
+      !itineraryLoading
+    ) {
       fetchItinerary();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -454,7 +461,12 @@ export default function TripDetailPage() {
 
   const TIME_PERIOD_META: Record<
     string,
-    { label: string; icon: React.ComponentType<{ className?: string; size?: number }>; bg: string; text: string }
+    {
+      label: string;
+      icon: React.ComponentType<{ className?: string; size?: number | string }>;
+      bg: string;
+      text: string;
+    }
   > = {
     morning: {
       label: "Morning",
@@ -557,6 +569,8 @@ export default function TripDetailPage() {
       prev.map((loc) => (loc.id === updated.id ? updated : loc))
     );
     setEditingLocationId(null);
+    // Itinerary tab embeds LocationSummary (name, note, etc.); refetch so it shows the update.
+    fetchItinerary();
   }
 
   async function handleDeleteTrip() {
@@ -574,6 +588,7 @@ export default function TripDetailPage() {
     try {
       await api.locations.delete(tripId, locationId);
       setLocations((prev) => prev.filter((loc) => loc.id !== locationId));
+      fetchItinerary(); // Itinerary embeds LocationSummary; refetch so removed location is updated.
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to delete location"
@@ -1060,7 +1075,10 @@ export default function TripDetailPage() {
                                   <div role="columnheader">Hours</div>
                                   <div role="columnheader">Booking</div>
                                   <div role="columnheader">Note</div>
-                                  <div role="columnheader" className="text-center">
+                                  <div
+                                    role="columnheader"
+                                    className="text-center"
+                                  >
                                     Map
                                   </div>
                                   <div role="columnheader" aria-label="Remove">
@@ -1070,8 +1088,7 @@ export default function TripDetailPage() {
                                 {currentOption.locations
                                   .sort((a, b) => a.sort_order - b.sort_order)
                                   .map((ol) => {
-                                    const timeKey =
-                                      ol.time_period || "morning";
+                                    const timeKey = ol.time_period || "morning";
                                     const timeMeta =
                                       TIME_PERIOD_META[timeKey] ??
                                       TIME_PERIOD_META.morning;
@@ -1164,9 +1181,7 @@ export default function TripDetailPage() {
                                                           : "hover:bg-accent hover:text-accent-foreground"
                                                       )}
                                                       onClick={() => {
-                                                        setOpenTimePicker(
-                                                          null
-                                                        );
+                                                        setOpenTimePicker(null);
                                                         void handleUpdateLocationTimePeriod(
                                                           day.id,
                                                           currentOption.id,
@@ -1250,7 +1265,8 @@ export default function TripDetailPage() {
                                         <div
                                           className="min-w-0 truncate text-xs text-muted-foreground"
                                           title={
-                                            ol.location.working_hours ?? undefined
+                                            ol.location.working_hours ??
+                                            undefined
                                           }
                                         >
                                           {ol.location.working_hours ?? "—"}

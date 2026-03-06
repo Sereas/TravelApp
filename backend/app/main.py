@@ -36,6 +36,12 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=[
+        "X-Itinerary-Ownership-Ms",
+        "X-Itinerary-Rpc-Ms",
+        "X-Itinerary-Build-Ms",
+        "X-Itinerary-Rows",
+    ],
 )
 app.add_middleware(RequestLoggingMiddleware)
 

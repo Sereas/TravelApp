@@ -1,5 +1,6 @@
 """Tests for full itinerary tree endpoint."""
 
+import os
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -147,6 +148,17 @@ def test_get_itinerary_returns_nested_structure_and_ordering(
     try:
         r = client.get(f"/api/v1/trips/{trip_id}/itinerary")
         assert r.status_code == 200
+        # Timing headers (for benchmarking / performance tests)
+        assert "X-Itinerary-Ownership-Ms" in r.headers
+        assert "X-Itinerary-Rpc-Ms" in r.headers
+        assert "X-Itinerary-Build-Ms" in r.headers
+        assert "X-Itinerary-Rows" in r.headers
+        if os.environ.get("PRINT_ITINERARY_TIMING"):
+            print(
+                f"  [timing] ownership_ms={r.headers['X-Itinerary-Ownership-Ms']} "
+                f"rpc_ms={r.headers['X-Itinerary-Rpc-Ms']} "
+                f"build_ms={r.headers['X-Itinerary-Build-Ms']} rows={r.headers['X-Itinerary-Rows']}"
+            )
         data = r.json()
         # Days ordered by sort_order: day2 (0), then day1 (1)
         assert [d["id"] for d in data["days"]] == [day2, day1]
