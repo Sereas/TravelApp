@@ -22,7 +22,14 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { Sunrise, Sun, Sunset, Moon } from "lucide-react";
+import {
+  Sunrise,
+  Sun,
+  Sunset,
+  Moon,
+  ExternalLink,
+  Ticket,
+} from "lucide-react";
 
 function AutosaveInput({
   id,
@@ -137,6 +144,8 @@ export default function TripDetailPage() {
     optionId: string;
     locationId: string;
   } | null>(null);
+  const [expandedNoteKey, setExpandedNoteKey] = useState<string | null>(null);
+  const [expandedNameKey, setExpandedNameKey] = useState<string | null>(null);
 
   async function fetchData() {
     setError(null);
@@ -1039,28 +1048,68 @@ export default function TripDetailPage() {
                                 collection.
                               </p>
                             ) : (
-                              <ul className="space-y-1">
+                              <div className="space-y-1 overflow-x-auto">
+                                {/* Table-like grid: fixed column widths + header row (Illuminator: docs/design/day-option-location-row.md) */}
+                                <div
+                                  className="grid w-full min-w-[640px] grid-cols-[7rem_minmax(4rem,7rem)_6rem_7rem_6rem_minmax(5rem,1fr)_2.5rem_2rem] gap-3 px-2 py-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground border-b border-border"
+                                  role="row"
+                                >
+                                  <div role="columnheader">Time</div>
+                                  <div role="columnheader">Location</div>
+                                  <div role="columnheader">City</div>
+                                  <div role="columnheader">Hours</div>
+                                  <div role="columnheader">Booking</div>
+                                  <div role="columnheader">Note</div>
+                                  <div role="columnheader" className="text-center">
+                                    Map
+                                  </div>
+                                  <div role="columnheader" aria-label="Remove">
+                                    <span className="sr-only">Remove</span>
+                                  </div>
+                                </div>
                                 {currentOption.locations
                                   .sort((a, b) => a.sort_order - b.sort_order)
-                                  .map((ol) => (
-                                    <li
-                                      key={ol.location_id}
-                                      className="group relative flex items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-accent/50"
-                                    >
-                                      {(() => {
-                                        const key = ol.time_period || "morning";
-                                        const meta =
-                                          TIME_PERIOD_META[key] ??
-                                          TIME_PERIOD_META.morning;
-                                        const Icon = meta.icon;
-                                        return (
+                                  .map((ol) => {
+                                    const timeKey =
+                                      ol.time_period || "morning";
+                                    const timeMeta =
+                                      TIME_PERIOD_META[timeKey] ??
+                                      TIME_PERIOD_META.morning;
+                                    const TimeIcon = timeMeta.icon;
+                                    const rowKey = `${day.id}-${currentOption.id}-${ol.location_id}`;
+                                    const noteKey = rowKey;
+                                    const nameKey = `name-${rowKey}`;
+                                    const isNoteExpanded =
+                                      expandedNoteKey === noteKey;
+                                    const isNameExpanded =
+                                      expandedNameKey === nameKey;
+                                    const hasNote = Boolean(
+                                      ol.location.note?.trim()
+                                    );
+                                    const nameLongEnoughToTruncate =
+                                      (ol.location.name?.length ?? 0) > 28;
+                                    const noteLongEnoughToTruncate =
+                                      (ol.location.note?.length ?? 0) > 55;
+                                    const booking =
+                                      ol.location.requires_booking ?? "no";
+                                    const isBooked = booking === "yes_done";
+                                    const showBookingPill =
+                                      booking !== "no" && booking != null;
+
+                                    return (
+                                      <div
+                                        key={ol.location_id}
+                                        className="group grid w-full min-w-[640px] grid-cols-[7rem_minmax(4rem,7rem)_6rem_7rem_6rem_minmax(5rem,1fr)_2.5rem_2rem] gap-3 items-start rounded-md px-2 py-1.5 text-sm hover:bg-accent/50"
+                                      >
+                                        {/* Time */}
+                                        <div className="relative min-w-0">
                                           <button
                                             type="button"
                                             className={cn(
                                               "inline-flex h-7 items-center gap-1 rounded-full px-2 text-xs font-medium transition-colors",
                                               "border border-transparent hover:border-border",
-                                              meta.bg,
-                                              meta.text
+                                              timeMeta.bg,
+                                              timeMeta.text
                                             )}
                                             onClick={() => {
                                               setOpenTimePicker((prev) =>
@@ -1082,93 +1131,241 @@ export default function TripDetailPage() {
                                             }}
                                             aria-label={`Select time of day for ${ol.location.name}`}
                                           >
-                                            <Icon
+                                            <TimeIcon
                                               className="h-3.5 w-3.5 shrink-0"
                                               size={14}
                                             />
-                                            <span>{meta.label}</span>
+                                            <span>{timeMeta.label}</span>
                                           </button>
-                                        );
-                                      })()}
-                                      {openTimePicker &&
-                                        openTimePicker.dayId === day.id &&
-                                        openTimePicker.optionId ===
-                                          currentOption.id &&
-                                        openTimePicker.locationId ===
-                                          ol.location_id && (
-                                          <div className="absolute left-0 top-full z-20 mt-1 w-40 rounded-md border border-border bg-popover p-1 text-xs shadow-md">
-                                            {["morning", "afternoon", "evening", "night"].map(
-                                              (key) => {
-                                                const meta =
-                                                  TIME_PERIOD_META[key];
-                                                const Icon = meta.icon;
-                                                return (
-                                                  <button
-                                                    key={key}
-                                                    type="button"
-                                                    className={cn(
-                                                      "flex w-full items-center gap-1 rounded-sm px-2 py-1 text-left",
-                                                      key ===
-                                                        (ol.time_period ||
-                                                          "morning")
-                                                        ? "bg-accent text-accent-foreground"
-                                                        : "hover:bg-accent hover:text-accent-foreground"
-                                                    )}
-                                                    onClick={() => {
-                                                      setOpenTimePicker(null);
-                                                      void handleUpdateLocationTimePeriod(
-                                                        day.id,
-                                                        currentOption.id,
-                                                        ol.location_id,
-                                                        key
-                                                      );
-                                                    }}
-                                                  >
-                                                    <span
+                                          {openTimePicker &&
+                                            openTimePicker.dayId === day.id &&
+                                            openTimePicker.optionId ===
+                                              currentOption.id &&
+                                            openTimePicker.locationId ===
+                                              ol.location_id && (
+                                              <div className="absolute left-0 top-full z-20 mt-1 w-40 rounded-md border border-border bg-popover p-1 text-xs shadow-md">
+                                                {[
+                                                  "morning",
+                                                  "afternoon",
+                                                  "evening",
+                                                  "night",
+                                                ].map((key) => {
+                                                  const m =
+                                                    TIME_PERIOD_META[key];
+                                                  const Ico = m.icon;
+                                                  return (
+                                                    <button
+                                                      key={key}
+                                                      type="button"
                                                       className={cn(
-                                                        "flex h-5 w-5 items-center justify-center rounded-full text-[10px]",
-                                                        meta.bg,
-                                                        meta.text
+                                                        "flex w-full items-center gap-1 rounded-sm px-2 py-1 text-left",
+                                                        key === timeKey
+                                                          ? "bg-accent text-accent-foreground"
+                                                          : "hover:bg-accent hover:text-accent-foreground"
                                                       )}
+                                                      onClick={() => {
+                                                        setOpenTimePicker(
+                                                          null
+                                                        );
+                                                        void handleUpdateLocationTimePeriod(
+                                                          day.id,
+                                                          currentOption.id,
+                                                          ol.location_id,
+                                                          key
+                                                        );
+                                                      }}
                                                     >
-                                                      <Icon
-                                                        className="h-3 w-3"
-                                                        size={12}
-                                                      />
-                                                    </span>
-                                                    <span>{meta.label}</span>
-                                                  </button>
-                                                );
-                                              }
+                                                      <span
+                                                        className={cn(
+                                                          "flex h-5 w-5 items-center justify-center rounded-full text-[10px]",
+                                                          m.bg,
+                                                          m.text
+                                                        )}
+                                                      >
+                                                        <Ico
+                                                          className="h-3 w-3"
+                                                          size={12}
+                                                        />
+                                                      </span>
+                                                      <span>{m.label}</span>
+                                                    </button>
+                                                  );
+                                                })}
+                                              </div>
                                             )}
-                                          </div>
-                                        )}
-                                      <span className="min-w-0 flex-1">
-                                        {ol.location.name}
-                                        {ol.location.city && (
-                                          <span className="text-muted-foreground">
-                                            {" "}
-                                            · {ol.location.city}
-                                          </span>
-                                        )}
-                                      </span>
-                                      <button
-                                        type="button"
-                                        className="shrink-0 text-xs text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
-                                        aria-label={`Remove ${ol.location.name}`}
-                                        onClick={() =>
-                                          handleRemoveLocationFromOption(
-                                            day.id,
-                                            currentOption.id,
-                                            ol.location_id
-                                          )
-                                        }
-                                      >
-                                        ✕
-                                      </button>
-                                    </li>
-                                  ))}
-                              </ul>
+                                        </div>
+                                        {/* Name (expandable only when long) */}
+                                        <div className="min-w-0">
+                                          {isNameExpanded ? (
+                                            <div className="space-y-0.5">
+                                              <p className="break-words text-sm font-medium">
+                                                {ol.location.name}
+                                              </p>
+                                              <button
+                                                type="button"
+                                                className="text-xs text-primary hover:underline"
+                                                onClick={() =>
+                                                  setExpandedNameKey(null)
+                                                }
+                                                aria-expanded={true}
+                                              >
+                                                Show less
+                                              </button>
+                                            </div>
+                                          ) : (
+                                            <div className="space-y-0.5">
+                                              <p
+                                                className={cn(
+                                                  "text-sm font-medium",
+                                                  nameLongEnoughToTruncate &&
+                                                    "truncate"
+                                                )}
+                                                title={ol.location.name}
+                                              >
+                                                {ol.location.name}
+                                              </p>
+                                              {nameLongEnoughToTruncate && (
+                                                <button
+                                                  type="button"
+                                                  className="text-xs text-primary hover:underline"
+                                                  onClick={() =>
+                                                    setExpandedNameKey(nameKey)
+                                                  }
+                                                  aria-expanded={false}
+                                                >
+                                                  Show more
+                                                </button>
+                                              )}
+                                            </div>
+                                          )}
+                                        </div>
+                                        {/* City */}
+                                        <div
+                                          className="min-w-0 truncate text-sm text-muted-foreground"
+                                          title={ol.location.city ?? undefined}
+                                        >
+                                          {ol.location.city ?? "—"}
+                                        </div>
+                                        {/* Working hours */}
+                                        <div
+                                          className="min-w-0 truncate text-xs text-muted-foreground"
+                                          title={
+                                            ol.location.working_hours ?? undefined
+                                          }
+                                        >
+                                          {ol.location.working_hours ?? "—"}
+                                        </div>
+                                        {/* Booking */}
+                                        <div className="min-w-0">
+                                          {showBookingPill ? (
+                                            <span
+                                              className={cn(
+                                                "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium leading-tight",
+                                                isBooked
+                                                  ? "bg-green-50 text-green-700"
+                                                  : "bg-amber-50 text-amber-700"
+                                              )}
+                                            >
+                                              <Ticket size={12} />
+                                              {isBooked
+                                                ? "Booked \u2713"
+                                                : "Booking needed"}
+                                            </span>
+                                          ) : null}
+                                        </div>
+                                        {/* Note (expandable only when long) */}
+                                        <div className="min-w-0">
+                                          {!hasNote ? (
+                                            <span className="text-xs text-muted-foreground">
+                                              —
+                                            </span>
+                                          ) : isNoteExpanded ? (
+                                            <div className="space-y-0.5">
+                                              <p className="whitespace-pre-wrap break-words text-xs text-muted-foreground max-h-24 overflow-y-auto">
+                                                {ol.location.note}
+                                              </p>
+                                              <button
+                                                type="button"
+                                                className="text-xs text-primary hover:underline"
+                                                onClick={() =>
+                                                  setExpandedNoteKey(null)
+                                                }
+                                                aria-expanded={true}
+                                              >
+                                                Show less
+                                              </button>
+                                            </div>
+                                          ) : (
+                                            <div className="space-y-0.5">
+                                              <p
+                                                className={cn(
+                                                  "text-xs text-muted-foreground",
+                                                  noteLongEnoughToTruncate &&
+                                                    "truncate"
+                                                )}
+                                                title={
+                                                  ol.location.note ?? undefined
+                                                }
+                                              >
+                                                {ol.location.note}
+                                              </p>
+                                              {noteLongEnoughToTruncate && (
+                                                <button
+                                                  type="button"
+                                                  className="text-xs text-primary hover:underline"
+                                                  onClick={() =>
+                                                    setExpandedNoteKey(noteKey)
+                                                  }
+                                                  aria-expanded={false}
+                                                >
+                                                  Show more
+                                                </button>
+                                              )}
+                                            </div>
+                                          )}
+                                        </div>
+                                        {/* Map link */}
+                                        <div className="flex items-center">
+                                          {ol.location.google_link ? (
+                                            <a
+                                              href={ol.location.google_link}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="text-primary hover:underline"
+                                              aria-label={`Open ${ol.location.name} in Google Maps`}
+                                            >
+                                              <ExternalLink
+                                                size={14}
+                                                className="shrink-0"
+                                              />
+                                            </a>
+                                          ) : (
+                                            <span className="text-muted-foreground/50">
+                                              —
+                                            </span>
+                                          )}
+                                        </div>
+                                        {/* Remove */}
+                                        <div className="flex items-center">
+                                          <button
+                                            type="button"
+                                            className="text-xs text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                                            aria-label={`Remove ${ol.location.name}`}
+                                            onClick={() =>
+                                              handleRemoveLocationFromOption(
+                                                day.id,
+                                                currentOption.id,
+                                                ol.location_id
+                                              )
+                                            }
+                                          >
+                                            ✕
+                                          </button>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                              </div>
                             )}
                             <div className="mt-3">
                               <AddLocationsToOptionDialog
