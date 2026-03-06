@@ -1,6 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
 import { useParams, useRouter } from "next/navigation";
 import {
   api,
@@ -145,6 +154,70 @@ export default function TripDetailPage() {
     optionId: string;
     locationId: string;
   } | null>(null);
+  const [timePickerPosition, setTimePickerPosition] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+  } | null>(null);
+  const timePickerTriggerRef = useRef<HTMLDivElement | null>(null);
+  const timePickerDropdownRef = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    if (!openTimePicker) {
+      setTimePickerPosition(null);
+      return;
+    }
+    const el = timePickerTriggerRef.current;
+    if (!el) {
+      setTimePickerPosition(null);
+      return;
+    }
+    const rect = el.getBoundingClientRect();
+    const dropdownHeight = 220;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openAbove =
+      spaceBelow < dropdownHeight ||
+      rect.bottom > window.innerHeight * 0.55;
+    const w = 160;
+    const left = Math.max(
+      8,
+      Math.min(rect.left, window.innerWidth - w - 8)
+    );
+    if (openAbove) {
+      setTimePickerPosition({
+        bottom: window.innerHeight - rect.top + 4,
+        left,
+      });
+    } else {
+      setTimePickerPosition({
+        top: rect.bottom + 4,
+        left,
+      });
+    }
+  }, [openTimePicker]);
+
+  useEffect(() => {
+    if (!openTimePicker) return;
+    const close = () => setOpenTimePicker(null);
+    document.addEventListener("scroll", close, true);
+    return () => document.removeEventListener("scroll", close, true);
+  }, [openTimePicker]);
+
+  useEffect(() => {
+    if (!openTimePicker) return;
+    const handleMouseDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        timePickerTriggerRef.current?.contains(target) ||
+        timePickerDropdownRef.current?.contains(target)
+      )
+        return;
+      setOpenTimePicker(null);
+    };
+    document.addEventListener("mousedown", handleMouseDown, true);
+    return () =>
+      document.removeEventListener("mousedown", handleMouseDown, true);
+  }, [openTimePicker]);
+
   const [expandedNoteKey, setExpandedNoteKey] = useState<string | null>(null);
   const [expandedNameKey, setExpandedNameKey] = useState<string | null>(null);
   const [dragLocation, setDragLocation] = useState<{
@@ -710,17 +783,102 @@ export default function TripDetailPage() {
     );
   }
 
-  return (
-    <div className="space-y-6">
-      <div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="mb-2 -ml-2 text-muted-foreground"
-          onClick={() => router.push("/trips")}
+  const timePickerPortal =
+    openTimePicker &&
+    timePickerPosition &&
+    itinerary &&
+    (() => {
+      const day = itinerary.days.find(
+        (d) => d.id === openTimePicker.dayId
+      );
+      const option = day?.options.find(
+        (o) => o.id === openTimePicker.optionId
+      );
+      const ol = option?.locations.find(
+        (l) => l.location_id === openTimePicker.locationId
+      );
+      if (!day || !option || !ol) return null;
+      const timeKey = ol.time_period || "morning";
+      const style: CSSProperties = {
+        position: "fixed",
+        left: timePickerPosition.left,
+        zIndex: 9999,
+        width: 160,
+        ...(timePickerPosition.top !== undefined
+          ? { top: timePickerPosition.top }
+          : { bottom: timePickerPosition.bottom }),
+      };
+      return createPortal(
+        <div
+          ref={timePickerDropdownRef}
+          className="rounded-md border border-border bg-popover p-1 text-xs shadow-md"
+          style={style}
+          role="listbox"
+          aria-label="Time of day"
         >
-          &larr; Back to trips
-        </Button>
+          {(
+            [
+              "morning",
+              "afternoon",
+              "evening",
+              "night",
+            ] as const
+          ).map((key) => {
+            const m = TIME_PERIOD_META[key];
+            const Ico = m.icon;
+            return (
+              <button
+                key={key}
+                type="button"
+                role="option"
+                aria-selected={key === timeKey}
+                className={cn(
+                  "flex w-full items-center gap-1 rounded-sm px-2 py-1 text-left",
+                  key === timeKey
+                    ? "bg-accent text-accent-foreground"
+                    : "hover:bg-accent hover:text-accent-foreground"
+                )}
+                onClick={() => {
+                  setOpenTimePicker(null);
+                  void handleUpdateLocationTimePeriod(
+                    day.id,
+                    option.id,
+                    ol.location_id,
+                    key
+                  );
+                }}
+              >
+                <span
+                  className={cn(
+                    "flex h-5 w-5 items-center justify-center rounded-full text-[10px]",
+                    m.bg,
+                    m.text
+                  )}
+                >
+                  <Ico className="h-3 w-3" size={12} />
+                </span>
+                <span>{m.label}</span>
+              </button>
+            );
+          })}
+        </div>,
+        document.body
+      );
+    })();
+
+  return (
+    <>
+      {timePickerPortal}
+      <div className="space-y-6">
+        <div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mb-2 -ml-2 text-muted-foreground"
+            onClick={() => router.push("/trips")}
+          >
+            &larr; Back to trips
+          </Button>
 
         {editingTrip ? (
           <EditTripForm
@@ -1300,7 +1458,19 @@ export default function TripDetailPage() {
                                           />
                                         </div>
                                         {/* Time */}
-                                        <div className="relative min-w-0">
+                                        <div
+                                          className="relative min-w-0"
+                                          ref={
+                                            openTimePicker &&
+                                            openTimePicker.dayId === day.id &&
+                                            openTimePicker.optionId ===
+                                              currentOption.id &&
+                                            openTimePicker.locationId ===
+                                              ol.location_id
+                                              ? timePickerTriggerRef
+                                              : undefined
+                                          }
+                                        >
                                           <button
                                             type="button"
                                             className={cn(
@@ -1335,60 +1505,6 @@ export default function TripDetailPage() {
                                             />
                                             <span>{timeMeta.label}</span>
                                           </button>
-                                          {openTimePicker &&
-                                            openTimePicker.dayId === day.id &&
-                                            openTimePicker.optionId ===
-                                              currentOption.id &&
-                                            openTimePicker.locationId ===
-                                              ol.location_id && (
-                                              <div className="absolute left-0 top-full z-20 mt-1 w-40 rounded-md border border-border bg-popover p-1 text-xs shadow-md">
-                                                {[
-                                                  "morning",
-                                                  "afternoon",
-                                                  "evening",
-                                                  "night",
-                                                ].map((key) => {
-                                                  const m =
-                                                    TIME_PERIOD_META[key];
-                                                  const Ico = m.icon;
-                                                  return (
-                                                    <button
-                                                      key={key}
-                                                      type="button"
-                                                      className={cn(
-                                                        "flex w-full items-center gap-1 rounded-sm px-2 py-1 text-left",
-                                                        key === timeKey
-                                                          ? "bg-accent text-accent-foreground"
-                                                          : "hover:bg-accent hover:text-accent-foreground"
-                                                      )}
-                                                      onClick={() => {
-                                                        setOpenTimePicker(null);
-                                                        void handleUpdateLocationTimePeriod(
-                                                          day.id,
-                                                          currentOption.id,
-                                                          ol.location_id,
-                                                          key
-                                                        );
-                                                      }}
-                                                    >
-                                                      <span
-                                                        className={cn(
-                                                          "flex h-5 w-5 items-center justify-center rounded-full text-[10px]",
-                                                          m.bg,
-                                                          m.text
-                                                        )}
-                                                      >
-                                                        <Ico
-                                                          className="h-3 w-3"
-                                                          size={12}
-                                                        />
-                                                      </span>
-                                                      <span>{m.label}</span>
-                                                    </button>
-                                                  );
-                                                })}
-                                              </div>
-                                            )}
                                         </div>
                                         {/* Name (expandable only when long) */}
                                         <div className="min-w-0">
@@ -1600,5 +1716,6 @@ export default function TripDetailPage() {
         </section>
       )}
     </div>
+    </>
   );
 }
