@@ -491,6 +491,112 @@ def test_reorder_option_locations_returns_200_and_new_order(
         app.dependency_overrides.clear()
 
 
+def test_reorder_option_locations_empty_returns_422(
+    client: TestClient,
+    mock_user_id,
+    mock_supabase_trips_and_days,
+):
+    trip_id, day_id, option_id, _, mock_sb = _setup_trip_day_option_and_location(
+        mock_supabase_trips_and_days, mock_user_id
+    )
+
+    async def override_user():
+        return mock_user_id
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        r = client.patch(
+            f"/api/v1/trips/{trip_id}/days/{day_id}/options/{option_id}/locations/reorder",
+            json={"location_ids": []},
+        )
+        assert r.status_code == 422
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_reorder_option_locations_duplicate_id_returns_422(
+    client: TestClient,
+    mock_user_id,
+    mock_supabase_trips_and_days,
+):
+    trip_id, day_id, option_id, location_id, mock_sb = _setup_trip_day_option_and_location(
+        mock_supabase_trips_and_days, mock_user_id
+    )
+    mock_sb._option_locations_store.append(
+        {
+            "option_id": option_id,
+            "location_id": location_id,
+            "sort_order": 0,
+            "time_period": "morning",
+            "trip_id": trip_id,
+        }
+    )
+
+    async def override_user():
+        return mock_user_id
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        r = client.patch(
+            f"/api/v1/trips/{trip_id}/days/{day_id}/options/{option_id}/locations/reorder",
+            json={"location_ids": [location_id, location_id]},
+        )
+        assert r.status_code == 422
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_reorder_option_locations_ids_mismatch_returns_422(
+    client: TestClient,
+    mock_user_id,
+    mock_supabase_trips_and_days,
+):
+    trip_id, day_id, option_id, location_id, mock_sb = _setup_trip_day_option_and_location(
+        mock_supabase_trips_and_days, mock_user_id
+    )
+    mock_sb._option_locations_store.append(
+        {
+            "option_id": option_id,
+            "location_id": location_id,
+            "sort_order": 0,
+            "time_period": "morning",
+            "trip_id": trip_id,
+        }
+    )
+    other_loc_id = str(uuid4())
+    mock_sb._locations_store.append(
+        {"location_id": other_loc_id, "trip_id": trip_id, "name": "Other"}
+    )
+
+    async def override_user():
+        return mock_user_id
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        r = client.patch(
+            f"/api/v1/trips/{trip_id}/days/{day_id}/options/{option_id}/locations/reorder",
+            json={"location_ids": [location_id, other_loc_id]},
+        )
+        assert r.status_code == 422
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_reorder_option_locations_no_jwt_returns_401(client: TestClient):
+    trip_id = uuid4()
+    day_id = uuid4()
+    option_id = uuid4()
+    loc_id = uuid4()
+    r = client.patch(
+        f"/api/v1/trips/{trip_id}/days/{day_id}/options/{option_id}/locations/reorder",
+        json={"location_ids": [str(loc_id)]},
+    )
+    assert r.status_code == 401
+
+
 def test_add_location_to_option_no_jwt_returns_401(client: TestClient):
     trip_id = uuid4()
     day_id = uuid4()

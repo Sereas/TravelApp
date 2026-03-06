@@ -27,6 +27,8 @@ const mockUpdateOption = vi.fn();
 const mockDeleteOption = vi.fn();
 const mockBatchAddLocationsToOption = vi.fn();
 const mockRemoveLocationFromOption = vi.fn();
+const mockReorderOptionLocations = vi.fn();
+const mockUpdateOptionLocation = vi.fn();
 
 vi.mock("@/lib/api", () => ({
   api: {
@@ -53,6 +55,10 @@ vi.mock("@/lib/api", () => ({
         mockBatchAddLocationsToOption(...args),
       removeLocationFromOption: (...args: unknown[]) =>
         mockRemoveLocationFromOption(...args),
+      reorderOptionLocations: (...args: unknown[]) =>
+        mockReorderOptionLocations(...args),
+      updateOptionLocation: (...args: unknown[]) =>
+        mockUpdateOptionLocation(...args),
     },
   },
   ApiError: class ApiError extends Error {
@@ -753,6 +759,87 @@ describe("TripDetailPage", () => {
     expect(screen.getByText("Louvre Museum")).toBeInTheDocument();
     expect(screen.getByText(/morning/i)).toBeInTheDocument();
     expect(screen.getByText(/afternoon/i)).toBeInTheDocument();
+  });
+
+  it("calls updateOptionLocation when time period is changed in itinerary", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue([]);
+    mockGetItinerary.mockResolvedValue({
+      days: [
+        {
+          id: "day-1",
+          date: "2026-06-01",
+          sort_order: 0,
+          options: [
+            {
+              id: "opt-1",
+              option_index: 1,
+              starting_city: null,
+              ending_city: null,
+              created_by: null,
+              locations: [
+                {
+                  location_id: "loc-1",
+                  sort_order: 0,
+                  time_period: "morning",
+                  location: {
+                    id: "loc-1",
+                    name: "Eiffel Tower",
+                    city: "Paris",
+                    address: null,
+                    google_link: null,
+                    category: null,
+                    note: null,
+                    working_hours: null,
+                    requires_booking: null,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    mockUpdateOptionLocation.mockResolvedValue({
+      option_id: "opt-1",
+      location_id: "loc-1",
+      sort_order: 0,
+      time_period: "evening",
+      location: {
+        id: "loc-1",
+        name: "Eiffel Tower",
+        city: "Paris",
+        address: null,
+        google_link: null,
+        category: null,
+        note: null,
+        working_hours: null,
+        requires_booking: null,
+      },
+    });
+    render(<TripDetailPage />);
+
+    await screen.findByText("Paris Summer");
+    await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
+    await screen.findByText("Eiffel Tower");
+
+    const morningButton = screen.getByRole("button", {
+      name: /select time of day for eiffel tower/i,
+    });
+    await userEvent.click(morningButton);
+
+    const eveningOption = await screen.findByRole("option", {
+      name: /evening/i,
+    });
+    await userEvent.click(eveningOption);
+
+    expect(mockUpdateOptionLocation).toHaveBeenCalledWith(
+      "trip-1",
+      "day-1",
+      "opt-1",
+      "loc-1",
+      { time_period: "evening" }
+    );
   });
 
   it("shows No locations for a day with empty option", async () => {

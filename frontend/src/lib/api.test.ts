@@ -169,4 +169,82 @@ describe("API client", () => {
       })
     );
   });
+
+  it("sends PATCH for reorderOptionLocations", async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () =>
+        Promise.resolve([
+          {
+            option_id: "opt-1",
+            location_id: "loc-2",
+            sort_order: 0,
+            time_period: "morning",
+            location: { id: "loc-2", name: "Louvre" },
+          },
+          {
+            option_id: "opt-1",
+            location_id: "loc-1",
+            sort_order: 1,
+            time_period: "afternoon",
+            location: { id: "loc-1", name: "Eiffel" },
+          },
+        ]),
+    });
+
+    const result = await api.itinerary.reorderOptionLocations(
+      "trip-1",
+      "day-1",
+      "opt-1",
+      { location_ids: ["loc-2", "loc-1"] }
+    );
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/api/v1/trips/trip-1/days/day-1/options/opt-1/locations/reorder"
+      ),
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ location_ids: ["loc-2", "loc-1"] }),
+      })
+    );
+    expect(result).toHaveLength(2);
+    expect(result[0].location_id).toBe("loc-2");
+    expect(result[0].sort_order).toBe(0);
+  });
+
+  it("sends PATCH for updateOptionLocation", async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () =>
+        Promise.resolve({
+          option_id: "opt-1",
+          location_id: "loc-1",
+          sort_order: 0,
+          time_period: "evening",
+          location: { id: "loc-1", name: "Eiffel" },
+        }),
+    });
+
+    const result = await api.itinerary.updateOptionLocation(
+      "trip-1",
+      "day-1",
+      "opt-1",
+      "loc-1",
+      { time_period: "evening" }
+    );
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/api/v1/trips/trip-1/days/day-1/options/opt-1/locations/loc-1"
+      ),
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ time_period: "evening" }),
+      })
+    );
+    expect(result.time_period).toBe("evening");
+  });
 });
