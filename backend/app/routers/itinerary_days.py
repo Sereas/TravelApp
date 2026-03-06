@@ -18,6 +18,13 @@ router = APIRouter(prefix="/trips", tags=["itinerary-days"])
 _TRIP_DAYS_SELECT = "day_id, trip_id, date, sort_order, created_at"
 
 
+def _create_main_option_for_day(supabase, day_id: str) -> None:
+    """Insert one main (empty) option for the day: option_index=1."""
+    supabase.table("day_options").insert(
+        {"day_id": day_id, "option_index": 1}
+    ).execute()
+
+
 def _day_row_to_response(row: dict) -> DayResponse:
     """Build DayResponse from a trip_days row dict."""
     d = row.get("date")
@@ -108,9 +115,11 @@ async def create_day(
             detail="Failed to create day; please try again",
         )
     day = result.data[0]
+    day_id_str = str(day["day_id"])
+    _create_main_option_for_day(supabase, day_id_str)
     logger.info(
         "day_created",
-        day_id=str(day["day_id"]),
+        day_id=day_id_str,
         trip_id=str(trip_id),
         sort_order=next_order,
     )
@@ -358,6 +367,8 @@ async def generate_days(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to generate days; please try again",
         )
+    for day_row in insert_result.data:
+        _create_main_option_for_day(supabase, str(day_row["day_id"]))
     # Fetch back ordered by sort_order
     result = (
         supabase.table("trip_days")
