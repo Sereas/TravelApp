@@ -271,6 +271,14 @@ class UpdateOptionLocationBody(BaseModel):
         return v
 
 
+class ReorderOptionLocationsBody(BaseModel):
+    """Request body for PATCH reorder option-locations."""
+
+    location_ids: list[str] = Field(
+        ..., min_length=1, description="Ordered list of location UUIDs in this option"
+    )
+
+
 class LocationSummary(BaseModel):
     """Minimal embedded location info used in itinerary views."""
 

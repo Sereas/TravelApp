@@ -365,5 +365,17 @@ export const api = {
         `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/locations/${locationId}`,
         { method: "DELETE" }
       ),
+
+    /** Reorder locations within an option (one call for full new order). */
+    reorderOptionLocations: (
+      tripId: string,
+      dayId: string,
+      optionId: string,
+      body: { location_ids: string[] }
+    ) =>
+      request<OptionLocationResponse[]>(
+        `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/locations/reorder`,
+        { method: "PATCH", body: JSON.stringify(body) }
+      ),
   },
 };

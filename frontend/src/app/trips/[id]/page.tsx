@@ -22,7 +22,15 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { Sunrise, Sun, Sunset, Moon, ExternalLink, Ticket } from "lucide-react";
+import {
+  Sunrise,
+  Sun,
+  Sunset,
+  Moon,
+  ExternalLink,
+  Ticket,
+  GripVertical,
+} from "lucide-react";
 
 function AutosaveInput({
   id,
@@ -139,6 +147,14 @@ export default function TripDetailPage() {
   } | null>(null);
   const [expandedNoteKey, setExpandedNoteKey] = useState<string | null>(null);
   const [expandedNameKey, setExpandedNameKey] = useState<string | null>(null);
+  const [dragLocation, setDragLocation] = useState<{
+    dayId: string;
+    optionId: string;
+    locationId: string;
+  } | null>(null);
+  const [dropTargetLocationId, setDropTargetLocationId] = useState<
+    string | null
+  >(null);
 
   async function fetchData() {
     setError(null);
@@ -455,6 +471,52 @@ export default function TripDetailPage() {
         err instanceof Error ? err.message : "Failed to update time of day";
       setItineraryActionError(message);
       // Refresh from server to avoid stale/incorrect optimistic state
+      await fetchItinerary();
+    }
+  }
+
+  async function handleReorderOptionLocations(
+    dayId: string,
+    optionId: string,
+    newOrderedLocationIds: string[]
+  ) {
+    if (!itinerary) return;
+    const day = itinerary.days.find((d) => d.id === dayId);
+    const option = day?.options.find((o) => o.id === optionId);
+    if (!option) return;
+    const idToLoc = new Map(option.locations.map((l) => [l.location_id, l]));
+    const reordered = newOrderedLocationIds
+      .map((id, idx) => {
+        const loc = idToLoc.get(id);
+        return loc ? { ...loc, sort_order: idx } : null;
+      })
+      .filter(Boolean) as typeof option.locations;
+    if (reordered.length !== newOrderedLocationIds.length) return;
+    setItineraryActionError(null);
+    setItinerary((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        days: prev.days.map((d) =>
+          d.id !== dayId
+            ? d
+            : {
+                ...d,
+                options: d.options.map((o) =>
+                  o.id !== optionId ? o : { ...o, locations: reordered }
+                ),
+              }
+        ),
+      };
+    });
+    try {
+      await api.itinerary.reorderOptionLocations(tripId, dayId, optionId, {
+        location_ids: newOrderedLocationIds,
+      });
+    } catch (err) {
+      setItineraryActionError(
+        err instanceof Error ? err.message : "Failed to reorder locations"
+      );
       await fetchItinerary();
     }
   }
@@ -1064,11 +1126,18 @@ export default function TripDetailPage() {
                               </p>
                             ) : (
                               <div className="space-y-1 overflow-x-auto">
-                                {/* Table-like grid: fixed column widths + header row (Illuminator: docs/design/day-option-location-row.md) */}
+                                {/* Table-like grid: drag + fixed column widths + header row */}
                                 <div
-                                  className="grid w-full min-w-[640px] grid-cols-[7rem_minmax(4rem,7rem)_6rem_7rem_6rem_minmax(5rem,1fr)_2.5rem_2rem] gap-3 px-2 py-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground border-b border-border"
+                                  className="grid w-full min-w-[680px] grid-cols-[2rem_7rem_minmax(4rem,7rem)_6rem_7rem_6rem_minmax(5rem,1fr)_2.5rem_2rem] gap-3 px-2 py-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground border-b border-border"
                                   role="row"
                                 >
+                                  <div
+                                    role="columnheader"
+                                    className="flex items-center"
+                                    aria-label="Drag to reorder"
+                                  >
+                                    <span className="sr-only">Reorder</span>
+                                  </div>
                                   <div role="columnheader">Time</div>
                                   <div role="columnheader">Location</div>
                                   <div role="columnheader">City</div>
@@ -1112,12 +1181,124 @@ export default function TripDetailPage() {
                                     const isBooked = booking === "yes_done";
                                     const showBookingPill =
                                       booking !== "no" && booking != null;
+                                    const isDragging =
+                                      dragLocation?.dayId === day.id &&
+                                      dragLocation?.optionId ===
+                                        currentOption.id &&
+                                      dragLocation?.locationId ===
+                                        ol.location_id;
+                                    const isDropTarget =
+                                      dropTargetLocationId === ol.location_id &&
+                                      !isDragging;
+
+                                    const sortedLocs = [
+                                      ...currentOption.locations,
+                                    ].sort(
+                                      (a, b) => a.sort_order - b.sort_order
+                                    );
+                                    const fromIdx = sortedLocs.findIndex(
+                                      (l) =>
+                                        l.location_id ===
+                                        dragLocation?.locationId
+                                    );
+                                    const toIdx = sortedLocs.findIndex(
+                                      (l) => l.location_id === ol.location_id
+                                    );
+
+                                    const optId = currentOption?.id;
+                                    function handleDragOver(
+                                      e: React.DragEvent
+                                    ) {
+                                      e.preventDefault();
+                                      e.dataTransfer.dropEffect = "move";
+                                      if (
+                                        dragLocation?.dayId === day.id &&
+                                        dragLocation?.optionId === optId
+                                      )
+                                        setDropTargetLocationId(ol.location_id);
+                                    }
+
+                                    function handleDrop(e: React.DragEvent) {
+                                      e.preventDefault();
+                                      setDropTargetLocationId(null);
+                                      if (
+                                        !dragLocation ||
+                                        dragLocation.dayId !== day.id ||
+                                        dragLocation.optionId !== optId ||
+                                        dragLocation.locationId ===
+                                          ol.location_id
+                                      ) {
+                                        setDragLocation(null);
+                                        return;
+                                      }
+                                      if (fromIdx < 0 || toIdx < 0) {
+                                        setDragLocation(null);
+                                        return;
+                                      }
+                                      const newOrder = [...sortedLocs];
+                                      const [removed] = newOrder.splice(
+                                        fromIdx,
+                                        1
+                                      );
+                                      const insertAt =
+                                        toIdx > fromIdx ? toIdx - 1 : toIdx;
+                                      newOrder.splice(insertAt, 0, removed);
+                                      const newIds = newOrder.map(
+                                        (l) => l.location_id
+                                      );
+                                      setDragLocation(null);
+                                      if (optId)
+                                        void handleReorderOptionLocations(
+                                          day.id,
+                                          optId,
+                                          newIds
+                                        );
+                                    }
 
                                     return (
                                       <div
                                         key={ol.location_id}
-                                        className="group grid w-full min-w-[640px] grid-cols-[7rem_minmax(4rem,7rem)_6rem_7rem_6rem_minmax(5rem,1fr)_2.5rem_2rem] gap-3 items-start rounded-md px-2 py-1.5 text-sm hover:bg-accent/50"
+                                        className={cn(
+                                          "group grid w-full min-w-[680px] grid-cols-[2rem_7rem_minmax(4rem,7rem)_6rem_7rem_6rem_minmax(5rem,1fr)_2.5rem_2rem] gap-3 items-start rounded-md px-2 py-1.5 text-sm hover:bg-accent/50",
+                                          isDragging && "opacity-50",
+                                          isDropTarget &&
+                                            "ring-1 ring-primary ring-inset bg-accent/70"
+                                        )}
+                                        onDragOver={handleDragOver}
+                                        onDragLeave={() =>
+                                          setDropTargetLocationId(null)
+                                        }
+                                        onDrop={handleDrop}
+                                        role="row"
                                       >
+                                        {/* Drag handle */}
+                                        <div
+                                          className="flex cursor-grab active:cursor-grabbing items-center justify-center self-center rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                                          draggable
+                                          onDragStart={(e) => {
+                                            setDragLocation({
+                                              dayId: day.id,
+                                              optionId: currentOption.id,
+                                              locationId: ol.location_id,
+                                            });
+                                            e.dataTransfer.effectAllowed =
+                                              "move";
+                                            e.dataTransfer.setData(
+                                              "text/plain",
+                                              ol.location_id
+                                            );
+                                          }}
+                                          onDragEnd={() => {
+                                            setDragLocation(null);
+                                            setDropTargetLocationId(null);
+                                          }}
+                                          aria-label={`Drag to reorder ${ol.location.name}`}
+                                        >
+                                          <GripVertical
+                                            className="h-4 w-4"
+                                            size={16}
+                                          />
+                                        </div>
                                         {/* Time */}
                                         <div className="relative min-w-0">
                                           <button

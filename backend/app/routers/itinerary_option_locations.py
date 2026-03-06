@@ -11,6 +11,7 @@ from backend.app.models.schemas import (
     AddOptionLocationBody,
     LocationSummary,
     OptionLocationResponse,
+    ReorderOptionLocationsBody,
     UpdateOptionLocationBody,
 )
 from backend.app.routers.itinerary_options import _ensure_day_in_trip
@@ -214,6 +215,88 @@ async def add_location_to_option(
         location_id=str(rec.get("location_id")),
     )
     return _option_location_row_to_response(rec, loc_row=loc_data)
+
+
+@router.patch(
+    "/{trip_id}/days/{day_id}/options/{option_id}/locations/reorder",
+    response_model=list[OptionLocationResponse],
+)
+async def reorder_option_locations(
+    trip_id: UUID,
+    day_id: UUID,
+    option_id: UUID,
+    body: ReorderOptionLocationsBody,
+    user_id: UUID = Depends(get_current_user_id),
+    supabase=Depends(get_supabase_client),
+):
+    """
+    Reorder locations within an option. Body: ordered list of location_ids.
+    Backend sets sort_order to 0, 1, 2, … by position.
+    422 if any id not in this option or duplicate.
+    """
+    _ensure_trip_owned(supabase, trip_id, user_id)
+    _ensure_day_in_trip(supabase, trip_id, day_id)
+    _ensure_option_in_day(supabase, day_id, option_id)
+    option_id_str = str(option_id)
+    if not body.location_ids:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="location_ids must not be empty",
+        )
+    seen: set[str] = set()
+    for lid in body.location_ids:
+        lid_str = str(lid)
+        if lid_str in seen:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Duplicate location_id in location_ids",
+            )
+        seen.add(lid_str)
+    # Fetch current option_locations for this option to validate all ids belong
+    current = (
+        supabase.table("option_locations")
+        .select("location_id")
+        .eq("option_id", option_id_str)
+        .execute()
+    )
+    current_ids = {str(r["location_id"]) for r in (current.data or [])}
+    if seen != current_ids:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="location_ids must match exactly the locations in this option",
+        )
+    for position, location_id in enumerate(body.location_ids):
+        lid_str = str(location_id)
+        supabase.table("option_locations").update({"sort_order": position}).eq(
+            "option_id", option_id_str
+        ).eq("location_id", lid_str).execute()
+    result = (
+        supabase.table("option_locations")
+        .select(_OPTION_LOCATIONS_SELECT)
+        .eq("option_id", option_id_str)
+        .order("sort_order")
+        .execute()
+    )
+    items = result.data if result.data else []
+    loc_rows = (
+        supabase.table("locations")
+        .select(_LOCATION_SUMMARY_SELECT)
+        .eq("trip_id", str(trip_id))
+        .in_("location_id", [str(r["location_id"]) for r in items])
+        .execute()
+    )
+    loc_by_id = {str(r["location_id"]): r for r in (loc_rows.data or [])}
+    logger.info(
+        "option_locations_reordered",
+        trip_id=str(trip_id),
+        day_id=str(day_id),
+        option_id=option_id_str,
+        count=len(items),
+    )
+    return [
+        _option_location_row_to_response(r, loc_row=loc_by_id.get(str(r["location_id"])))
+        for r in items
+    ]
 
 
 @router.patch(

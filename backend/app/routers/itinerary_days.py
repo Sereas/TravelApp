@@ -20,9 +20,7 @@ _TRIP_DAYS_SELECT = "day_id, trip_id, date, sort_order, created_at"
 
 def _create_main_option_for_day(supabase, day_id: str) -> None:
     """Insert one main (empty) option for the day: option_index=1."""
-    supabase.table("day_options").insert(
-        {"day_id": day_id, "option_index": 1}
-    ).execute()
+    supabase.table("day_options").insert({"day_id": day_id, "option_index": 1}).execute()
 
 
 def _day_row_to_response(row: dict) -> DayResponse:
