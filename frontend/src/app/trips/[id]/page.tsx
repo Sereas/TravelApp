@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { Sunrise, Sun, Sunset, Moon } from "lucide-react";
 
 function AutosaveInput({
   id,
@@ -131,6 +132,11 @@ export default function TripDetailPage() {
   const [createOptionLoading, setCreateOptionLoading] = useState<string | null>(
     null
   );
+  const [openTimePicker, setOpenTimePicker] = useState<{
+    dayId: string;
+    optionId: string;
+    locationId: string;
+  } | null>(null);
 
   async function fetchData() {
     setError(null);
@@ -386,6 +392,86 @@ export default function TripDetailPage() {
       setItineraryActionError(message);
     }
   }
+
+  async function handleUpdateLocationTimePeriod(
+    dayId: string,
+    optionId: string,
+    locationId: string,
+    timePeriod: string
+  ) {
+    setItineraryActionError(null);
+    // Optimistic UI update for snappier interaction
+    setItinerary((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        days: prev.days.map((d) =>
+          d.id === dayId
+            ? {
+                ...d,
+                options: d.options.map((o) =>
+                  o.id === optionId
+                    ? {
+                        ...o,
+                        locations: o.locations.map((l) =>
+                          l.location_id === locationId
+                            ? { ...l, time_period: timePeriod }
+                            : l
+                        ),
+                      }
+                    : o
+                ),
+              }
+            : d
+        ),
+      };
+    });
+    try {
+      await api.itinerary.updateOptionLocation(
+        tripId,
+        dayId,
+        optionId,
+        locationId,
+        { time_period: timePeriod }
+      );
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to update time of day";
+      setItineraryActionError(message);
+      // Refresh from server to avoid stale/incorrect optimistic state
+      await fetchItinerary();
+    }
+  }
+
+  const TIME_PERIOD_META: Record<
+    string,
+    { label: string; icon: React.ComponentType<{ className?: string; size?: number }>; bg: string; text: string }
+  > = {
+    morning: {
+      label: "Morning",
+      icon: Sunrise,
+      bg: "bg-amber-50",
+      text: "text-amber-800",
+    },
+    afternoon: {
+      label: "Afternoon",
+      icon: Sun,
+      bg: "bg-sky-50",
+      text: "text-sky-800",
+    },
+    evening: {
+      label: "Evening",
+      icon: Sunset,
+      bg: "bg-purple-50",
+      text: "text-purple-800",
+    },
+    night: {
+      label: "Night",
+      icon: Moon,
+      bg: "bg-slate-800",
+      text: "text-slate-50",
+    },
+  };
 
   const categoryOptions = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -959,11 +1045,104 @@ export default function TripDetailPage() {
                                   .map((ol) => (
                                     <li
                                       key={ol.location_id}
-                                      className="group flex items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-accent/50"
+                                      className="group relative flex items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-accent/50"
                                     >
-                                      <span className="w-20 shrink-0 capitalize text-muted-foreground">
-                                        {ol.time_period}
-                                      </span>
+                                      {(() => {
+                                        const key = ol.time_period || "morning";
+                                        const meta =
+                                          TIME_PERIOD_META[key] ??
+                                          TIME_PERIOD_META.morning;
+                                        const Icon = meta.icon;
+                                        return (
+                                          <button
+                                            type="button"
+                                            className={cn(
+                                              "inline-flex h-7 items-center gap-1 rounded-full px-2 text-xs font-medium transition-colors",
+                                              "border border-transparent hover:border-border",
+                                              meta.bg,
+                                              meta.text
+                                            )}
+                                            onClick={() => {
+                                              setOpenTimePicker((prev) =>
+                                                prev &&
+                                                prev.dayId === day.id &&
+                                                prev.optionId ===
+                                                  currentOption.id &&
+                                                prev.locationId ===
+                                                  ol.location_id
+                                                  ? null
+                                                  : {
+                                                      dayId: day.id,
+                                                      optionId:
+                                                        currentOption.id,
+                                                      locationId:
+                                                        ol.location_id,
+                                                    }
+                                              );
+                                            }}
+                                            aria-label={`Select time of day for ${ol.location.name}`}
+                                          >
+                                            <Icon
+                                              className="h-3.5 w-3.5 shrink-0"
+                                              size={14}
+                                            />
+                                            <span>{meta.label}</span>
+                                          </button>
+                                        );
+                                      })()}
+                                      {openTimePicker &&
+                                        openTimePicker.dayId === day.id &&
+                                        openTimePicker.optionId ===
+                                          currentOption.id &&
+                                        openTimePicker.locationId ===
+                                          ol.location_id && (
+                                          <div className="absolute left-0 top-full z-20 mt-1 w-40 rounded-md border border-border bg-popover p-1 text-xs shadow-md">
+                                            {["morning", "afternoon", "evening", "night"].map(
+                                              (key) => {
+                                                const meta =
+                                                  TIME_PERIOD_META[key];
+                                                const Icon = meta.icon;
+                                                return (
+                                                  <button
+                                                    key={key}
+                                                    type="button"
+                                                    className={cn(
+                                                      "flex w-full items-center gap-1 rounded-sm px-2 py-1 text-left",
+                                                      key ===
+                                                        (ol.time_period ||
+                                                          "morning")
+                                                        ? "bg-accent text-accent-foreground"
+                                                        : "hover:bg-accent hover:text-accent-foreground"
+                                                    )}
+                                                    onClick={() => {
+                                                      setOpenTimePicker(null);
+                                                      void handleUpdateLocationTimePeriod(
+                                                        day.id,
+                                                        currentOption.id,
+                                                        ol.location_id,
+                                                        key
+                                                      );
+                                                    }}
+                                                  >
+                                                    <span
+                                                      className={cn(
+                                                        "flex h-5 w-5 items-center justify-center rounded-full text-[10px]",
+                                                        meta.bg,
+                                                        meta.text
+                                                      )}
+                                                    >
+                                                      <Icon
+                                                        className="h-3 w-3"
+                                                        size={12}
+                                                      />
+                                                    </span>
+                                                    <span>{meta.label}</span>
+                                                  </button>
+                                                );
+                                              }
+                                            )}
+                                          </div>
+                                        )}
                                       <span className="min-w-0 flex-1">
                                         {ol.location.name}
                                         {ol.location.city && (

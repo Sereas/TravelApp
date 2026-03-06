@@ -338,6 +338,22 @@ export const api = {
         { method: "POST", body: JSON.stringify(body) }
       ),
 
+    /** Update a single option-location link (sort_order and/or time_period). */
+    updateOptionLocation: (
+      tripId: string,
+      dayId: string,
+      optionId: string,
+      locationId: string,
+      body: {
+        sort_order?: number;
+        time_period?: string;
+      }
+    ) =>
+      request<OptionLocationResponse>(
+        `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/locations/${locationId}`,
+        { method: "PATCH", body: JSON.stringify(body) }
+      ),
+
     /** Remove a location from an option. */
     removeLocationFromOption: (
       tripId: string,
