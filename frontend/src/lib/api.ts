@@ -139,6 +139,17 @@ export interface OptionLocationResponse {
   location: LocationSummary | null;
 }
 
+export interface RouteResponse {
+  route_id: string;
+  option_id: string;
+  label: string | null;
+  transport_mode: string;
+  duration_seconds: number | null;
+  distance_meters: number | null;
+  sort_order: number;
+  location_ids: string[];
+}
+
 export interface ItineraryResponse {
   days: ItineraryDay[];
 }
@@ -376,6 +387,40 @@ export const api = {
       request<OptionLocationResponse[]>(
         `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/locations/reorder`,
         { method: "PATCH", body: JSON.stringify(body) }
+      ),
+
+    /** List routes for an option. */
+    listRoutes: (tripId: string, dayId: string, optionId: string) =>
+      request<RouteResponse[]>(
+        `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/routes`
+      ),
+
+    /** Create a route with stops. */
+    createRoute: (
+      tripId: string,
+      dayId: string,
+      optionId: string,
+      body: {
+        transport_mode: string;
+        label?: string | null;
+        location_ids: string[];
+      }
+    ) =>
+      request<RouteResponse>(
+        `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/routes`,
+        { method: "POST", body: JSON.stringify(body) }
+      ),
+
+    /** Delete a route. */
+    deleteRoute: (
+      tripId: string,
+      dayId: string,
+      optionId: string,
+      routeId: string
+    ) =>
+      request<void>(
+        `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/routes/${routeId}`,
+        { method: "DELETE" }
       ),
   },
 };

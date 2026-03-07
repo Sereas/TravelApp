@@ -98,7 +98,7 @@ async def create_route(
             "p_location_ids": body.location_ids,
         },
     ).execute()
-    if not result.data or len(result.data) == 0:
+    if not result.data:
         logger.error(
             "route_create_failed",
             trip_id=str(trip_id),
@@ -109,7 +109,7 @@ async def create_route(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create route; please try again",
         )
-    row = result.data[0]
+    row = result.data if isinstance(result.data, dict) else result.data[0]
     row["location_ids"] = body.location_ids
     logger.info(
         "route_created",
