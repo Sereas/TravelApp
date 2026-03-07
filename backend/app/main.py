@@ -12,6 +12,7 @@ from backend.app.routers import (
     itinerary_days,
     itinerary_option_locations,
     itinerary_options,
+    itinerary_routes,
     itinerary_tree,
     trip_locations,
     trips,
@@ -51,4 +52,5 @@ app.include_router(trip_locations.router, prefix="/api/v1")
 app.include_router(itinerary_days.router, prefix="/api/v1")
 app.include_router(itinerary_options.router, prefix="/api/v1")
 app.include_router(itinerary_option_locations.router, prefix="/api/v1")
+app.include_router(itinerary_routes.router, prefix="/api/v1")
 app.include_router(itinerary_tree.router, prefix="/api/v1")
