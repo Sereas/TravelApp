@@ -976,6 +976,24 @@ def mock_supabase_trips_and_days():
         def __init__(self, data):
             self.data = data
 
+    class _EmptyTable:
+        """Stub table that always returns empty results for select/in_/order/execute chains."""
+
+        def select(self, *a):
+            return self
+
+        def eq(self, *a):
+            return self
+
+        def in_(self, *a):
+            return self
+
+        def order(self, *a, **kw):
+            return self
+
+        def execute(self):
+            return type("Result", (), {"data": []})()
+
     class MockSupabaseTripsAndDays:
         def __init__(self, trip_owners, user_id):
             self._trip_owners = {str(k): str(v) for k, v in trip_owners.items()}
@@ -997,6 +1015,8 @@ def mock_supabase_trips_and_days():
                 return _LocationsTableForItinerary(self._locations_store)
             if name == "option_locations":
                 return _OptionLocationsTable(self._option_locations_store)
+            if name in ("option_routes", "route_stops"):
+                return _EmptyTable()
             return None
 
         def rpc(self, name, params):

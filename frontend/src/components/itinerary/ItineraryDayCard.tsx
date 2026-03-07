@@ -16,7 +16,6 @@ import {
   type ItineraryOption,
   type ItineraryOptionLocation,
   type Location,
-  type RouteResponse,
 } from "@/lib/api";
 import { AddLocationsToOptionDialog } from "@/components/itinerary/AddLocationsToOptionDialog";
 import { Button } from "@/components/ui/button";
@@ -213,6 +212,7 @@ export interface ItineraryDayCardProps {
     optionId: string,
     locationIds: string[]
   ) => void;
+  onRoutesChanged: () => void;
 }
 
 export function ItineraryDayCard({
@@ -229,6 +229,7 @@ export function ItineraryDayCard({
   onRemoveLocation,
   onUpdateTimePeriod,
   onReorderLocations,
+  onRoutesChanged,
 }: ItineraryDayCardProps) {
   const dayLabel = day.date
     ? formatDate(day.date)
@@ -240,27 +241,11 @@ export function ItineraryDayCard({
     [currentOption]
   );
 
-  // Routes (persisted)
-  const [routes, setRoutes] = useState<RouteResponse[]>([]);
-  const [routesLoading, setRoutesLoading] = useState(false);
-
-  const optionId = currentOption?.id;
-  const fetchRoutes = useCallback(async () => {
-    if (!optionId) return;
-    setRoutesLoading(true);
-    try {
-      const data = await api.itinerary.listRoutes(tripId, day.id, optionId);
-      setRoutes(data);
-    } catch {
-      setRoutes([]);
-    } finally {
-      setRoutesLoading(false);
-    }
-  }, [tripId, day.id, optionId]);
-
-  useEffect(() => {
-    fetchRoutes();
-  }, [fetchRoutes]);
+  // Routes from itinerary tree (loaded with tree, no separate fetch)
+  const routes = useMemo(
+    () => currentOption?.routes ?? [],
+    [currentOption?.routes]
+  );
 
   // Route creation
   const [creating, setCreating] = useState(false);
@@ -279,7 +264,7 @@ export function ItineraryDayCard({
         label: null,
         location_ids: pickIds,
       });
-      await fetchRoutes();
+      onRoutesChanged();
       setCreating(false);
       setPickIds([]);
     } catch {
@@ -298,7 +283,7 @@ export function ItineraryDayCard({
         currentOption.id,
         routeId
       );
-      setRoutes((prev) => prev.filter((r) => r.route_id !== routeId));
+      onRoutesChanged();
     } catch {
       /* swallow */
     }
@@ -308,7 +293,11 @@ export function ItineraryDayCard({
   const locRouteMap = useMemo(() => {
     const m = new Map<
       string,
-      { route: RouteResponse; idx: number; color: (typeof ROUTE_COLORS)[0] }
+      {
+        route: (typeof routes)[0];
+        idx: number;
+        color: (typeof ROUTE_COLORS)[0];
+      }
     >();
     routes.forEach((r, ri) => {
       const color = ROUTE_COLORS[ri % ROUTE_COLORS.length];
@@ -451,14 +440,17 @@ export function ItineraryDayCard({
           onDragLeave={() => setDropId(null)}
           onDrop={(e) => onDrop(ol.location_id, e)}
         >
-          {/* Route indicator */}
+          {/* Route indicator — continuous bar, extends beyond row edges */}
           {routeInfo && (
             <div
               className={cn(
-                "absolute left-0 top-0 bottom-0 w-0 border-l-[3px] rounded-sm",
+                "absolute left-0 w-0 border-l-[3px]",
                 routeInfo.color.bar,
-                routeInfo.idx === 0 && "top-1/2",
-                isLast && "bottom-1/2"
+                routeInfo.idx === 0
+                  ? "-bottom-1 top-1/2"
+                  : isLast
+                    ? "-top-1 bottom-1/2"
+                    : "-top-1 -bottom-1"
               )}
             />
           )}
