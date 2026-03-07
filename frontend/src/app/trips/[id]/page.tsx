@@ -950,6 +950,7 @@ export default function TripDetailPage() {
                     <ItineraryDayCard
                       key={day.id}
                       day={day}
+                      tripId={tripId}
                       currentOption={currentOption}
                       tripLocations={locations}
                       createOptionLoading={createOptionLoading === day.id}

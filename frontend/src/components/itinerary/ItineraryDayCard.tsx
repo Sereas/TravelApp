@@ -11,10 +11,12 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import {
+  api,
   type ItineraryDay,
   type ItineraryOption,
   type ItineraryOptionLocation,
   type Location,
+  type RouteResponse,
 } from "@/lib/api";
 import { AddLocationsToOptionDialog } from "@/components/itinerary/AddLocationsToOptionDialog";
 import { Button } from "@/components/ui/button";
@@ -29,18 +31,17 @@ import {
   ExternalLink,
   Ticket,
   GripVertical,
-  ChevronDown,
   MapPin,
-  Route,
   Car,
   Footprints,
   TrainFront,
   Plus,
   X,
   ArrowRight,
+  Trash2,
 } from "lucide-react";
 
-const TIME_PERIOD_META: Record<
+const TIME_META: Record<
   string,
   {
     label: string;
@@ -75,26 +76,44 @@ const TIME_PERIOD_META: Record<
   },
 };
 
-const TRANSPORT_MODES = [
+const TRANSPORT = [
   { key: "walk", label: "Walk", icon: Footprints },
   { key: "drive", label: "Drive", icon: Car },
   { key: "transit", label: "Transit", icon: TrainFront },
 ] as const;
 
 const ROUTE_COLORS = [
-  "border-blue-400",
-  "border-emerald-400",
-  "border-orange-400",
-  "border-violet-400",
-  "border-rose-400",
+  {
+    bar: "border-l-blue-400",
+    bg: "bg-blue-50",
+    text: "text-blue-700",
+    dot: "bg-blue-400",
+  },
+  {
+    bar: "border-l-emerald-400",
+    bg: "bg-emerald-50",
+    text: "text-emerald-700",
+    dot: "bg-emerald-400",
+  },
+  {
+    bar: "border-l-orange-400",
+    bg: "bg-orange-50",
+    text: "text-orange-700",
+    dot: "bg-orange-400",
+  },
+  {
+    bar: "border-l-violet-400",
+    bg: "bg-violet-50",
+    text: "text-violet-700",
+    dot: "bg-violet-400",
+  },
+  {
+    bar: "border-l-rose-400",
+    bg: "bg-rose-50",
+    text: "text-rose-700",
+    dot: "bg-rose-400",
+  },
 ];
-
-export interface LocalRoute {
-  id: string;
-  locationIds: string[];
-  transportMode: "walk" | "drive" | "transit";
-  colorIndex: number;
-}
 
 function AutosaveInput({
   id,
@@ -111,52 +130,53 @@ function AutosaveInput({
 }) {
   const [value, setValue] = useState(initialValue);
   const savedRef = useRef(initialValue);
-
   useEffect(() => {
     setValue(initialValue);
     savedRef.current = initialValue;
   }, [initialValue]);
-
-  const commitValue = useCallback(async () => {
-    const trimmed = value.trim();
-    if (trimmed === savedRef.current) return;
-    savedRef.current = trimmed;
-    await onSave(trimmed);
+  const commit = useCallback(async () => {
+    const t = value.trim();
+    if (t === savedRef.current) return;
+    savedRef.current = t;
+    await onSave(t);
   }, [value, onSave]);
-
   return (
     <input
       id={id}
       autoComplete="off"
+      placeholder={placeholder}
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={() => void commit()}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          e.currentTarget.blur();
+        }
+      }}
       className={cn(
         "h-7 rounded border border-transparent bg-transparent px-1.5 text-sm transition-colors hover:border-input focus:border-input focus:bg-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
         className
       )}
-      placeholder={placeholder}
-      value={value}
-      onChange={(e) => setValue(e.target.value)}
-      onBlur={() => void commitValue()}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          (e.currentTarget as HTMLInputElement).blur();
-        }
-      }}
     />
   );
 }
 
 function formatDate(dateStr: string): string {
-  const date = new Date(dateStr + "T00:00:00");
-  return date.toLocaleDateString("en-US", {
+  const d = new Date(dateStr + "T00:00:00");
+  return d.toLocaleDateString("en-US", {
     weekday: "short",
     month: "short",
     day: "numeric",
   });
 }
 
+// Grid column template shared by header + rows
+const GRID_COLS = "grid-cols-[1.5rem_6.5rem_1fr_5rem_5rem_5rem_1.5rem_1.5rem]";
+
 export interface ItineraryDayCardProps {
   day: ItineraryDay;
+  tripId: string;
   currentOption: ItineraryOption | undefined;
   tripLocations: Location[];
   createOptionLoading: boolean;
@@ -197,6 +217,7 @@ export interface ItineraryDayCardProps {
 
 export function ItineraryDayCard({
   day,
+  tripId,
   currentOption,
   tripLocations,
   createOptionLoading,
@@ -212,128 +233,144 @@ export function ItineraryDayCard({
   const dayLabel = day.date
     ? formatDate(day.date)
     : `Day ${day.sort_order + 1}`;
-  const hasMultipleOptions = day.options.length > 1;
-  const canDeleteOption = day.options.length > 1;
-  const alreadyAddedIds = useMemo(
+  const hasMultiOpts = day.options.length > 1;
+  const canDelete = day.options.length > 1;
+  const alreadyAdded = useMemo(
     () => new Set(currentOption?.locations.map((l) => l.location_id) ?? []),
     [currentOption]
   );
 
-  const [expandedLocationId, setExpandedLocationId] = useState<string | null>(
-    null
-  );
-  const [showMap, setShowMap] = useState(false);
-  const [routes, setRoutes] = useState<LocalRoute[]>([]);
-  const [linkingRoute, setLinkingRoute] = useState(false);
-  const [linkingLocationIds, setLinkingLocationIds] = useState<string[]>([]);
-  const [linkingTransport, setLinkingTransport] = useState<
+  // Routes (persisted)
+  const [routes, setRoutes] = useState<RouteResponse[]>([]);
+  const [routesLoading, setRoutesLoading] = useState(false);
+
+  const optionId = currentOption?.id;
+  const fetchRoutes = useCallback(async () => {
+    if (!optionId) return;
+    setRoutesLoading(true);
+    try {
+      const data = await api.itinerary.listRoutes(tripId, day.id, optionId);
+      setRoutes(data);
+    } catch {
+      setRoutes([]);
+    } finally {
+      setRoutesLoading(false);
+    }
+  }, [tripId, day.id, optionId]);
+
+  useEffect(() => {
+    fetchRoutes();
+  }, [fetchRoutes]);
+
+  // Route creation
+  const [creating, setCreating] = useState(false);
+  const [pickIds, setPickIds] = useState<string[]>([]);
+  const [pickTransport, setPickTransport] = useState<
     "walk" | "drive" | "transit"
   >("walk");
+  const [savingRoute, setSavingRoute] = useState(false);
+
+  async function handleSaveRoute() {
+    if (pickIds.length < 2 || !currentOption) return;
+    setSavingRoute(true);
+    try {
+      await api.itinerary.createRoute(tripId, day.id, currentOption.id, {
+        transport_mode: pickTransport,
+        label: null,
+        location_ids: pickIds,
+      });
+      await fetchRoutes();
+      setCreating(false);
+      setPickIds([]);
+    } catch {
+      /* error shown by parent */
+    } finally {
+      setSavingRoute(false);
+    }
+  }
+
+  async function handleDeleteRoute(routeId: string) {
+    if (!currentOption) return;
+    try {
+      await api.itinerary.deleteRoute(
+        tripId,
+        day.id,
+        currentOption.id,
+        routeId
+      );
+      setRoutes((prev) => prev.filter((r) => r.route_id !== routeId));
+    } catch {
+      /* swallow */
+    }
+  }
+
+  // Build lookup: locationId → route
+  const locRouteMap = useMemo(() => {
+    const m = new Map<
+      string,
+      { route: RouteResponse; idx: number; color: (typeof ROUTE_COLORS)[0] }
+    >();
+    routes.forEach((r, ri) => {
+      const color = ROUTE_COLORS[ri % ROUTE_COLORS.length];
+      r.location_ids.forEach((lid, idx) =>
+        m.set(lid, { route: r, idx, color })
+      );
+    });
+    return m;
+  }, [routes]);
 
   // Drag state
-  const [dragLocationId, setDragLocationId] = useState<string | null>(null);
-  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropId, setDropId] = useState<string | null>(null);
 
   // Time picker
-  const [openTimePicker, setOpenTimePicker] = useState<string | null>(null);
-  const [timePickerPos, setTimePickerPos] = useState<{
+  const [tpOpen, setTpOpen] = useState<string | null>(null);
+  const [tpPos, setTpPos] = useState<{
     top?: number;
     bottom?: number;
     left: number;
   } | null>(null);
-  const triggerRef = useRef<HTMLDivElement | null>(null);
-  const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const tpTrigger = useRef<HTMLDivElement | null>(null);
+  const tpDrop = useRef<HTMLDivElement | null>(null);
 
   useLayoutEffect(() => {
-    if (!openTimePicker) {
-      setTimePickerPos(null);
+    if (!tpOpen) {
+      setTpPos(null);
       return;
     }
-    const el = triggerRef.current;
+    const el = tpTrigger.current;
     if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const openAbove =
-      spaceBelow < 200 || rect.bottom > window.innerHeight * 0.55;
-    const left = Math.max(8, Math.min(rect.left, window.innerWidth - 168));
-    setTimePickerPos(
-      openAbove
-        ? { bottom: window.innerHeight - rect.top + 4, left }
-        : { top: rect.bottom + 4, left }
+    const r = el.getBoundingClientRect();
+    const below = window.innerHeight - r.bottom;
+    const left = Math.max(8, Math.min(r.left, window.innerWidth - 168));
+    setTpPos(
+      below < 200
+        ? { bottom: window.innerHeight - r.top + 4, left }
+        : { top: r.bottom + 4, left }
     );
-  }, [openTimePicker]);
+  }, [tpOpen]);
 
   useEffect(() => {
-    if (!openTimePicker) return;
-    const close = () => setOpenTimePicker(null);
-    document.addEventListener("scroll", close, true);
-    return () => document.removeEventListener("scroll", close, true);
-  }, [openTimePicker]);
-
+    if (!tpOpen) return;
+    const c = () => setTpOpen(null);
+    document.addEventListener("scroll", c, true);
+    return () => document.removeEventListener("scroll", c, true);
+  }, [tpOpen]);
   useEffect(() => {
-    if (!openTimePicker) return;
-    const handler = (e: MouseEvent) => {
+    if (!tpOpen) return;
+    const h = (e: MouseEvent) => {
       const t = e.target as Node;
-      if (triggerRef.current?.contains(t) || dropdownRef.current?.contains(t))
-        return;
-      setOpenTimePicker(null);
+      if (tpTrigger.current?.contains(t) || tpDrop.current?.contains(t)) return;
+      setTpOpen(null);
     };
-    document.addEventListener("mousedown", handler, true);
-    return () => document.removeEventListener("mousedown", handler, true);
-  }, [openTimePicker]);
+    document.addEventListener("mousedown", h, true);
+    return () => document.removeEventListener("mousedown", h, true);
+  }, [tpOpen]);
 
-  function getRouteForLocation(locId: string): LocalRoute | undefined {
-    return routes.find((r) => r.locationIds.includes(locId));
-  }
+  const [showMap, setShowMap] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  function getRoutePosition(
-    route: LocalRoute,
-    locId: string
-  ): "first" | "middle" | "last" | "only" {
-    const idx = route.locationIds.indexOf(locId);
-    if (route.locationIds.length === 1) return "only";
-    if (idx === 0) return "first";
-    if (idx === route.locationIds.length - 1) return "last";
-    return "middle";
-  }
-
-  function handleToggleLinkLocation(locId: string) {
-    setLinkingLocationIds((prev) =>
-      prev.includes(locId)
-        ? prev.filter((id) => id !== locId)
-        : [...prev, locId]
-    );
-  }
-
-  function handleSaveRoute() {
-    if (linkingLocationIds.length < 2) return;
-    const newRoute: LocalRoute = {
-      id: `route-${Date.now()}`,
-      locationIds: [...linkingLocationIds],
-      transportMode: linkingTransport,
-      colorIndex: routes.length % ROUTE_COLORS.length,
-    };
-    setRoutes((prev) => [...prev, newRoute]);
-    setLinkingRoute(false);
-    setLinkingLocationIds([]);
-  }
-
-  function handleDeleteRoute(routeId: string) {
-    setRoutes((prev) => prev.filter((r) => r.id !== routeId));
-  }
-
-  function handleStartLinking() {
-    setLinkingRoute(true);
-    setLinkingLocationIds([]);
-    setLinkingTransport("walk");
-  }
-
-  function handleCancelLinking() {
-    setLinkingRoute(false);
-    setLinkingLocationIds([]);
-  }
-
-  const sortedLocations = useMemo(
+  const sorted = useMemo(
     () =>
       currentOption
         ? [...currentOption.locations].sort(
@@ -343,226 +380,207 @@ export function ItineraryDayCard({
     [currentOption]
   );
 
-  function handleDragStart(locId: string, e: React.DragEvent) {
-    setDragLocationId(locId);
+  // Drag handlers
+  function onDragStart(locId: string, e: React.DragEvent) {
+    setDragId(locId);
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", locId);
   }
-
-  function handleDragEnd() {
-    setDragLocationId(null);
-    setDropTargetId(null);
+  function onDragEnd() {
+    setDragId(null);
+    setDropId(null);
   }
-
-  function handleDragOver(locId: string, e: React.DragEvent) {
+  function onDragOver(locId: string, e: React.DragEvent) {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
-    if (dragLocationId) setDropTargetId(locId);
+    if (dragId) setDropId(locId);
   }
-
-  function handleDrop(targetLocId: string, e: React.DragEvent) {
+  function onDrop(targetId: string, e: React.DragEvent) {
     e.preventDefault();
-    setDropTargetId(null);
-    if (!dragLocationId || !currentOption || dragLocationId === targetLocId) {
-      setDragLocationId(null);
+    setDropId(null);
+    if (!dragId || !currentOption || dragId === targetId) {
+      setDragId(null);
       return;
     }
-    const fromIdx = sortedLocations.findIndex(
-      (l) => l.location_id === dragLocationId
-    );
-    const toIdx = sortedLocations.findIndex(
-      (l) => l.location_id === targetLocId
-    );
-    if (fromIdx < 0 || toIdx < 0) {
-      setDragLocationId(null);
+    const fi = sorted.findIndex((l) => l.location_id === dragId);
+    const ti = sorted.findIndex((l) => l.location_id === targetId);
+    if (fi < 0 || ti < 0) {
+      setDragId(null);
       return;
     }
-    const newOrder = [...sortedLocations];
-    const [removed] = newOrder.splice(fromIdx, 1);
-    newOrder.splice(toIdx > fromIdx ? toIdx - 1 : toIdx, 0, removed);
-    setDragLocationId(null);
+    const arr = [...sorted];
+    const [rm] = arr.splice(fi, 1);
+    arr.splice(ti > fi ? ti - 1 : ti, 0, rm);
+    setDragId(null);
     onReorderLocations(
       day.id,
       currentOption.id,
-      newOrder.map((l) => l.location_id)
+      arr.map((l) => l.location_id)
     );
   }
 
-  function renderLocationRow(ol: ItineraryOptionLocation, index: number) {
-    const timeKey = ol.time_period || "morning";
-    const timeMeta = TIME_PERIOD_META[timeKey] ?? TIME_PERIOD_META.morning;
-    const TimeIcon = timeMeta.icon;
-    const isExpanded = expandedLocationId === ol.location_id;
-    const route = getRouteForLocation(ol.location_id);
-    const routePos = route ? getRoutePosition(route, ol.location_id) : null;
-    const routeColor = route ? ROUTE_COLORS[route.colorIndex] : "";
-    const isDragging = dragLocationId === ol.location_id;
-    const isDropTarget = dropTargetId === ol.location_id && !isDragging;
-    const booking = ol.location.requires_booking ?? "no";
-    const showBookingBadge = booking === "yes" || booking === "yes_done";
-    const isLinkingSelected = linkingLocationIds.includes(ol.location_id);
-    const linkingSeq = linkingLocationIds.indexOf(ol.location_id) + 1;
-
-    const showRouteSpacer = route && routePos !== "last" && routePos !== "only";
-    const nextInRoute =
-      route && showRouteSpacer
-        ? sortedLocations.find(
-            (l) =>
-              route.locationIds[
-                route.locationIds.indexOf(ol.location_id) + 1
-              ] === l.location_id
-          )
-        : null;
-
-    const TransportIcon =
-      route && TRANSPORT_MODES.find((m) => m.key === route.transportMode)?.icon;
+  function renderRow(ol: ItineraryOptionLocation) {
+    const tk = ol.time_period || "morning";
+    const tm = TIME_META[tk] ?? TIME_META.morning;
+    const TIcon = tm.icon;
+    const expanded = expandedId === ol.location_id;
+    const isDrag = dragId === ol.location_id;
+    const isDrop = dropId === ol.location_id && !isDrag;
+    const bk = ol.location.requires_booking ?? "no";
+    const showBk = bk === "yes" || bk === "yes_done";
+    const routeInfo = locRouteMap.get(ol.location_id);
+    const isLast =
+      routeInfo && routeInfo.idx === routeInfo.route.location_ids.length - 1;
+    const picking = creating && pickIds.includes(ol.location_id);
+    const pickSeq = pickIds.indexOf(ol.location_id) + 1;
+    const TransportIcon = routeInfo
+      ? TRANSPORT.find((t) => t.key === routeInfo.route.transport_mode)?.icon
+      : null;
 
     return (
       <div key={ol.location_id}>
         <div
           className={cn(
-            "group relative flex items-center gap-2 rounded-lg px-2 py-2 transition-colors",
-            isDragging && "opacity-40",
-            isDropTarget && "ring-1 ring-primary ring-inset bg-accent/60",
-            isExpanded ? "bg-accent/40" : "hover:bg-accent/30"
+            "group relative grid gap-x-2 items-center rounded-md px-1 py-1.5 text-sm transition-colors",
+            GRID_COLS,
+            isDrag && "opacity-40",
+            isDrop && "ring-1 ring-primary ring-inset bg-accent/60",
+            expanded ? "bg-accent/30" : "hover:bg-accent/20"
           )}
-          onDragOver={(e) => handleDragOver(ol.location_id, e)}
-          onDragLeave={() => setDropTargetId(null)}
-          onDrop={(e) => handleDrop(ol.location_id, e)}
+          onDragOver={(e) => onDragOver(ol.location_id, e)}
+          onDragLeave={() => setDropId(null)}
+          onDrop={(e) => onDrop(ol.location_id, e)}
         >
-          {/* Route indicator bar */}
-          {route && (
+          {/* Route indicator */}
+          {routeInfo && (
             <div
               className={cn(
-                "absolute left-0 top-0 bottom-0 w-1 rounded-l-lg border-l-[3px]",
-                routeColor,
-                routePos === "first" && "top-1/2",
-                routePos === "last" && "bottom-1/2"
+                "absolute left-0 top-0 bottom-0 w-0 border-l-[3px] rounded-sm",
+                routeInfo.color.bar,
+                routeInfo.idx === 0 && "top-1/2",
+                isLast && "bottom-1/2"
               )}
             />
           )}
 
-          {/* Linking mode: sequence number */}
-          {linkingRoute && (
+          {/* Col 1: drag or pick */}
+          {creating ? (
             <button
               type="button"
-              onClick={() => handleToggleLinkLocation(ol.location_id)}
-              className={cn(
-                "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-all",
-                isLinkingSelected
-                  ? "bg-primary text-primary-foreground"
-                  : "border-2 border-dashed border-muted-foreground/40 text-muted-foreground hover:border-primary hover:text-primary"
-              )}
-              aria-label={
-                isLinkingSelected
-                  ? `Remove from route (stop ${linkingSeq})`
-                  : "Add to route"
+              onClick={() =>
+                setPickIds((p) =>
+                  p.includes(ol.location_id)
+                    ? p.filter((x) => x !== ol.location_id)
+                    : [...p, ol.location_id]
+                )
               }
+              className={cn(
+                "flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold mx-auto",
+                picking
+                  ? "bg-primary text-primary-foreground"
+                  : "border-2 border-dashed border-muted-foreground/30 text-muted-foreground hover:border-primary"
+              )}
             >
-              {isLinkingSelected ? linkingSeq : <Plus size={12} />}
+              {picking ? pickSeq : <Plus size={10} />}
             </button>
-          )}
-
-          {/* Drag handle */}
-          {!linkingRoute && (
+          ) : (
             <div
-              className="flex shrink-0 cursor-grab items-center rounded p-0.5 text-muted-foreground/50 transition-colors hover:text-foreground active:cursor-grabbing"
+              className="flex cursor-grab items-center justify-center text-muted-foreground/40 hover:text-foreground active:cursor-grabbing"
               draggable
-              onDragStart={(e) => handleDragStart(ol.location_id, e)}
-              onDragEnd={handleDragEnd}
-              aria-label={`Drag to reorder ${ol.location.name}`}
+              onDragStart={(e) => onDragStart(ol.location_id, e)}
+              onDragEnd={onDragEnd}
+              aria-label={`Drag ${ol.location.name}`}
             >
               <GripVertical size={14} />
             </div>
           )}
 
-          {/* Time badge */}
-          <div
-            ref={openTimePicker === ol.location_id ? triggerRef : undefined}
-            className="shrink-0"
-          >
+          {/* Col 2: time */}
+          <div ref={tpOpen === ol.location_id ? tpTrigger : undefined}>
             <button
               type="button"
               className={cn(
-                "inline-flex h-6 items-center gap-1 rounded-full px-2 text-[11px] font-medium transition-colors",
-                "border border-transparent hover:border-border",
-                timeMeta.bg,
-                timeMeta.text
+                "inline-flex h-6 items-center gap-1 rounded-full px-2 text-[11px] font-medium border border-transparent hover:border-border",
+                tm.bg,
+                tm.text
               )}
               onClick={() =>
-                setOpenTimePicker((prev) =>
-                  prev === ol.location_id ? null : ol.location_id
-                )
+                setTpOpen((p) => (p === ol.location_id ? null : ol.location_id))
               }
-              aria-label={`Time: ${timeMeta.label}`}
+              aria-label={`Time: ${tm.label}`}
             >
-              <TimeIcon className="h-3 w-3" size={12} />
-              <span>{timeMeta.label}</span>
+              <TIcon className="h-3 w-3" size={12} />
+              <span>{tm.label}</span>
             </button>
           </div>
 
-          {/* Name + city (clickable to expand) */}
+          {/* Col 3: name + city */}
           <button
             type="button"
-            className="min-w-0 flex-1 text-left"
+            className="min-w-0 text-left truncate"
             onClick={() =>
-              setExpandedLocationId((prev) =>
-                prev === ol.location_id ? null : ol.location_id
+              setExpandedId((p) =>
+                p === ol.location_id ? null : ol.location_id
               )
             }
-            aria-expanded={isExpanded}
+            aria-expanded={expanded}
           >
-            <span className="text-sm font-medium">{ol.location.name}</span>
+            <span className="font-medium">{ol.location.name}</span>
             {ol.location.city && (
-              <span className="ml-1.5 text-xs text-muted-foreground">
+              <span className="ml-1.5 text-muted-foreground text-xs">
                 {ol.location.city}
               </span>
             )}
           </button>
 
-          {/* Booking indicator */}
-          {showBookingBadge && (
-            <span
-              className={cn(
-                "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
-                booking === "yes_done"
-                  ? "bg-green-50 text-green-700"
-                  : "bg-amber-50 text-amber-700"
-              )}
-            >
-              <Ticket size={10} />
-              {booking === "yes_done" ? "Booked" : "Book"}
-            </span>
-          )}
+          {/* Col 4: hours */}
+          <span
+            className="truncate text-xs text-muted-foreground"
+            title={ol.location.working_hours ?? undefined}
+          >
+            {ol.location.working_hours ?? "—"}
+          </span>
 
-          {/* Map link */}
-          {ol.location.google_link && (
-            <a
-              href={ol.location.google_link}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="shrink-0 text-muted-foreground transition-colors hover:text-primary"
-              aria-label={`Open ${ol.location.name} in Maps`}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <ExternalLink size={13} />
-            </a>
-          )}
-
-          {/* Expand chevron */}
-          <ChevronDown
-            size={14}
-            className={cn(
-              "shrink-0 text-muted-foreground/50 transition-transform",
-              isExpanded && "rotate-180"
+          {/* Col 5: booking */}
+          <div>
+            {showBk && (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                  bk === "yes_done"
+                    ? "bg-green-50 text-green-700"
+                    : "bg-amber-50 text-amber-700"
+                )}
+              >
+                <Ticket size={10} />
+                {bk === "yes_done" ? "Booked" : "Book"}
+              </span>
             )}
-          />
+          </div>
 
-          {/* Remove */}
-          {!linkingRoute && currentOption && (
+          {/* Col 6: map */}
+          <div className="flex justify-center">
+            {ol.location.google_link ? (
+              <a
+                href={ol.location.google_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-muted-foreground hover:text-primary"
+                aria-label={`Map: ${ol.location.name}`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <ExternalLink size={13} />
+              </a>
+            ) : (
+              <span className="text-muted-foreground/30">—</span>
+            )}
+          </div>
+
+          {/* Col 7: remove */}
+          {!creating && currentOption && (
             <button
               type="button"
-              className="shrink-0 text-muted-foreground/40 opacity-0 transition-all hover:text-destructive group-hover:opacity-100"
+              className="text-muted-foreground/30 opacity-0 transition hover:text-destructive group-hover:opacity-100"
               aria-label={`Remove ${ol.location.name}`}
               onClick={(e) => {
                 e.stopPropagation();
@@ -575,56 +593,51 @@ export function ItineraryDayCard({
         </div>
 
         {/* Expanded details */}
-        {isExpanded && (
-          <div className="ml-10 mr-8 mb-1 space-y-1.5 rounded-b-lg bg-accent/20 px-3 py-2.5 text-xs">
+        {expanded && (
+          <div className="ml-8 mr-6 mb-1 rounded-b-lg bg-accent/15 px-3 py-2 text-xs space-y-1">
             {ol.location.address && (
               <div>
-                <span className="text-muted-foreground">Address: </span>
+                <span className="text-muted-foreground">Address:</span>{" "}
                 {ol.location.address}
               </div>
             )}
-            {ol.location.working_hours && (
-              <div>
-                <span className="text-muted-foreground">Hours: </span>
-                {ol.location.working_hours}
-              </div>
-            )}
-            {ol.location.requires_booking &&
-              ol.location.requires_booking !== "no" && (
-                <div>
-                  <span className="text-muted-foreground">Booking: </span>
-                  {ol.location.requires_booking === "yes_done"
-                    ? "Booked ✓"
-                    : "Required"}
-                </div>
-              )}
             {ol.location.category && (
               <div>
-                <span className="text-muted-foreground">Category: </span>
+                <span className="text-muted-foreground">Category:</span>{" "}
                 {ol.location.category}
               </div>
             )}
             {ol.location.note && (
               <div>
-                <span className="text-muted-foreground">Note: </span>
+                <span className="text-muted-foreground">Note:</span>{" "}
                 <span className="whitespace-pre-wrap">{ol.location.note}</span>
               </div>
             )}
           </div>
         )}
 
-        {/* Route connector between consecutive route stops */}
-        {showRouteSpacer && nextInRoute && TransportIcon && (
-          <div className="relative ml-4 flex items-center gap-2 py-0.5 pl-4">
+        {/* Route connector between consecutive stops */}
+        {routeInfo && !isLast && TransportIcon && (
+          <div
+            className={cn("relative ml-1 flex items-center gap-1.5 py-px pl-3")}
+          >
             <div
               className={cn(
                 "absolute left-0 top-0 bottom-0 border-l-[3px]",
-                routeColor
+                routeInfo.color.bar
               )}
             />
-            <div className="flex items-center gap-1.5 rounded-full border border-border bg-background px-2 py-0.5 text-[10px] text-muted-foreground">
+            <div
+              className={cn(
+                "flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                routeInfo.color.bg,
+                routeInfo.color.text
+              )}
+            >
               <TransportIcon size={10} />
-              <span>—</span>
+              {routeInfo.route.duration_seconds
+                ? `${Math.round(routeInfo.route.duration_seconds / 60)} min`
+                : "—"}
             </div>
           </div>
         )}
@@ -632,63 +645,62 @@ export function ItineraryDayCard({
     );
   }
 
-  const timePickerPortal =
-    openTimePicker && timePickerPos && currentOption
+  // Time picker portal
+  const tpPortal =
+    tpOpen && tpPos && currentOption
       ? (() => {
-          const ol = sortedLocations.find(
-            (l) => l.location_id === openTimePicker
-          );
+          const ol = sorted.find((l) => l.location_id === tpOpen);
           if (!ol) return null;
           const style: CSSProperties = {
             position: "fixed",
-            left: timePickerPos.left,
+            left: tpPos.left,
             zIndex: 9999,
             width: 160,
-            ...(timePickerPos.top !== undefined
-              ? { top: timePickerPos.top }
-              : { bottom: timePickerPos.bottom }),
+            ...(tpPos.top !== undefined
+              ? { top: tpPos.top }
+              : { bottom: tpPos.bottom }),
           };
           return createPortal(
             <div
-              ref={dropdownRef}
+              ref={tpDrop}
               className="rounded-md border border-border bg-popover p-1 text-xs shadow-md"
               style={style}
               role="listbox"
             >
               {(["morning", "afternoon", "evening", "night"] as const).map(
-                (key) => {
-                  const m = TIME_PERIOD_META[key];
-                  const Ico = m.icon;
+                (k) => {
+                  const m = TIME_META[k];
+                  const I = m.icon;
                   return (
                     <button
-                      key={key}
+                      key={k}
                       type="button"
                       role="option"
-                      aria-selected={key === (ol.time_period || "morning")}
+                      aria-selected={k === (ol.time_period || "morning")}
                       className={cn(
                         "flex w-full items-center gap-1.5 rounded-sm px-2 py-1.5 text-left",
-                        key === (ol.time_period || "morning")
-                          ? "bg-accent text-accent-foreground"
-                          : "hover:bg-accent hover:text-accent-foreground"
+                        k === (ol.time_period || "morning")
+                          ? "bg-accent"
+                          : "hover:bg-accent"
                       )}
                       onClick={() => {
-                        setOpenTimePicker(null);
+                        setTpOpen(null);
                         onUpdateTimePeriod(
                           day.id,
                           currentOption.id,
                           ol.location_id,
-                          key
+                          k
                         );
                       }}
                     >
                       <span
                         className={cn(
-                          "flex h-5 w-5 items-center justify-center rounded-full text-[10px]",
+                          "flex h-5 w-5 items-center justify-center rounded-full",
                           m.bg,
                           m.text
                         )}
                       >
-                        <Ico className="h-3 w-3" size={12} />
+                        <I className="h-3 w-3" size={12} />
                       </span>
                       <span>{m.label}</span>
                     </button>
@@ -703,119 +715,75 @@ export function ItineraryDayCard({
 
   return (
     <>
-      {timePickerPortal}
+      {tpPortal}
       <Card>
-        {/* ── Header ── */}
         <CardHeader className="pb-2">
           <div className="flex items-center gap-3">
             <h3 className="text-base font-semibold">{dayLabel}</h3>
-
-            {/* Route indicator: Paris → Nice */}
-            {currentOption &&
-              (currentOption.starting_city || currentOption.ending_city) && (
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <AutosaveInput
-                    id={`sc-${currentOption.id}`}
-                    placeholder="From"
-                    initialValue={currentOption.starting_city ?? ""}
-                    onSave={async (v) => {
-                      const n = v === "" ? null : v;
-                      if (n === (currentOption.starting_city ?? null)) return;
-                      onSaveOptionDetails(day.id, currentOption.id, {
-                        starting_city: n,
-                      });
-                    }}
-                    className="w-24 text-xs"
-                  />
-                  <ArrowRight size={12} className="shrink-0" />
-                  <AutosaveInput
-                    id={`ec-${currentOption.id}`}
-                    placeholder="To"
-                    initialValue={currentOption.ending_city ?? ""}
-                    onSave={async (v) => {
-                      const n = v === "" ? null : v;
-                      if (n === (currentOption.ending_city ?? null)) return;
-                      onSaveOptionDetails(day.id, currentOption.id, {
-                        ending_city: n,
-                      });
-                    }}
-                    className="w-24 text-xs"
-                  />
-                </div>
-              )}
-
-            {currentOption &&
-              !currentOption.starting_city &&
-              !currentOption.ending_city && (
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <AutosaveInput
-                    id={`sc-${currentOption.id}`}
-                    placeholder="Start city"
-                    initialValue=""
-                    onSave={async (v) => {
-                      if (!v) return;
-                      onSaveOptionDetails(day.id, currentOption.id, {
-                        starting_city: v,
-                      });
-                    }}
-                    className="w-24 text-xs"
-                  />
-                  <ArrowRight size={12} className="shrink-0 opacity-30" />
-                  <AutosaveInput
-                    id={`ec-${currentOption.id}`}
-                    placeholder="End city"
-                    initialValue=""
-                    onSave={async (v) => {
-                      if (!v) return;
-                      onSaveOptionDetails(day.id, currentOption.id, {
-                        ending_city: v,
-                      });
-                    }}
-                    className="w-24 text-xs"
-                  />
-                </div>
-              )}
-
-            {/* Created by */}
             {currentOption && (
-              <AutosaveInput
-                id={`cb-${currentOption.id}`}
-                placeholder="by…"
-                initialValue={currentOption.created_by ?? ""}
-                onSave={async (v) => {
-                  const n = v === "" ? null : v;
-                  if (n === (currentOption.created_by ?? null)) return;
-                  onSaveOptionDetails(day.id, currentOption.id, {
-                    created_by: n,
-                  });
-                }}
-                className="w-20 text-xs italic text-muted-foreground"
-              />
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <AutosaveInput
+                  id={`sc-${currentOption.id}`}
+                  placeholder="From"
+                  initialValue={currentOption.starting_city ?? ""}
+                  onSave={async (v) => {
+                    const n = v || null;
+                    if (n === (currentOption.starting_city ?? null)) return;
+                    onSaveOptionDetails(day.id, currentOption.id, {
+                      starting_city: n,
+                    });
+                  }}
+                  className="w-20 text-xs"
+                />
+                <ArrowRight size={11} className="shrink-0 opacity-40" />
+                <AutosaveInput
+                  id={`ec-${currentOption.id}`}
+                  placeholder="To"
+                  initialValue={currentOption.ending_city ?? ""}
+                  onSave={async (v) => {
+                    const n = v || null;
+                    if (n === (currentOption.ending_city ?? null)) return;
+                    onSaveOptionDetails(day.id, currentOption.id, {
+                      ending_city: n,
+                    });
+                  }}
+                  className="w-20 text-xs"
+                />
+                <AutosaveInput
+                  id={`cb-${currentOption.id}`}
+                  placeholder="by…"
+                  initialValue={currentOption.created_by ?? ""}
+                  onSave={async (v) => {
+                    const n = v || null;
+                    if (n === (currentOption.created_by ?? null)) return;
+                    onSaveOptionDetails(day.id, currentOption.id, {
+                      created_by: n,
+                    });
+                  }}
+                  className="w-16 text-xs italic"
+                />
+              </div>
             )}
-
-            {/* Spacer */}
             <div className="flex-1" />
-
-            {/* Option switcher + actions */}
-            <div className="flex items-center gap-1.5">
-              {hasMultipleOptions && (
+            <div className="flex items-center gap-1">
+              {hasMultiOpts && (
                 <select
                   aria-label={`Select option for ${dayLabel}`}
-                  className="h-7 rounded-md border border-input bg-background px-2 text-xs shadow-sm"
+                  className="h-7 rounded-md border border-input bg-background px-2 text-xs"
                   value={currentOption?.id ?? ""}
                   onChange={(e) => onSelectOption(day.id, e.target.value)}
                 >
-                  {day.options.map((opt) => (
-                    <option key={opt.id} value={opt.id}>
-                      {opt.option_index === 1
+                  {day.options.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.option_index === 1
                         ? "Main plan"
-                        : `Alt ${opt.option_index - 1}`}
-                      {opt.created_by ? ` (${opt.created_by})` : ""}
+                        : `Alt ${o.option_index - 1}`}
+                      {o.created_by ? ` (${o.created_by})` : ""}
                     </option>
                   ))}
                 </select>
               )}
-              {canDeleteOption && currentOption && (
+              {canDelete && currentOption && (
                 <ConfirmDialog
                   trigger={
                     <Button
@@ -828,7 +796,7 @@ export function ItineraryDayCard({
                     </Button>
                   }
                   title="Delete this plan?"
-                  description={`"${currentOption.option_index === 1 ? "Main plan" : `Alt ${currentOption.option_index - 1}`}" and its locations will be removed.`}
+                  description={`"${currentOption.option_index === 1 ? "Main plan" : `Alt ${currentOption.option_index - 1}`}" will be removed.`}
                   confirmLabel="Delete"
                   variant="destructive"
                   onConfirm={() => onDeleteOption(day.id, currentOption.id)}
@@ -851,102 +819,129 @@ export function ItineraryDayCard({
         <CardContent className="pt-0">
           {currentOption && (
             <>
-              {/* ── Location list ── */}
-              {sortedLocations.length === 0 ? (
+              {/* Column headers */}
+              {sorted.length > 0 && (
+                <div
+                  className={cn(
+                    "grid gap-x-2 px-1 pb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60 border-b border-border/50 mb-1",
+                    GRID_COLS
+                  )}
+                >
+                  <div />
+                  <div>Time</div>
+                  <div>Location</div>
+                  <div>Hours</div>
+                  <div>Booking</div>
+                  <div className="text-center">Map</div>
+                  <div />
+                  <div />
+                </div>
+              )}
+
+              {/* Location rows */}
+              {sorted.length === 0 ? (
                 <p className="py-4 text-center text-sm text-muted-foreground">
                   No locations yet
                 </p>
               ) : (
-                <div className="space-y-0.5">
-                  {sortedLocations.map((ol, idx) => renderLocationRow(ol, idx))}
-                </div>
+                <div className="space-y-0">{sorted.map(renderRow)}</div>
               )}
 
-              {/* ── Route linking mode bar ── */}
-              {linkingRoute && (
-                <div className="mt-3 flex items-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 px-3 py-2">
+              {/* Route creation bar */}
+              {creating && (
+                <div className="mt-2 flex items-center gap-2 rounded-lg border border-dashed border-primary/30 bg-primary/5 px-3 py-2">
                   <span className="text-xs font-medium text-primary">
-                    Select locations in order
+                    Click locations in order
                   </span>
                   <div className="flex-1" />
-                  <div className="flex gap-1">
-                    {TRANSPORT_MODES.map((m) => {
-                      const MIcon = m.icon;
-                      return (
-                        <button
-                          key={m.key}
-                          type="button"
-                          className={cn(
-                            "rounded-md px-2 py-1 text-[10px] font-medium transition-colors",
-                            linkingTransport === m.key
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted text-muted-foreground hover:bg-accent"
-                          )}
-                          onClick={() => setLinkingTransport(m.key)}
-                        >
-                          <MIcon size={12} className="inline mr-1" />
-                          {m.label}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  {TRANSPORT.map((m) => {
+                    const MI = m.icon;
+                    return (
+                      <button
+                        key={m.key}
+                        type="button"
+                        className={cn(
+                          "rounded-md px-2 py-0.5 text-[10px] font-medium",
+                          pickTransport === m.key
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted text-muted-foreground hover:bg-accent"
+                        )}
+                        onClick={() => setPickTransport(m.key)}
+                      >
+                        <MI size={11} className="inline mr-0.5" />
+                        {m.label}
+                      </button>
+                    );
+                  })}
                   <Button
                     size="sm"
-                    className="h-7 text-xs"
-                    disabled={linkingLocationIds.length < 2}
+                    className="h-6 text-[11px]"
+                    disabled={pickIds.length < 2 || savingRoute}
                     onClick={handleSaveRoute}
                   >
-                    Save route ({linkingLocationIds.length})
+                    {savingRoute ? "Saving…" : `Save (${pickIds.length})`}
                   </Button>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-7 text-xs"
-                    onClick={handleCancelLinking}
+                    className="h-6 text-[11px]"
+                    onClick={() => {
+                      setCreating(false);
+                      setPickIds([]);
+                    }}
                   >
                     Cancel
                   </Button>
                 </div>
               )}
 
-              {/* ── Saved routes summary ── */}
-              {routes.length > 0 && !linkingRoute && (
+              {/* Saved routes */}
+              {routes.length > 0 && !creating && (
                 <div className="mt-2 space-y-1">
-                  {routes.map((r) => {
-                    const MIcon =
-                      TRANSPORT_MODES.find((m) => m.key === r.transportMode)
-                        ?.icon ?? Footprints;
-                    const names = r.locationIds
-                      .map((lid) => {
-                        const ol = sortedLocations.find(
-                          (l) => l.location_id === lid
-                        );
-                        return ol?.location.name ?? "?";
-                      })
+                  {routes.map((r, ri) => {
+                    const color = ROUTE_COLORS[ri % ROUTE_COLORS.length];
+                    const MI =
+                      TRANSPORT.find((t) => t.key === r.transport_mode)?.icon ??
+                      Footprints;
+                    const names = r.location_ids
+                      .map(
+                        (lid) =>
+                          sorted.find((l) => l.location_id === lid)?.location
+                            .name ?? "?"
+                      )
                       .join(" → ");
                     return (
                       <div
-                        key={r.id}
+                        key={r.route_id}
                         className={cn(
-                          "flex items-center gap-2 rounded border-l-[3px] bg-muted/30 px-2 py-1.5 text-xs",
-                          ROUTE_COLORS[r.colorIndex]
+                          "flex items-center gap-2 rounded border-l-[3px] px-2 py-1 text-xs",
+                          color.bar,
+                          color.bg
                         )}
                       >
-                        <MIcon
-                          size={12}
-                          className="shrink-0 text-muted-foreground"
-                        />
-                        <span className="min-w-0 flex-1 truncate">{names}</span>
-                        <span className="shrink-0 text-muted-foreground">
-                          — min
+                        <MI size={12} className={cn("shrink-0", color.text)} />
+                        <span
+                          className={cn(
+                            "min-w-0 flex-1 truncate font-medium",
+                            color.text
+                          )}
+                        >
+                          {names}
                         </span>
+                        {r.duration_seconds ? (
+                          <span className="text-muted-foreground">
+                            {Math.round(r.duration_seconds / 60)} min
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground/50">—</span>
+                        )}
                         <button
                           type="button"
                           className="shrink-0 text-muted-foreground hover:text-destructive"
-                          onClick={() => handleDeleteRoute(r.id)}
+                          onClick={() => handleDeleteRoute(r.route_id)}
                           aria-label="Delete route"
                         >
-                          <X size={12} />
+                          <Trash2 size={12} />
                         </button>
                       </div>
                     );
@@ -954,8 +949,9 @@ export function ItineraryDayCard({
                 </div>
               )}
 
-              {/* ── Action bar ── */}
-              <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
+              {/* Actions row — two groups */}
+              <div className="mt-3 flex items-center gap-3 border-t border-border pt-3">
+                {/* Left: locations */}
                 <AddLocationsToOptionDialog
                   trigger={
                     <Button
@@ -968,25 +964,37 @@ export function ItineraryDayCard({
                     </Button>
                   }
                   allLocations={tripLocations}
-                  alreadyAddedIds={alreadyAddedIds}
+                  alreadyAddedIds={alreadyAdded}
                   startingCity={currentOption.starting_city}
                   endingCity={currentOption.ending_city}
                   onConfirm={(ids) =>
                     onAddLocations(day.id, currentOption.id, ids)
                   }
                 />
-                {sortedLocations.length >= 2 && !linkingRoute && (
+
+                {/* Separator */}
+                {sorted.length >= 2 && <div className="h-4 w-px bg-border" />}
+
+                {/* Middle: routes */}
+                {sorted.length >= 2 && !creating && (
                   <Button
                     variant="ghost"
                     size="sm"
                     className="h-7 gap-1 text-xs text-muted-foreground"
-                    onClick={handleStartLinking}
+                    onClick={() => {
+                      setCreating(true);
+                      setPickIds([]);
+                      setPickTransport("walk");
+                    }}
                   >
-                    <Route size={12} />
-                    Link route
+                    <Plus size={12} />
+                    Create route
                   </Button>
                 )}
+
                 <div className="flex-1" />
+
+                {/* Right: map */}
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1001,17 +1009,16 @@ export function ItineraryDayCard({
                 </Button>
               </div>
 
-              {/* ── Map panel ── */}
+              {/* Map panel */}
               {showMap && (
                 <div className="mt-2 rounded-lg border border-border bg-muted/20 p-4">
-                  <div className="flex flex-col items-center justify-center gap-2 py-8 text-center text-muted-foreground">
-                    <MapPin size={32} className="opacity-40" />
+                  <div className="flex flex-col items-center gap-2 py-6 text-center text-muted-foreground">
+                    <MapPin size={28} className="opacity-30" />
                     <p className="text-sm font-medium">Map view</p>
                     <p className="text-xs">
-                      {sortedLocations.length} location
-                      {sortedLocations.length !== 1 ? "s" : ""} will appear here
+                      {sorted.length} location{sorted.length !== 1 ? "s" : ""}
                       {routes.length > 0 &&
-                        ` with ${routes.length} route${routes.length !== 1 ? "s" : ""} connected`}
+                        `, ${routes.length} route${routes.length !== 1 ? "s" : ""}`}
                     </p>
                     <p className="text-[10px] italic">
                       Google Maps integration coming soon

@@ -338,3 +338,36 @@ class ItineraryResponse(BaseModel):
     """Full itinerary for a trip: list of days with nested options and locations."""
 
     days: list[ItineraryDay] = Field(default_factory=list)
+
+
+# -------- Route schemas (option_routes, route_stops) --------
+
+TRANSPORT_MODE_VALUES = frozenset({"walk", "drive", "transit"})
+
+
+class CreateRouteBody(BaseModel):
+    """Request body for POST create-route."""
+
+    transport_mode: str = Field(..., description="One of: walk, drive, transit")
+    label: str | None = None
+    location_ids: list[str] = Field(..., min_length=2, description="Ordered stop location UUIDs")
+
+    @field_validator("transport_mode")
+    @classmethod
+    def validate_transport_mode(cls, v: str) -> str:
+        if v not in TRANSPORT_MODE_VALUES:
+            raise ValueError("must be one of: walk, drive, transit")
+        return v
+
+
+class RouteResponse(BaseModel):
+    """Response body for route operations."""
+
+    route_id: str = Field(..., description="Route UUID")
+    option_id: str = Field(..., description="Parent option UUID")
+    label: str | None = None
+    transport_mode: str = Field(..., description="walk | drive | transit")
+    duration_seconds: int | None = None
+    distance_meters: int | None = None
+    sort_order: int = Field(..., ge=0)
+    location_ids: list[str] = Field(default_factory=list)
