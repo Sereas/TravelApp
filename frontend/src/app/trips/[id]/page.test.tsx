@@ -754,7 +754,7 @@ describe("TripDetailPage", () => {
     await screen.findByText("Paris Summer");
     await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
 
-    expect(await screen.findByText("Jun 1, 2026")).toBeInTheDocument();
+    expect(await screen.findByText("Mon, Jun 1")).toBeInTheDocument();
     expect(screen.getByText("Eiffel Tower")).toBeInTheDocument();
     expect(screen.getByText("Louvre Museum")).toBeInTheDocument();
     expect(screen.getByText(/morning/i)).toBeInTheDocument();
@@ -824,7 +824,7 @@ describe("TripDetailPage", () => {
     await screen.findByText("Eiffel Tower");
 
     const morningButton = screen.getByRole("button", {
-      name: /select time of day for eiffel tower/i,
+      name: /time: morning/i,
     });
     await userEvent.click(morningButton);
 
@@ -869,7 +869,7 @@ describe("TripDetailPage", () => {
     await screen.findByText("Paris Summer");
     await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
 
-    expect(await screen.findByText("Jun 1, 2026")).toBeInTheDocument();
+    expect(await screen.findByText("Mon, Jun 1")).toBeInTheDocument();
     expect(screen.getByText(/no locations yet/i)).toBeInTheDocument();
   });
 
@@ -1023,8 +1023,8 @@ describe("TripDetailPage", () => {
     await waitFor(() => {
       expect(mockGenerateDays).toHaveBeenCalledWith("trip-1");
     });
-    expect(await screen.findByText("Jun 1, 2026")).toBeInTheDocument();
-    expect(screen.getByText("Jun 2, 2026")).toBeInTheDocument();
+    expect(await screen.findByText("Mon, Jun 1")).toBeInTheDocument();
+    expect(screen.getByText("Tue, Jun 2")).toBeInTheDocument();
   });
 
   it("shows error message when generate days returns 409", async () => {
@@ -1090,7 +1090,7 @@ describe("TripDetailPage", () => {
     await screen.findByText("Paris Summer");
     await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
 
-    expect(await screen.findByText("Jun 1, 2026")).toBeInTheDocument();
+    expect(await screen.findByText("Mon, Jun 1")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /add day/i })
     ).toBeInTheDocument();
@@ -1131,13 +1131,13 @@ describe("TripDetailPage", () => {
     await screen.findByText("Paris Summer");
     await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
 
-    await screen.findByText("Jun 1, 2026");
+    await screen.findByText("Mon, Jun 1");
 
-    const startInput = screen.getByLabelText(/start city/i);
-    const endInput = screen.getByLabelText(/end city/i);
+    const startInput = screen.getByDisplayValue("Paris");
+    const endInput = screen.getByDisplayValue("Lyon");
 
-    expect(startInput).toHaveValue("Paris");
-    expect(endInput).toHaveValue("Lyon");
+    expect(startInput).toBeInTheDocument();
+    expect(endInput).toBeInTheDocument();
 
     await userEvent.clear(endInput);
     await userEvent.type(endInput, "Nice");
@@ -1186,7 +1186,7 @@ describe("TripDetailPage", () => {
     await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
 
     expect(
-      await screen.findByRole("button", { name: /alternative/i })
+      await screen.findByRole("button", { name: /\balt\b/i })
     ).toBeInTheDocument();
   });
 
@@ -1254,7 +1254,7 @@ describe("TripDetailPage", () => {
     await screen.findByText("Paris Summer");
     await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
     await userEvent.click(
-      await screen.findByRole("button", { name: /alternative/i })
+      await screen.findByRole("button", { name: /\balt\b/i })
     );
 
     await waitFor(() => {
@@ -1288,7 +1288,7 @@ describe("TripDetailPage", () => {
 
     await screen.findByText("Paris Summer");
     await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
-    await screen.findByText("Jun 1, 2026");
+    await screen.findByText("Mon, Jun 1");
 
     expect(
       screen.queryByRole("button", { name: /delete this alternative/i })
@@ -1350,7 +1350,7 @@ describe("TripDetailPage", () => {
 
     await screen.findByText("Paris Summer");
     await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
-    await screen.findByText("Jun 1, 2026");
+    await screen.findByText("Mon, Jun 1");
 
     const deleteBtn = screen.getByRole("button", {
       name: /delete this alternative/i,

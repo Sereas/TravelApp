@@ -1,15 +1,6 @@
 "use client";
 
-import type { CSSProperties } from "react";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { createPortal } from "react-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   api,
@@ -23,7 +14,7 @@ import { LocationCard } from "@/components/locations/LocationCard";
 import { AddLocationForm } from "@/components/locations/AddLocationForm";
 import { EditLocationRow } from "@/components/locations/EditLocationRow";
 import { EditTripForm } from "@/components/trips/EditTripForm";
-import { AddLocationsToOptionDialog } from "@/components/itinerary/AddLocationsToOptionDialog";
+import { ItineraryDayCard } from "@/components/itinerary/ItineraryDayCard";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { LoadingSpinner } from "@/components/feedback/LoadingSpinner";
 import { ErrorBanner } from "@/components/feedback/ErrorBanner";
@@ -31,15 +22,6 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import {
-  Sunrise,
-  Sun,
-  Sunset,
-  Moon,
-  ExternalLink,
-  Ticket,
-  GripVertical,
-} from "lucide-react";
 
 function AutosaveInput({
   id,
@@ -150,81 +132,6 @@ export default function TripDetailPage() {
   const [createOptionLoading, setCreateOptionLoading] = useState<string | null>(
     null
   );
-  const [openTimePicker, setOpenTimePicker] = useState<{
-    dayId: string;
-    optionId: string;
-    locationId: string;
-  } | null>(null);
-  const [timePickerPosition, setTimePickerPosition] = useState<{
-    top?: number;
-    bottom?: number;
-    left: number;
-  } | null>(null);
-  const timePickerTriggerRef = useRef<HTMLDivElement | null>(null);
-  const timePickerDropdownRef = useRef<HTMLDivElement | null>(null);
-  useLayoutEffect(() => {
-    if (!openTimePicker) {
-      setTimePickerPosition(null);
-      return;
-    }
-    const el = timePickerTriggerRef.current;
-    if (!el) {
-      setTimePickerPosition(null);
-      return;
-    }
-    const rect = el.getBoundingClientRect();
-    const dropdownHeight = 220;
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const openAbove =
-      spaceBelow < dropdownHeight || rect.bottom > window.innerHeight * 0.55;
-    const w = 160;
-    const left = Math.max(8, Math.min(rect.left, window.innerWidth - w - 8));
-    if (openAbove) {
-      setTimePickerPosition({
-        bottom: window.innerHeight - rect.top + 4,
-        left,
-      });
-    } else {
-      setTimePickerPosition({
-        top: rect.bottom + 4,
-        left,
-      });
-    }
-  }, [openTimePicker]);
-
-  useEffect(() => {
-    if (!openTimePicker) return;
-    const close = () => setOpenTimePicker(null);
-    document.addEventListener("scroll", close, true);
-    return () => document.removeEventListener("scroll", close, true);
-  }, [openTimePicker]);
-
-  useEffect(() => {
-    if (!openTimePicker) return;
-    const handleMouseDown = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (
-        timePickerTriggerRef.current?.contains(target) ||
-        timePickerDropdownRef.current?.contains(target)
-      )
-        return;
-      setOpenTimePicker(null);
-    };
-    document.addEventListener("mousedown", handleMouseDown, true);
-    return () =>
-      document.removeEventListener("mousedown", handleMouseDown, true);
-  }, [openTimePicker]);
-
-  const [expandedNoteKey, setExpandedNoteKey] = useState<string | null>(null);
-  const [expandedNameKey, setExpandedNameKey] = useState<string | null>(null);
-  const [dragLocation, setDragLocation] = useState<{
-    dayId: string;
-    optionId: string;
-    locationId: string;
-  } | null>(null);
-  const [dropTargetLocationId, setDropTargetLocationId] = useState<
-    string | null
-  >(null);
 
   async function fetchData() {
     setError(null);
@@ -591,41 +498,6 @@ export default function TripDetailPage() {
     }
   }
 
-  const TIME_PERIOD_META: Record<
-    string,
-    {
-      label: string;
-      icon: React.ComponentType<{ className?: string; size?: number | string }>;
-      bg: string;
-      text: string;
-    }
-  > = {
-    morning: {
-      label: "Morning",
-      icon: Sunrise,
-      bg: "bg-amber-50",
-      text: "text-amber-800",
-    },
-    afternoon: {
-      label: "Afternoon",
-      icon: Sun,
-      bg: "bg-sky-50",
-      text: "text-sky-800",
-    },
-    evening: {
-      label: "Evening",
-      icon: Sunset,
-      bg: "bg-purple-50",
-      text: "text-purple-800",
-    },
-    night: {
-      label: "Night",
-      icon: Moon,
-      bg: "bg-slate-800",
-      text: "text-slate-50",
-    },
-  };
-
   const categoryOptions = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const loc of locations) {
@@ -784,969 +656,323 @@ export default function TripDetailPage() {
     );
   }
 
-  const timePickerPortal =
-    openTimePicker &&
-    timePickerPosition &&
-    itinerary &&
-    (() => {
-      const day = itinerary.days.find((d) => d.id === openTimePicker.dayId);
-      const option = day?.options.find((o) => o.id === openTimePicker.optionId);
-      const ol = option?.locations.find(
-        (l) => l.location_id === openTimePicker.locationId
-      );
-      if (!day || !option || !ol) return null;
-      const timeKey = ol.time_period || "morning";
-      const style: CSSProperties = {
-        position: "fixed",
-        left: timePickerPosition.left,
-        zIndex: 9999,
-        width: 160,
-        ...(timePickerPosition.top !== undefined
-          ? { top: timePickerPosition.top }
-          : { bottom: timePickerPosition.bottom }),
-      };
-      return createPortal(
-        <div
-          ref={timePickerDropdownRef}
-          className="rounded-md border border-border bg-popover p-1 text-xs shadow-md"
-          style={style}
-          role="listbox"
-          aria-label="Time of day"
-        >
-          {(["morning", "afternoon", "evening", "night"] as const).map(
-            (key) => {
-              const m = TIME_PERIOD_META[key];
-              const Ico = m.icon;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  role="option"
-                  aria-selected={key === timeKey}
-                  className={cn(
-                    "flex w-full items-center gap-1 rounded-sm px-2 py-1 text-left",
-                    key === timeKey
-                      ? "bg-accent text-accent-foreground"
-                      : "hover:bg-accent hover:text-accent-foreground"
-                  )}
-                  onClick={() => {
-                    setOpenTimePicker(null);
-                    void handleUpdateLocationTimePeriod(
-                      day.id,
-                      option.id,
-                      ol.location_id,
-                      key
-                    );
-                  }}
-                >
-                  <span
-                    className={cn(
-                      "flex h-5 w-5 items-center justify-center rounded-full text-[10px]",
-                      m.bg,
-                      m.text
-                    )}
-                  >
-                    <Ico className="h-3 w-3" size={12} />
-                  </span>
-                  <span>{m.label}</span>
-                </button>
-              );
-            }
-          )}
-        </div>,
-        document.body
-      );
-    })();
-
   return (
-    <>
-      {timePickerPortal}
-      <div className="space-y-6">
-        <div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="mb-2 -ml-2 text-muted-foreground"
-            onClick={() => router.push("/trips")}
-          >
-            &larr; Back to trips
-          </Button>
+    <div className="space-y-6">
+      <div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="mb-2 -ml-2 text-muted-foreground"
+          onClick={() => router.push("/trips")}
+        >
+          &larr; Back to trips
+        </Button>
 
-          {editingTrip ? (
-            <EditTripForm
-              trip={trip}
-              onUpdated={handleTripUpdated}
-              onCancel={() => setEditingTrip(false)}
-            />
-          ) : (
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight">
-                  {trip.name}
-                </h1>
-                {dateDisplay && (
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {dateDisplay}
-                  </p>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setEditingTrip(true)}
-                >
-                  Edit trip
-                </Button>
-                <ConfirmDialog
-                  trigger={
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      disabled={deletingTrip}
-                    >
-                      Delete trip
-                    </Button>
-                  }
-                  title="Delete trip?"
-                  description="This will permanently delete this trip and all its locations. This action cannot be undone."
-                  confirmLabel="Delete trip"
-                  variant="destructive"
-                  onConfirm={handleDeleteTrip}
-                />
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Tabs: Locations | Itinerary */}
-        <div className="border-b border-border">
-          <nav className="flex gap-4" role="tablist" aria-label="Trip sections">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeTab === "locations"}
-              aria-controls="tab-panel-locations"
-              id="tab-locations"
-              className={cn(
-                "border-b-2 pb-2 text-sm font-medium transition-colors",
-                activeTab === "locations"
-                  ? "border-primary text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
+        {editingTrip ? (
+          <EditTripForm
+            trip={trip}
+            onUpdated={handleTripUpdated}
+            onCancel={() => setEditingTrip(false)}
+          />
+        ) : (
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">{trip.name}</h1>
+              {dateDisplay && (
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {dateDisplay}
+                </p>
               )}
-              onClick={() => setActiveTab("locations")}
-            >
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setEditingTrip(true)}
+              >
+                Edit trip
+              </Button>
+              <ConfirmDialog
+                trigger={
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    disabled={deletingTrip}
+                  >
+                    Delete trip
+                  </Button>
+                }
+                title="Delete trip?"
+                description="This will permanently delete this trip and all its locations. This action cannot be undone."
+                confirmLabel="Delete trip"
+                variant="destructive"
+                onConfirm={handleDeleteTrip}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Tabs: Locations | Itinerary */}
+      <div className="border-b border-border">
+        <nav className="flex gap-4" role="tablist" aria-label="Trip sections">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "locations"}
+            aria-controls="tab-panel-locations"
+            id="tab-locations"
+            className={cn(
+              "border-b-2 pb-2 text-sm font-medium transition-colors",
+              activeTab === "locations"
+                ? "border-primary text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+            onClick={() => setActiveTab("locations")}
+          >
+            Locations
+            {locations.length > 0 && (
+              <span className="ml-1.5 font-normal text-muted-foreground">
+                ({locations.length})
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "itinerary"}
+            aria-controls="tab-panel-itinerary"
+            id="tab-itinerary"
+            className={cn(
+              "border-b-2 pb-2 text-sm font-medium transition-colors",
+              activeTab === "itinerary"
+                ? "border-primary text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+            onClick={() => setActiveTab("itinerary")}
+          >
+            Itinerary
+          </button>
+        </nav>
+      </div>
+
+      {activeTab === "locations" && (
+        <section
+          id="tab-panel-locations"
+          role="tabpanel"
+          aria-labelledby="tab-locations"
+        >
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-lg font-semibold">
               Locations
               {locations.length > 0 && (
-                <span className="ml-1.5 font-normal text-muted-foreground">
+                <span className="ml-1.5 text-sm font-normal text-muted-foreground">
                   ({locations.length})
                 </span>
               )}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeTab === "itinerary"}
-              aria-controls="tab-panel-itinerary"
-              id="tab-itinerary"
-              className={cn(
-                "border-b-2 pb-2 text-sm font-medium transition-colors",
-                activeTab === "itinerary"
-                  ? "border-primary text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
+            </h2>
+            <div className="flex items-center gap-2">
+              {cities.size >= 2 && (
+                <Button
+                  variant={groupByCity ? "secondary" : "outline"}
+                  size="sm"
+                  onClick={() => setGroupByCity((v) => !v)}
+                >
+                  {groupByCity ? "Ungroup" : "Group by city"}
+                </Button>
               )}
-              onClick={() => setActiveTab("itinerary")}
-            >
-              Itinerary
-            </button>
-          </nav>
-        </div>
-
-        {activeTab === "locations" && (
-          <section
-            id="tab-panel-locations"
-            role="tabpanel"
-            aria-labelledby="tab-locations"
-          >
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-lg font-semibold">
-                Locations
-                {locations.length > 0 && (
-                  <span className="ml-1.5 text-sm font-normal text-muted-foreground">
-                    ({locations.length})
-                  </span>
-                )}
-              </h2>
-              <div className="flex items-center gap-2">
-                {cities.size >= 2 && (
-                  <Button
-                    variant={groupByCity ? "secondary" : "outline"}
-                    size="sm"
-                    onClick={() => setGroupByCity((v) => !v)}
-                  >
-                    {groupByCity ? "Ungroup" : "Group by city"}
-                  </Button>
-                )}
-                {!addingLocation && locations.length > 0 && (
-                  <Button size="sm" onClick={() => setAddingLocation(true)}>
-                    Add location
-                  </Button>
-                )}
-              </div>
+              {!addingLocation && locations.length > 0 && (
+                <Button size="sm" onClick={() => setAddingLocation(true)}>
+                  Add location
+                </Button>
+              )}
             </div>
+          </div>
 
-            {/* Search by location name */}
-            {locations.length > 0 && (
-              <div className="mb-3">
-                <input
-                  type="search"
-                  autoComplete="off"
-                  placeholder="Search by location name…"
-                  value={locationNameSearch}
-                  onChange={(e) => setLocationNameSearch(e.target.value)}
-                  className="h-9 w-full max-w-sm rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  aria-label="Search by location name"
-                />
-              </div>
-            )}
+          {/* Search by location name */}
+          {locations.length > 0 && (
+            <div className="mb-3">
+              <input
+                type="search"
+                autoComplete="off"
+                placeholder="Search by location name…"
+                value={locationNameSearch}
+                onChange={(e) => setLocationNameSearch(e.target.value)}
+                className="h-9 w-full max-w-sm rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                aria-label="Search by location name"
+              />
+            </div>
+          )}
 
-            {/* Category filter chips */}
-            {categoryOptions.length >= 2 && (
-              <div
-                className="mb-3 flex flex-wrap gap-1.5"
-                role="toolbar"
-                aria-label="Filter locations by category"
+          {/* Category filter chips */}
+          {categoryOptions.length >= 2 && (
+            <div
+              className="mb-3 flex flex-wrap gap-1.5"
+              role="toolbar"
+              aria-label="Filter locations by category"
+            >
+              <button
+                className={cn(
+                  "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                  categoryFilter === null
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-background text-muted-foreground hover:bg-accent"
+                )}
+                onClick={() => setCategoryFilter(null)}
               >
+                All ({locations.length})
+              </button>
+              {categoryOptions.map(([cat, count]) => (
                 <button
+                  key={cat}
                   className={cn(
                     "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                    categoryFilter === null
+                    categoryFilter === cat
                       ? "border-primary bg-primary text-primary-foreground"
                       : "border-border bg-background text-muted-foreground hover:bg-accent"
                   )}
-                  onClick={() => setCategoryFilter(null)}
+                  onClick={() =>
+                    setCategoryFilter(categoryFilter === cat ? null : cat)
+                  }
                 >
-                  All ({locations.length})
+                  {cat} ({count})
                 </button>
-                {categoryOptions.map(([cat, count]) => (
-                  <button
-                    key={cat}
-                    className={cn(
-                      "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                      categoryFilter === cat
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border bg-background text-muted-foreground hover:bg-accent"
-                    )}
-                    onClick={() =>
-                      setCategoryFilter(categoryFilter === cat ? null : cat)
-                    }
-                  >
-                    {cat} ({count})
-                  </button>
-                ))}
-              </div>
-            )}
+              ))}
+            </div>
+          )}
 
-            {addingLocation && (
-              <div className="mb-4">
-                <AddLocationForm
-                  tripId={tripId}
-                  onAdded={handleLocationAdded}
-                  onCancel={() => setAddingLocation(false)}
-                />
-              </div>
-            )}
-
-            {locations.length === 0 && !addingLocation ? (
-              <EmptyState message="No locations added to this trip yet.">
-                <Button onClick={() => setAddingLocation(true)}>
-                  Add a location
-                </Button>
-              </EmptyState>
-            ) : filteredLocations.length === 0 && locationNameSearch.trim() ? (
-              <p className="py-4 text-sm text-muted-foreground">
-                No locations match &quot;{locationNameSearch.trim()}&quot;. Try
-                a different search or clear the search box.
-              </p>
-            ) : groupedLocations ? (
-              <div className="space-y-4">
-                {groupedLocations.map(([cityName, locs]) => (
-                  <div key={cityName}>
-                    <h3 className="mb-2 text-sm font-semibold text-muted-foreground">
-                      {cityName}{" "}
-                      <span className="font-normal">({locs.length})</span>
-                    </h3>
-                    <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                      {locs.map(renderLocationCard)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                {filteredLocations.map(renderLocationCard)}
-              </div>
-            )}
-          </section>
-        )}
-
-        {activeTab === "itinerary" && (
-          <section
-            id="tab-panel-itinerary"
-            role="tabpanel"
-            aria-labelledby="tab-itinerary"
-          >
-            {itineraryLoading && (
-              <div className="flex justify-center py-12">
-                <LoadingSpinner size="lg" />
-              </div>
-            )}
-            {itineraryError && !itineraryLoading && (
-              <ErrorBanner message={itineraryError} onRetry={fetchItinerary} />
-            )}
-            {itineraryActionError && !itineraryLoading && (
-              <ErrorBanner
-                message={itineraryActionError}
-                onRetry={() => setItineraryActionError(null)}
+          {addingLocation && (
+            <div className="mb-4">
+              <AddLocationForm
+                tripId={tripId}
+                onAdded={handleLocationAdded}
+                onCancel={() => setAddingLocation(false)}
               />
-            )}
-            {!itineraryLoading &&
-              !itineraryError &&
-              itinerary?.days.length === 0 && (
-                <EmptyState message="No days yet. Add a day or generate days from your trip dates.">
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Button
-                      onClick={handleAddDay}
-                      disabled={addDayLoading || generateDaysLoading}
-                    >
-                      {addDayLoading ? "Adding…" : "Add day"}
-                    </Button>
-                    {trip.start_date && trip.end_date && (
-                      <Button
-                        variant="outline"
-                        onClick={handleGenerateDays}
-                        disabled={addDayLoading || generateDaysLoading}
-                      >
-                        {generateDaysLoading
-                          ? "Generating…"
-                          : "Generate days from dates"}
-                      </Button>
-                    )}
+            </div>
+          )}
+
+          {locations.length === 0 && !addingLocation ? (
+            <EmptyState message="No locations added to this trip yet.">
+              <Button onClick={() => setAddingLocation(true)}>
+                Add a location
+              </Button>
+            </EmptyState>
+          ) : filteredLocations.length === 0 && locationNameSearch.trim() ? (
+            <p className="py-4 text-sm text-muted-foreground">
+              No locations match &quot;{locationNameSearch.trim()}&quot;. Try a
+              different search or clear the search box.
+            </p>
+          ) : groupedLocations ? (
+            <div className="space-y-4">
+              {groupedLocations.map(([cityName, locs]) => (
+                <div key={cityName}>
+                  <h3 className="mb-2 text-sm font-semibold text-muted-foreground">
+                    {cityName}{" "}
+                    <span className="font-normal">({locs.length})</span>
+                  </h3>
+                  <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                    {locs.map(renderLocationCard)}
                   </div>
-                </EmptyState>
-              )}
-            {!itineraryLoading &&
-              !itineraryError &&
-              itinerary &&
-              itinerary.days.length > 0 && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-semibold">Days</h2>
-                    <Button
-                      size="sm"
-                      onClick={handleAddDay}
-                      disabled={addDayLoading || generateDaysLoading}
-                    >
-                      {addDayLoading ? "Adding…" : "Add day"}
-                    </Button>
-                  </div>
-                  {itinerary.days.map((day) => {
-                    const currentOption = getSelectedOption(day);
-                    const dayLabel = day.date
-                      ? formatDate(day.date)
-                      : `Day ${day.sort_order + 1}`;
-                    const hasMultipleOptions = day.options.length > 1;
-                    const alreadyAddedIds = new Set(
-                      currentOption?.locations.map((l) => l.location_id) ?? []
-                    );
-                    const canDeleteOption = day.options.length > 1;
-
-                    return (
-                      <Card key={day.id}>
-                        <CardHeader className="pb-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <h3 className="text-lg font-semibold">
-                              {dayLabel}
-                            </h3>
-                            <div className="flex items-center gap-2">
-                              {hasMultipleOptions && (
-                                <select
-                                  aria-label={`Select option for ${dayLabel}`}
-                                  className="h-8 rounded-md border border-input bg-background px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                                  value={currentOption?.id ?? ""}
-                                  onChange={(e) =>
-                                    setSelectedOptionByDay((prev) => ({
-                                      ...prev,
-                                      [day.id]: e.target.value,
-                                    }))
-                                  }
-                                >
-                                  {day.options.map((opt) => (
-                                    <option key={opt.id} value={opt.id}>
-                                      {opt.option_index === 1
-                                        ? "Main plan"
-                                        : `Alternative ${opt.option_index - 1}`}
-                                      {opt.created_by
-                                        ? ` (${opt.created_by})`
-                                        : ""}
-                                    </option>
-                                  ))}
-                                </select>
-                              )}
-                              {canDeleteOption && currentOption && (
-                                <ConfirmDialog
-                                  trigger={
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="h-8 px-2 text-destructive hover:text-destructive"
-                                      aria-label="Delete this alternative"
-                                    >
-                                      ✕
-                                    </Button>
-                                  }
-                                  title="Delete this plan?"
-                                  description={`"${currentOption.option_index === 1 ? "Main plan" : `Alternative ${currentOption.option_index - 1}`}" and its locations will be removed. The next plan will become the main plan if needed.`}
-                                  confirmLabel="Delete"
-                                  variant="destructive"
-                                  onConfirm={() =>
-                                    handleDeleteOption(day.id, currentOption.id)
-                                  }
-                                />
-                              )}
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-8 whitespace-nowrap"
-                                onClick={() => handleCreateAlternative(day.id)}
-                                disabled={createOptionLoading === day.id}
-                              >
-                                {createOptionLoading === day.id
-                                  ? "Creating…"
-                                  : "+ Alternative"}
-                              </Button>
-                            </div>
-                          </div>
-                        </CardHeader>
-                        <CardContent className="pt-0">
-                          {currentOption && (
-                            <>
-                              <div className="mb-4 flex flex-wrap items-end gap-3">
-                                <AutosaveInput
-                                  key={`start-${currentOption.id}`}
-                                  id={`starting-city-${currentOption.id}`}
-                                  label="Start City"
-                                  placeholder="e.g. Paris"
-                                  initialValue={
-                                    currentOption.starting_city ?? ""
-                                  }
-                                  onSave={async (val) => {
-                                    const normalized = val === "" ? null : val;
-                                    if (
-                                      normalized ===
-                                      (currentOption.starting_city ?? null)
-                                    )
-                                      return;
-                                    await handleSaveOptionDetails(
-                                      day.id,
-                                      currentOption.id,
-                                      { starting_city: normalized }
-                                    );
-                                  }}
-                                />
-                                <AutosaveInput
-                                  key={`end-${currentOption.id}`}
-                                  id={`ending-city-${currentOption.id}`}
-                                  label="End City"
-                                  placeholder="e.g. Nice"
-                                  initialValue={currentOption.ending_city ?? ""}
-                                  onSave={async (val) => {
-                                    const normalized = val === "" ? null : val;
-                                    if (
-                                      normalized ===
-                                      (currentOption.ending_city ?? null)
-                                    )
-                                      return;
-                                    await handleSaveOptionDetails(
-                                      day.id,
-                                      currentOption.id,
-                                      { ending_city: normalized }
-                                    );
-                                  }}
-                                />
-                                <AutosaveInput
-                                  key={`creator-${currentOption.id}`}
-                                  id={`created-by-${currentOption.id}`}
-                                  label="Created by"
-                                  placeholder="e.g. Alice"
-                                  initialValue={currentOption.created_by ?? ""}
-                                  onSave={async (val) => {
-                                    const normalized = val === "" ? null : val;
-                                    if (
-                                      normalized ===
-                                      (currentOption.created_by ?? null)
-                                    )
-                                      return;
-                                    await handleSaveOptionDetails(
-                                      day.id,
-                                      currentOption.id,
-                                      { created_by: normalized }
-                                    );
-                                  }}
-                                />
-                              </div>
-                              {currentOption.locations.length === 0 ? (
-                                <p className="py-2 text-sm text-muted-foreground">
-                                  No locations yet — add some from your trip
-                                  collection.
-                                </p>
-                              ) : (
-                                <div className="space-y-1 overflow-x-auto">
-                                  {/* Table-like grid: drag + fixed column widths + header row */}
-                                  <div
-                                    className="grid w-full min-w-[680px] grid-cols-[2rem_7rem_minmax(4rem,7rem)_6rem_7rem_6rem_minmax(5rem,1fr)_2.5rem_2rem] gap-3 px-2 py-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground border-b border-border"
-                                    role="row"
-                                  >
-                                    <div
-                                      role="columnheader"
-                                      className="flex items-center"
-                                      aria-label="Drag to reorder"
-                                    >
-                                      <span className="sr-only">Reorder</span>
-                                    </div>
-                                    <div role="columnheader">Time</div>
-                                    <div role="columnheader">Location</div>
-                                    <div role="columnheader">City</div>
-                                    <div role="columnheader">Hours</div>
-                                    <div role="columnheader">Booking</div>
-                                    <div role="columnheader">Note</div>
-                                    <div
-                                      role="columnheader"
-                                      className="text-center"
-                                    >
-                                      Map
-                                    </div>
-                                    <div
-                                      role="columnheader"
-                                      aria-label="Remove"
-                                    >
-                                      <span className="sr-only">Remove</span>
-                                    </div>
-                                  </div>
-                                  {currentOption.locations
-                                    .sort((a, b) => a.sort_order - b.sort_order)
-                                    .map((ol) => {
-                                      const timeKey =
-                                        ol.time_period || "morning";
-                                      const timeMeta =
-                                        TIME_PERIOD_META[timeKey] ??
-                                        TIME_PERIOD_META.morning;
-                                      const TimeIcon = timeMeta.icon;
-                                      const rowKey = `${day.id}-${currentOption.id}-${ol.location_id}`;
-                                      const noteKey = rowKey;
-                                      const nameKey = `name-${rowKey}`;
-                                      const isNoteExpanded =
-                                        expandedNoteKey === noteKey;
-                                      const isNameExpanded =
-                                        expandedNameKey === nameKey;
-                                      const hasNote = Boolean(
-                                        ol.location.note?.trim()
-                                      );
-                                      const nameLongEnoughToTruncate =
-                                        (ol.location.name?.length ?? 0) > 28;
-                                      const noteLongEnoughToTruncate =
-                                        (ol.location.note?.length ?? 0) > 55;
-                                      const booking =
-                                        ol.location.requires_booking ?? "no";
-                                      const isBooked = booking === "yes_done";
-                                      const showBookingPill =
-                                        booking !== "no" && booking != null;
-                                      const isDragging =
-                                        dragLocation?.dayId === day.id &&
-                                        dragLocation?.optionId ===
-                                          currentOption.id &&
-                                        dragLocation?.locationId ===
-                                          ol.location_id;
-                                      const isDropTarget =
-                                        dropTargetLocationId ===
-                                          ol.location_id && !isDragging;
-
-                                      const sortedLocs = [
-                                        ...currentOption.locations,
-                                      ].sort(
-                                        (a, b) => a.sort_order - b.sort_order
-                                      );
-                                      const fromIdx = sortedLocs.findIndex(
-                                        (l) =>
-                                          l.location_id ===
-                                          dragLocation?.locationId
-                                      );
-                                      const toIdx = sortedLocs.findIndex(
-                                        (l) => l.location_id === ol.location_id
-                                      );
-
-                                      const optId = currentOption?.id;
-                                      function handleDragOver(
-                                        e: React.DragEvent
-                                      ) {
-                                        e.preventDefault();
-                                        e.dataTransfer.dropEffect = "move";
-                                        if (
-                                          dragLocation?.dayId === day.id &&
-                                          dragLocation?.optionId === optId
-                                        )
-                                          setDropTargetLocationId(
-                                            ol.location_id
-                                          );
-                                      }
-
-                                      function handleDrop(e: React.DragEvent) {
-                                        e.preventDefault();
-                                        setDropTargetLocationId(null);
-                                        if (
-                                          !dragLocation ||
-                                          dragLocation.dayId !== day.id ||
-                                          dragLocation.optionId !== optId ||
-                                          dragLocation.locationId ===
-                                            ol.location_id
-                                        ) {
-                                          setDragLocation(null);
-                                          return;
-                                        }
-                                        if (fromIdx < 0 || toIdx < 0) {
-                                          setDragLocation(null);
-                                          return;
-                                        }
-                                        const newOrder = [...sortedLocs];
-                                        const [removed] = newOrder.splice(
-                                          fromIdx,
-                                          1
-                                        );
-                                        const insertAt =
-                                          toIdx > fromIdx ? toIdx - 1 : toIdx;
-                                        newOrder.splice(insertAt, 0, removed);
-                                        const newIds = newOrder.map(
-                                          (l) => l.location_id
-                                        );
-                                        setDragLocation(null);
-                                        if (optId)
-                                          void handleReorderOptionLocations(
-                                            day.id,
-                                            optId,
-                                            newIds
-                                          );
-                                      }
-
-                                      return (
-                                        <div
-                                          key={ol.location_id}
-                                          className={cn(
-                                            "group grid w-full min-w-[680px] grid-cols-[2rem_7rem_minmax(4rem,7rem)_6rem_7rem_6rem_minmax(5rem,1fr)_2.5rem_2rem] gap-3 items-start rounded-md px-2 py-1.5 text-sm hover:bg-accent/50",
-                                            isDragging && "opacity-50",
-                                            isDropTarget &&
-                                              "ring-1 ring-primary ring-inset bg-accent/70"
-                                          )}
-                                          onDragOver={handleDragOver}
-                                          onDragLeave={() =>
-                                            setDropTargetLocationId(null)
-                                          }
-                                          onDrop={handleDrop}
-                                          role="row"
-                                        >
-                                          {/* Drag handle */}
-                                          <div
-                                            className="flex cursor-grab active:cursor-grabbing items-center justify-center self-center rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                                            draggable
-                                            onDragStart={(e) => {
-                                              setDragLocation({
-                                                dayId: day.id,
-                                                optionId: currentOption.id,
-                                                locationId: ol.location_id,
-                                              });
-                                              e.dataTransfer.effectAllowed =
-                                                "move";
-                                              e.dataTransfer.setData(
-                                                "text/plain",
-                                                ol.location_id
-                                              );
-                                            }}
-                                            onDragEnd={() => {
-                                              setDragLocation(null);
-                                              setDropTargetLocationId(null);
-                                            }}
-                                            aria-label={`Drag to reorder ${ol.location.name}`}
-                                          >
-                                            <GripVertical
-                                              className="h-4 w-4"
-                                              size={16}
-                                            />
-                                          </div>
-                                          {/* Time */}
-                                          <div
-                                            className="relative min-w-0"
-                                            ref={
-                                              openTimePicker &&
-                                              openTimePicker.dayId === day.id &&
-                                              openTimePicker.optionId ===
-                                                currentOption.id &&
-                                              openTimePicker.locationId ===
-                                                ol.location_id
-                                                ? timePickerTriggerRef
-                                                : undefined
-                                            }
-                                          >
-                                            <button
-                                              type="button"
-                                              className={cn(
-                                                "inline-flex h-7 items-center gap-1 rounded-full px-2 text-xs font-medium transition-colors",
-                                                "border border-transparent hover:border-border",
-                                                timeMeta.bg,
-                                                timeMeta.text
-                                              )}
-                                              onClick={() => {
-                                                setOpenTimePicker((prev) =>
-                                                  prev &&
-                                                  prev.dayId === day.id &&
-                                                  prev.optionId ===
-                                                    currentOption.id &&
-                                                  prev.locationId ===
-                                                    ol.location_id
-                                                    ? null
-                                                    : {
-                                                        dayId: day.id,
-                                                        optionId:
-                                                          currentOption.id,
-                                                        locationId:
-                                                          ol.location_id,
-                                                      }
-                                                );
-                                              }}
-                                              aria-label={`Select time of day for ${ol.location.name}`}
-                                            >
-                                              <TimeIcon
-                                                className="h-3.5 w-3.5 shrink-0"
-                                                size={14}
-                                              />
-                                              <span>{timeMeta.label}</span>
-                                            </button>
-                                          </div>
-                                          {/* Name (expandable only when long) */}
-                                          <div className="min-w-0">
-                                            {isNameExpanded ? (
-                                              <div className="space-y-0.5">
-                                                <p className="break-words text-sm font-medium">
-                                                  {ol.location.name}
-                                                </p>
-                                                <button
-                                                  type="button"
-                                                  className="text-xs text-primary hover:underline"
-                                                  onClick={() =>
-                                                    setExpandedNameKey(null)
-                                                  }
-                                                  aria-expanded={true}
-                                                >
-                                                  Show less
-                                                </button>
-                                              </div>
-                                            ) : (
-                                              <div className="space-y-0.5">
-                                                <p
-                                                  className={cn(
-                                                    "text-sm font-medium",
-                                                    nameLongEnoughToTruncate &&
-                                                      "truncate"
-                                                  )}
-                                                  title={ol.location.name}
-                                                >
-                                                  {ol.location.name}
-                                                </p>
-                                                {nameLongEnoughToTruncate && (
-                                                  <button
-                                                    type="button"
-                                                    className="text-xs text-primary hover:underline"
-                                                    onClick={() =>
-                                                      setExpandedNameKey(
-                                                        nameKey
-                                                      )
-                                                    }
-                                                    aria-expanded={false}
-                                                  >
-                                                    Show more
-                                                  </button>
-                                                )}
-                                              </div>
-                                            )}
-                                          </div>
-                                          {/* City */}
-                                          <div
-                                            className="min-w-0 truncate text-sm text-muted-foreground"
-                                            title={
-                                              ol.location.city ?? undefined
-                                            }
-                                          >
-                                            {ol.location.city ?? "—"}
-                                          </div>
-                                          {/* Working hours */}
-                                          <div
-                                            className="min-w-0 truncate text-xs text-muted-foreground"
-                                            title={
-                                              ol.location.working_hours ??
-                                              undefined
-                                            }
-                                          >
-                                            {ol.location.working_hours ?? "—"}
-                                          </div>
-                                          {/* Booking */}
-                                          <div className="min-w-0">
-                                            {showBookingPill ? (
-                                              <span
-                                                className={cn(
-                                                  "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium leading-tight",
-                                                  isBooked
-                                                    ? "bg-green-50 text-green-700"
-                                                    : "bg-amber-50 text-amber-700"
-                                                )}
-                                              >
-                                                <Ticket size={12} />
-                                                {isBooked
-                                                  ? "Booked \u2713"
-                                                  : "Booking needed"}
-                                              </span>
-                                            ) : null}
-                                          </div>
-                                          {/* Note (expandable only when long) */}
-                                          <div className="min-w-0">
-                                            {!hasNote ? (
-                                              <span className="text-xs text-muted-foreground">
-                                                —
-                                              </span>
-                                            ) : isNoteExpanded ? (
-                                              <div className="space-y-0.5">
-                                                <p className="whitespace-pre-wrap break-words text-xs text-muted-foreground max-h-24 overflow-y-auto">
-                                                  {ol.location.note}
-                                                </p>
-                                                <button
-                                                  type="button"
-                                                  className="text-xs text-primary hover:underline"
-                                                  onClick={() =>
-                                                    setExpandedNoteKey(null)
-                                                  }
-                                                  aria-expanded={true}
-                                                >
-                                                  Show less
-                                                </button>
-                                              </div>
-                                            ) : (
-                                              <div className="space-y-0.5">
-                                                <p
-                                                  className={cn(
-                                                    "text-xs text-muted-foreground",
-                                                    noteLongEnoughToTruncate &&
-                                                      "truncate"
-                                                  )}
-                                                  title={
-                                                    ol.location.note ??
-                                                    undefined
-                                                  }
-                                                >
-                                                  {ol.location.note}
-                                                </p>
-                                                {noteLongEnoughToTruncate && (
-                                                  <button
-                                                    type="button"
-                                                    className="text-xs text-primary hover:underline"
-                                                    onClick={() =>
-                                                      setExpandedNoteKey(
-                                                        noteKey
-                                                      )
-                                                    }
-                                                    aria-expanded={false}
-                                                  >
-                                                    Show more
-                                                  </button>
-                                                )}
-                                              </div>
-                                            )}
-                                          </div>
-                                          {/* Map link */}
-                                          <div className="flex items-center">
-                                            {ol.location.google_link ? (
-                                              <a
-                                                href={ol.location.google_link}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="text-primary hover:underline"
-                                                aria-label={`Open ${ol.location.name} in Google Maps`}
-                                              >
-                                                <ExternalLink
-                                                  size={14}
-                                                  className="shrink-0"
-                                                />
-                                              </a>
-                                            ) : (
-                                              <span className="text-muted-foreground/50">
-                                                —
-                                              </span>
-                                            )}
-                                          </div>
-                                          {/* Remove */}
-                                          <div className="flex items-center">
-                                            <button
-                                              type="button"
-                                              className="text-xs text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
-                                              aria-label={`Remove ${ol.location.name}`}
-                                              onClick={() =>
-                                                handleRemoveLocationFromOption(
-                                                  day.id,
-                                                  currentOption.id,
-                                                  ol.location_id
-                                                )
-                                              }
-                                            >
-                                              ✕
-                                            </button>
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                </div>
-                              )}
-                              <div className="mt-3">
-                                <AddLocationsToOptionDialog
-                                  trigger={
-                                    <Button variant="outline" size="sm">
-                                      + Add locations
-                                    </Button>
-                                  }
-                                  allLocations={locations}
-                                  alreadyAddedIds={alreadyAddedIds}
-                                  startingCity={currentOption.starting_city}
-                                  endingCity={currentOption.ending_city}
-                                  onConfirm={(ids) =>
-                                    handleAddLocationsToOption(
-                                      day.id,
-                                      currentOption.id,
-                                      ids
-                                    )
-                                  }
-                                />
-                              </div>
-                            </>
-                          )}
-                          {!currentOption && (
-                            <p className="text-sm text-muted-foreground">
-                              No locations
-                            </p>
-                          )}
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
                 </div>
-              )}
-          </section>
-        )}
-      </div>
-    </>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+              {filteredLocations.map(renderLocationCard)}
+            </div>
+          )}
+        </section>
+      )}
+
+      {activeTab === "itinerary" && (
+        <section
+          id="tab-panel-itinerary"
+          role="tabpanel"
+          aria-labelledby="tab-itinerary"
+        >
+          {itineraryLoading && (
+            <div className="flex justify-center py-12">
+              <LoadingSpinner size="lg" />
+            </div>
+          )}
+          {itineraryError && !itineraryLoading && (
+            <ErrorBanner message={itineraryError} onRetry={fetchItinerary} />
+          )}
+          {itineraryActionError && !itineraryLoading && (
+            <ErrorBanner
+              message={itineraryActionError}
+              onRetry={() => setItineraryActionError(null)}
+            />
+          )}
+          {!itineraryLoading &&
+            !itineraryError &&
+            itinerary?.days.length === 0 && (
+              <EmptyState message="No days yet. Add a day or generate days from your trip dates.">
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    onClick={handleAddDay}
+                    disabled={addDayLoading || generateDaysLoading}
+                  >
+                    {addDayLoading ? "Adding…" : "Add day"}
+                  </Button>
+                  {trip.start_date && trip.end_date && (
+                    <Button
+                      variant="outline"
+                      onClick={handleGenerateDays}
+                      disabled={addDayLoading || generateDaysLoading}
+                    >
+                      {generateDaysLoading
+                        ? "Generating…"
+                        : "Generate days from dates"}
+                    </Button>
+                  )}
+                </div>
+              </EmptyState>
+            )}
+          {!itineraryLoading &&
+            !itineraryError &&
+            itinerary &&
+            itinerary.days.length > 0 && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold">Days</h2>
+                  <Button
+                    size="sm"
+                    onClick={handleAddDay}
+                    disabled={addDayLoading || generateDaysLoading}
+                  >
+                    {addDayLoading ? "Adding…" : "Add day"}
+                  </Button>
+                </div>
+                {itinerary.days.map((day) => {
+                  const currentOption = getSelectedOption(day);
+                  return (
+                    <ItineraryDayCard
+                      key={day.id}
+                      day={day}
+                      currentOption={currentOption}
+                      tripLocations={locations}
+                      createOptionLoading={createOptionLoading === day.id}
+                      onSelectOption={(dayId, optId) =>
+                        setSelectedOptionByDay((prev) => ({
+                          ...prev,
+                          [dayId]: optId,
+                        }))
+                      }
+                      onCreateAlternative={handleCreateAlternative}
+                      onDeleteOption={handleDeleteOption}
+                      onSaveOptionDetails={handleSaveOptionDetails}
+                      onAddLocations={handleAddLocationsToOption}
+                      onRemoveLocation={handleRemoveLocationFromOption}
+                      onUpdateTimePeriod={handleUpdateLocationTimePeriod}
+                      onReorderLocations={handleReorderOptionLocations}
+                    />
+                  );
+                })}
+              </div>
+            )}
+        </section>
+      )}
+    </div>
   );
 }
