@@ -312,6 +312,18 @@ class ItineraryOptionLocation(BaseModel):
     location: LocationSummary
 
 
+class ItineraryRoute(BaseModel):
+    """Itinerary tree node: route within an option."""
+
+    route_id: str
+    label: str | None = None
+    transport_mode: str = "walk"
+    duration_seconds: int | None = None
+    distance_meters: int | None = None
+    sort_order: int = 0
+    location_ids: list[str] = Field(default_factory=list)
+
+
 class ItineraryOption(BaseModel):
     """Itinerary tree node: option containing locations."""
 
@@ -322,6 +334,7 @@ class ItineraryOption(BaseModel):
     created_by: str | None = None
     created_at: datetime | None = None
     locations: list[ItineraryOptionLocation] = Field(default_factory=list)
+    routes: list[ItineraryRoute] = Field(default_factory=list)
 
 
 class ItineraryDay(BaseModel):

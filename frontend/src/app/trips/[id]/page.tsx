@@ -967,6 +967,7 @@ export default function TripDetailPage() {
                       onRemoveLocation={handleRemoveLocationFromOption}
                       onUpdateTimePeriod={handleUpdateLocationTimePeriod}
                       onReorderLocations={handleReorderOptionLocations}
+                      onRoutesChanged={fetchItinerary}
                     />
                   );
                 })}

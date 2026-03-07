@@ -13,6 +13,7 @@ from backend.app.models.schemas import (
     ItineraryOption,
     ItineraryOptionLocation,
     ItineraryResponse,
+    ItineraryRoute,
     LocationSummary,
 )
 from backend.app.routers.trip_ownership import _ensure_trip_owned
@@ -218,6 +219,50 @@ async def get_itinerary(
     itinerary_response = _build_itinerary_response(
         day_rows, option_rows, ol_rows, locations_by_id, include_empty_options
     )
+    # Attach routes to options (single query for all options in this trip)
+    all_option_ids = [opt.id for d in itinerary_response.days for opt in d.options]
+    if all_option_ids:
+        routes_result = (
+            supabase.table("option_routes")
+            .select(
+                "route_id, option_id, label, transport_mode,"
+                " duration_seconds, distance_meters, sort_order"
+            )
+            .in_("option_id", all_option_ids)
+            .order("sort_order")
+            .execute()
+        )
+        route_rows = routes_result.data or []
+        if route_rows:
+            route_ids = [str(r["route_id"]) for r in route_rows]
+            stops_result = (
+                supabase.table("route_stops")
+                .select("route_id, location_id, stop_order")
+                .in_("route_id", route_ids)
+                .order("stop_order")
+                .execute()
+            )
+            stops_by_route: dict[str, list[str]] = {}
+            for s in stops_result.data or []:
+                rid = str(s["route_id"])
+                stops_by_route.setdefault(rid, []).append(str(s["location_id"]))
+            routes_by_option: dict[str, list[ItineraryRoute]] = {}
+            for r in route_rows:
+                oid = str(r["option_id"])
+                rid = str(r["route_id"])
+                route = ItineraryRoute(
+                    route_id=rid,
+                    label=r.get("label"),
+                    transport_mode=r.get("transport_mode", "walk"),
+                    duration_seconds=r.get("duration_seconds"),
+                    distance_meters=r.get("distance_meters"),
+                    sort_order=int(r.get("sort_order", 0)),
+                    location_ids=stops_by_route.get(rid, []),
+                )
+                routes_by_option.setdefault(oid, []).append(route)
+            for d in itinerary_response.days:
+                for opt in d.options:
+                    opt.routes = routes_by_option.get(opt.id, [])
     build_ms = round((time.perf_counter() - t2) * 1000, 1)
 
     response.headers["X-Itinerary-Ownership-Ms"] = str(ownership_ms)

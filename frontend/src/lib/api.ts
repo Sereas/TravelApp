@@ -95,6 +95,16 @@ export interface ItineraryOptionLocation {
   location: LocationSummary;
 }
 
+export interface ItineraryOptionRoute {
+  route_id: string;
+  label: string | null;
+  transport_mode: string;
+  duration_seconds: number | null;
+  distance_meters: number | null;
+  sort_order: number;
+  location_ids: string[];
+}
+
 export interface ItineraryOption {
   id: string;
   option_index: number;
@@ -102,6 +112,7 @@ export interface ItineraryOption {
   ending_city: string | null;
   created_by: string | null;
   locations: ItineraryOptionLocation[];
+  routes: ItineraryOptionRoute[];
 }
 
 export interface ItineraryDay {
