@@ -130,6 +130,7 @@ export default function TripDetailPage() {
   const [deletingTrip, setDeletingTrip] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [groupByCity, setGroupByCity] = useState(false);
+  const [locationNameSearch, setLocationNameSearch] = useState("");
 
   const [activeTab, setActiveTab] = useState<"locations" | "itinerary">(
     "locations"
@@ -642,15 +643,21 @@ export default function TripDetailPage() {
     return set;
   }, [locations]);
 
-  const filteredLocations = useMemo(
-    () =>
-      categoryFilter
-        ? locations.filter(
-            (loc) => (loc.category ?? "Uncategorized") === categoryFilter
-          )
-        : locations,
-    [locations, categoryFilter]
-  );
+  const filteredLocations = useMemo(() => {
+    let list = locations;
+    if (categoryFilter) {
+      list = list.filter(
+        (loc) => (loc.category ?? "Uncategorized") === categoryFilter
+      );
+    }
+    if (locationNameSearch.trim()) {
+      const q = locationNameSearch.trim().toLowerCase();
+      list = list.filter((loc) =>
+        (loc.name ?? "").toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [locations, categoryFilter, locationNameSearch]);
 
   const groupedLocations = useMemo(() => {
     if (!groupByCity) return null;
@@ -990,6 +997,21 @@ export default function TripDetailPage() {
               </div>
             </div>
 
+            {/* Search by location name */}
+            {locations.length > 0 && (
+              <div className="mb-3">
+                <input
+                  type="search"
+                  autoComplete="off"
+                  placeholder="Search by location name…"
+                  value={locationNameSearch}
+                  onChange={(e) => setLocationNameSearch(e.target.value)}
+                  className="h-9 w-full max-w-sm rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  aria-label="Search by location name"
+                />
+              </div>
+            )}
+
             {/* Category filter chips */}
             {categoryOptions.length >= 2 && (
               <div
@@ -1043,6 +1065,12 @@ export default function TripDetailPage() {
                   Add a location
                 </Button>
               </EmptyState>
+            ) : filteredLocations.length === 0 &&
+              locationNameSearch.trim() ? (
+              <p className="py-4 text-sm text-muted-foreground">
+                No locations match &quot;{locationNameSearch.trim()}&quot;.
+                Try a different search or clear the search box.
+              </p>
             ) : groupedLocations ? (
               <div className="space-y-4">
                 {groupedLocations.map(([cityName, locs]) => (
