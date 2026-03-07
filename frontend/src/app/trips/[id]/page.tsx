@@ -652,9 +652,7 @@ export default function TripDetailPage() {
     }
     if (locationNameSearch.trim()) {
       const q = locationNameSearch.trim().toLowerCase();
-      list = list.filter((loc) =>
-        (loc.name ?? "").toLowerCase().includes(q)
-      );
+      list = list.filter((loc) => (loc.name ?? "").toLowerCase().includes(q));
     }
     return list;
   }, [locations, categoryFilter, locationNameSearch]);
@@ -1065,11 +1063,10 @@ export default function TripDetailPage() {
                   Add a location
                 </Button>
               </EmptyState>
-            ) : filteredLocations.length === 0 &&
-              locationNameSearch.trim() ? (
+            ) : filteredLocations.length === 0 && locationNameSearch.trim() ? (
               <p className="py-4 text-sm text-muted-foreground">
-                No locations match &quot;{locationNameSearch.trim()}&quot;.
-                Try a different search or clear the search box.
+                No locations match &quot;{locationNameSearch.trim()}&quot;. Try
+                a different search or clear the search box.
               </p>
             ) : groupedLocations ? (
               <div className="space-y-4">

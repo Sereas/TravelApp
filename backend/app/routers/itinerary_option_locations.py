@@ -265,11 +265,10 @@ async def reorder_option_locations(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="location_ids must match exactly the locations in this option",
         )
-    for position, location_id in enumerate(body.location_ids):
-        lid_str = str(location_id)
-        supabase.table("option_locations").update({"sort_order": position}).eq(
-            "option_id", option_id_str
-        ).eq("location_id", lid_str).execute()
+    supabase.rpc(
+        "reorder_option_locations",
+        {"p_option_id": option_id_str, "p_location_ids": [str(lid) for lid in body.location_ids]},
+    ).execute()
     result = (
         supabase.table("option_locations")
         .select(_OPTION_LOCATIONS_SELECT)
@@ -450,59 +449,81 @@ async def batch_add_locations_to_option(
     _ensure_trip_owned(supabase, trip_id, user_id)
     _ensure_day_in_trip(supabase, trip_id, day_id)
     _ensure_option_in_day(supabase, day_id, option_id)
-    seen_pairs: set[tuple[str, str]] = set()
-    # Validation pass: check locations belong to trip and no conflicts.
+    option_id_str = str(option_id)
+    trip_id_str = str(trip_id)
+    # Collect and deduplicate
+    seen_pairs: set[str] = set()
+    location_ids_to_add: list[str] = []
     for item in body:
-        _ensure_location_in_trip(supabase, trip_id, item.location_id)
-        key = (str(option_id), str(item.location_id))
-        if key in seen_pairs:
+        lid = str(item.location_id)
+        if lid in seen_pairs:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Duplicate location in batch for this option",
             )
-        seen_pairs.add(key)
-        existing = (
-            supabase.table("option_locations")
-            .select("option_id, location_id")
-            .eq("option_id", str(option_id))
-            .eq("location_id", str(item.location_id))
-            .execute()
+        seen_pairs.add(lid)
+        location_ids_to_add.append(lid)
+    # Batch-validate: all locations belong to trip (single query)
+    loc_check = (
+        supabase.table("locations")
+        .select("location_id")
+        .eq("trip_id", trip_id_str)
+        .in_("location_id", location_ids_to_add)
+        .execute()
+    )
+    found_ids = {str(r["location_id"]) for r in (loc_check.data or [])}
+    missing = [lid for lid in location_ids_to_add if lid not in found_ids]
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Location does not belong to this trip",
         )
-        if existing.data and len(existing.data) > 0:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Location already added to this option",
-            )
-    # Insert pass: now we can safely write rows.
+    # Batch-check conflicts (single query)
+    existing_check = (
+        supabase.table("option_locations")
+        .select("location_id")
+        .eq("option_id", option_id_str)
+        .in_("location_id", location_ids_to_add)
+        .execute()
+    )
+    if existing_check.data and len(existing_check.data) > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Location already added to this option",
+        )
+    # Batch insert via RPC (single DB call)
+    rpc_result = supabase.rpc(
+        "batch_insert_option_locations",
+        {
+            "p_option_id": option_id_str,
+            "p_location_ids": location_ids_to_add,
+            "p_sort_orders": [item.sort_order for item in body],
+            "p_time_periods": [item.time_period for item in body],
+        },
+    ).execute()
+    if not rpc_result.data or len(rpc_result.data) == 0:
+        logger.error(
+            "option_locations_batch_insert_failed",
+            trip_id=trip_id_str,
+            day_id=str(day_id),
+            option_id=option_id_str,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create one or more option-locations; please try again",
+        )
+    # Fetch location summaries in one query
+    loc_rows = (
+        supabase.table("locations")
+        .select(_LOCATION_SUMMARY_SELECT)
+        .eq("trip_id", trip_id_str)
+        .in_("location_id", location_ids_to_add)
+        .execute()
+    )
+    loc_by_id = {str(r["location_id"]): r for r in (loc_rows.data or [])}
     created: list[OptionLocationResponse] = []
-    for item in body:
-        row = {
-            "option_id": str(option_id),
-            "location_id": str(item.location_id),
-            "sort_order": item.sort_order,
-            "time_period": item.time_period,
-        }
-        result = supabase.table("option_locations").insert(row).execute()
-        if not result.data or len(result.data) == 0:
-            logger.error(
-                "option_locations_batch_insert_failed",
-                trip_id=str(trip_id),
-                day_id=str(day_id),
-                option_id=str(option_id),
-            )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to create one or more option-locations; please try again",
-            )
-        rec = result.data[0]
-        loc_row = (
-            supabase.table("locations")
-            .select(_LOCATION_SUMMARY_SELECT)
-            .eq("trip_id", str(trip_id))
-            .eq("location_id", str(rec.get("location_id")))
-            .execute()
-        )
-        loc_data = (loc_row.data or [None])[0] if loc_row.data else None
+    for rec in rpc_result.data:
+        loc_data = loc_by_id.get(str(rec.get("location_id")))
         created.append(_option_location_row_to_response(rec, loc_row=loc_data))
     logger.info(
         "option_locations_batch_added",

@@ -1010,6 +1010,30 @@ def mock_supabase_trips_and_days():
                     self._locations_store,
                 )
                 return type("RpcChain", (), {"execute": lambda _: _RpcResult(data)})()
+            if name == "reorder_option_locations":
+                oid = str(params.get("p_option_id", ""))
+                lids = [str(x) for x in (params.get("p_location_ids") or [])]
+                for pos, lid in enumerate(lids):
+                    for r in self._option_locations_store:
+                        if str(r.get("option_id")) == oid and str(r.get("location_id")) == lid:
+                            r["sort_order"] = pos
+                return type("RpcChain", (), {"execute": lambda _: _RpcResult(None)})()
+            if name == "batch_insert_option_locations":
+                oid = str(params.get("p_option_id", ""))
+                lids = [str(x) for x in (params.get("p_location_ids") or [])]
+                sorts = params.get("p_sort_orders") or []
+                periods = params.get("p_time_periods") or []
+                inserted = []
+                for i, lid in enumerate(lids):
+                    row = {
+                        "option_id": oid,
+                        "location_id": lid,
+                        "sort_order": int(sorts[i]) if i < len(sorts) else 0,
+                        "time_period": periods[i] if i < len(periods) else "morning",
+                    }
+                    self._option_locations_store.append(row)
+                    inserted.append(row)
+                return type("RpcChain", (), {"execute": lambda _: _RpcResult(inserted)})()
             return type("RpcChain", (), {"execute": lambda _: _RpcResult([])})()
 
     return trip_days_store, trips_store, MockSupabaseTripsAndDays
