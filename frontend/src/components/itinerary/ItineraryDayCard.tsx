@@ -171,7 +171,8 @@ function formatDate(dateStr: string): string {
 }
 
 // Grid column template shared by header + rows
-const GRID_COLS = "grid-cols-[1.5rem_6.5rem_1fr_5rem_5rem_5rem_1.5rem_1.5rem]";
+const GRID_COLS =
+  "grid-cols-[1.5rem_6rem_minmax(7rem,1.2fr)_4.5rem_minmax(5rem,0.8fr)_5rem_5rem_auto_1.5rem]";
 
 export interface ItineraryDayCardProps {
   day: ItineraryDay;
@@ -430,7 +431,7 @@ export function ItineraryDayCard({
       <div key={ol.location_id}>
         <div
           className={cn(
-            "group relative grid gap-x-2 items-center rounded-md px-1 py-1.5 text-sm transition-colors",
+            "group grid gap-x-2 items-center rounded-md px-1 py-1.5 text-sm transition-colors",
             GRID_COLS,
             isDrag && "opacity-40",
             isDrop && "ring-1 ring-primary ring-inset bg-accent/60",
@@ -440,21 +441,6 @@ export function ItineraryDayCard({
           onDragLeave={() => setDropId(null)}
           onDrop={(e) => onDrop(ol.location_id, e)}
         >
-          {/* Route indicator — continuous bar, extends beyond row edges */}
-          {routeInfo && (
-            <div
-              className={cn(
-                "absolute left-0 w-0 border-l-[3px]",
-                routeInfo.color.bar,
-                routeInfo.idx === 0
-                  ? "-bottom-1 top-1/2"
-                  : isLast
-                    ? "-top-1 bottom-1/2"
-                    : "-top-1 -bottom-1"
-              )}
-            />
-          )}
-
           {/* Col 1: drag or pick */}
           {creating ? (
             <button
@@ -509,7 +495,7 @@ export function ItineraryDayCard({
           {/* Col 3: name + city */}
           <button
             type="button"
-            className="min-w-0 text-left truncate"
+            className="min-w-0 text-left truncate flex items-center"
             onClick={() =>
               setExpandedId((p) =>
                 p === ol.location_id ? null : ol.location_id
@@ -517,15 +503,38 @@ export function ItineraryDayCard({
             }
             aria-expanded={expanded}
           >
-            <span className="font-medium">{ol.location.name}</span>
+            {routeInfo && (
+              <span
+                className={cn(
+                  "inline-flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold text-white mr-1.5 shrink-0",
+                  routeInfo.color.dot
+                )}
+              >
+                {routeInfo.idx + 1}
+              </span>
+            )}
+            <span className="font-medium truncate">{ol.location.name}</span>
             {ol.location.city && (
-              <span className="ml-1.5 text-muted-foreground text-xs">
+              <span className="ml-1.5 text-muted-foreground text-xs shrink-0">
                 {ol.location.city}
               </span>
             )}
           </button>
 
-          {/* Col 4: hours */}
+          {/* Col 4: category */}
+          <span className="truncate text-xs text-muted-foreground">
+            {ol.location.category ?? "—"}
+          </span>
+
+          {/* Col 5: note */}
+          <span
+            className="truncate text-xs text-muted-foreground"
+            title={ol.location.note ?? undefined}
+          >
+            {ol.location.note ?? "—"}
+          </span>
+
+          {/* Col 6: hours */}
           <span
             className="truncate text-xs text-muted-foreground"
             title={ol.location.working_hours ?? undefined}
@@ -533,7 +542,7 @@ export function ItineraryDayCard({
             {ol.location.working_hours ?? "—"}
           </span>
 
-          {/* Col 5: booking */}
+          {/* Col 7: booking */}
           <div>
             {showBk && (
               <span
@@ -550,7 +559,7 @@ export function ItineraryDayCard({
             )}
           </div>
 
-          {/* Col 6: map */}
+          {/* Col 8: map */}
           <div className="flex justify-center">
             {ol.location.google_link ? (
               <a
@@ -568,7 +577,7 @@ export function ItineraryDayCard({
             )}
           </div>
 
-          {/* Col 7: remove */}
+          {/* Col 9: remove */}
           {!creating && currentOption && (
             <button
               type="button"
@@ -610,26 +619,21 @@ export function ItineraryDayCard({
 
         {/* Route connector between consecutive stops */}
         {routeInfo && !isLast && TransportIcon && (
-          <div
-            className={cn("relative ml-1 flex items-center gap-1.5 py-px pl-3")}
-          >
+          <div className="flex items-center gap-2 py-0.5 pl-[1.5rem] ml-[6rem]">
             <div
               className={cn(
-                "absolute left-0 top-0 bottom-0 border-l-[3px]",
-                routeInfo.color.bar
-              )}
-            />
-            <div
-              className={cn(
-                "flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                "flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-medium",
                 routeInfo.color.bg,
                 routeInfo.color.text
               )}
             >
+              <span className="text-muted-foreground/60">↓</span>
               <TransportIcon size={10} />
-              {routeInfo.route.duration_seconds
-                ? `${Math.round(routeInfo.route.duration_seconds / 60)} min`
-                : "—"}
+              <span>
+                {routeInfo.route.duration_seconds
+                  ? `${Math.round(routeInfo.route.duration_seconds / 60)} min`
+                  : "—"}
+              </span>
             </div>
           </div>
         )}
@@ -822,10 +826,11 @@ export function ItineraryDayCard({
                   <div />
                   <div>Time</div>
                   <div>Location</div>
+                  <div>Category</div>
+                  <div>Note</div>
                   <div>Hours</div>
                   <div>Booking</div>
                   <div className="text-center">Map</div>
-                  <div />
                   <div />
                 </div>
               )}
