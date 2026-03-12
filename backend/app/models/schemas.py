@@ -375,6 +375,7 @@ class LocationPreviewResponse(BaseModel):
 
     name: str
     address: str | None = None
+    city: str | None = None
     latitude: float | None = None
     longitude: float | None = None
     google_place_id: str
