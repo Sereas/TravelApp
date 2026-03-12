@@ -7,10 +7,10 @@ calling Google to preserve quotas.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import parse_qs, unquote, urlparse
-import re
+from urllib.parse import unquote, urlparse
 
 import httpx
 
@@ -75,7 +75,9 @@ class GooglePlacesClient:
         resp = self._http.get(url, follow_redirects=True)
         return str(resp.url)
 
-    def _extract_name_and_location_from_url(self, url: str) -> tuple[str | None, float | None, float | None]:
+    def _extract_name_and_location_from_url(
+        self, url: str
+    ) -> tuple[str | None, float | None, float | None]:
         """Extract place display name and high-precision lat/lng from a Google Maps URL."""
         parsed = urlparse(url)
         decoded_path = unquote(parsed.path)
@@ -148,9 +150,7 @@ class GooglePlacesClient:
             raise RuntimeError("Places search returned no candidates")
         place = places[0] or {}
         location = place.get("location") or {}
-        opening = (place.get("regularOpeningHours") or {}).get(
-            "weekdayDescriptions", []
-        ) or []
+        opening = (place.get("regularOpeningHours") or {}).get("weekdayDescriptions", []) or []
         display_name = place.get("displayName") or {}
 
         return PlaceResolution(
@@ -172,4 +172,3 @@ def get_google_places_client() -> GooglePlacesClient:
     settings = get_settings()
     api_key = settings.google_places_api_key or ""
     return GooglePlacesClient(api_key)
-

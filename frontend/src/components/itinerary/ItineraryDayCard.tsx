@@ -172,7 +172,7 @@ function formatDate(dateStr: string): string {
 
 // Grid column template shared by header + rows
 const GRID_COLS =
-  "grid-cols-[1.5rem_6rem_minmax(7rem,1.2fr)_4.5rem_minmax(5rem,0.8fr)_5rem_5rem_auto_1.5rem]";
+  "grid-cols-[1.5rem_5.5rem_minmax(7rem,1.5fr)_minmax(3rem,0.5fr)_minmax(3rem,0.5fr)_minmax(3rem,0.5fr)_auto_auto_1.5rem]";
 
 export interface ItineraryDayCardProps {
   day: ItineraryDay;
@@ -359,6 +359,7 @@ export function ItineraryDayCard({
 
   const [showMap, setShowMap] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedColKey, setExpandedColKey] = useState<string | null>(null);
 
   const sorted = useMemo(
     () =>
@@ -522,25 +523,64 @@ export function ItineraryDayCard({
           </button>
 
           {/* Col 4: category */}
-          <span className="truncate text-xs text-muted-foreground">
+          <button
+            type="button"
+            className={cn(
+              "text-left text-xs text-muted-foreground min-w-0",
+              expandedColKey === `${ol.location_id}-category`
+                ? "whitespace-pre-wrap break-words"
+                : "truncate"
+            )}
+            onClick={() =>
+              setExpandedColKey((p) =>
+                p === `${ol.location_id}-category`
+                  ? null
+                  : `${ol.location_id}-category`
+              )
+            }
+          >
             {ol.location.category ?? "—"}
-          </span>
+          </button>
 
           {/* Col 5: note */}
-          <span
-            className="truncate text-xs text-muted-foreground"
+          <button
+            type="button"
+            className={cn(
+              "text-left text-xs text-muted-foreground min-w-0",
+              expandedColKey === `${ol.location_id}-note`
+                ? "whitespace-pre-wrap break-words"
+                : "truncate"
+            )}
             title={ol.location.note ?? undefined}
+            onClick={() =>
+              setExpandedColKey((p) =>
+                p === `${ol.location_id}-note` ? null : `${ol.location_id}-note`
+              )
+            }
           >
             {ol.location.note ?? "—"}
-          </span>
+          </button>
 
           {/* Col 6: hours */}
-          <span
-            className="truncate text-xs text-muted-foreground"
+          <button
+            type="button"
+            className={cn(
+              "text-left text-xs text-muted-foreground min-w-0",
+              expandedColKey === `${ol.location_id}-hours`
+                ? "whitespace-pre-wrap break-words"
+                : "truncate"
+            )}
             title={ol.location.working_hours ?? undefined}
+            onClick={() =>
+              setExpandedColKey((p) =>
+                p === `${ol.location_id}-hours`
+                  ? null
+                  : `${ol.location_id}-hours`
+              )
+            }
           >
             {ol.location.working_hours ?? "—"}
-          </span>
+          </button>
 
           {/* Col 7: booking */}
           <div>

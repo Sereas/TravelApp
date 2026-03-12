@@ -277,6 +277,7 @@ export const api = {
       request<{
         name: string;
         address: string | null;
+        city?: string | null;
         latitude: number | null;
         longitude: number | null;
         google_place_id: string;

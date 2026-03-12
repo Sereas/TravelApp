@@ -5,10 +5,10 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from backend.app.clients.google_places import PlaceResolution
-from backend.app.routers import locations_google
 from backend.app.db.supabase import get_supabase_client
 from backend.app.dependencies import get_current_user_id
 from backend.app.main import app
+from backend.app.routers import locations_google
 
 
 class _DummySupabase:
@@ -41,7 +41,7 @@ def test_preview_location_from_google_link_returns_200(client: TestClient, monke
             formatted_phone_number="+33 1 40 20 50 50",
             opening_hours_text=[
                 "Monday: Closed",
-                "Tuesday: 9:00 AM – 6:00 PM",
+                "Tuesday: 9:00 AM - 6:00 PM",
             ],
             raw={"result": {"place_id": "ChIJCzYy5IS16lQRQrfeQ5K5Oxw"}, "status": "OK"},
         )
@@ -83,4 +83,3 @@ def test_preview_location_missing_google_link_returns_422(client: TestClient, mo
         assert r.status_code == 422
     finally:
         app.dependency_overrides.clear()
-
