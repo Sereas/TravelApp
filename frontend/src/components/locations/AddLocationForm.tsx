@@ -67,11 +67,8 @@ export function AddLocationForm({
       if (!address && preview.address) {
         setAddress(preview.address);
       }
-      if (!city && preview.address) {
-        const match = preview.address.match(/,\s*([^,]+),\s*[^,]+$/);
-        if (match) {
-          setCity(match[1]);
-        }
+      if (!city && preview.city) {
+        setCity(preview.city);
       }
       if (!workingHours && preview.working_hours.length > 0) {
         setWorkingHours(preview.working_hours.join(" | "));
@@ -122,6 +119,29 @@ export function AddLocationForm({
     <form onSubmit={handleSubmit} className="space-y-3">
       {error && <ErrorBanner message={error} />}
 
+      <div className="space-y-2 rounded-md bg-blue-50/50 p-3">
+        <Label htmlFor="add-location-google-link">Google Maps link</Label>
+        <p className="text-xs text-muted-foreground">
+          Paste a link to auto-fill details
+        </p>
+        <Input
+          id="add-location-google-link"
+          type="url"
+          placeholder="https://maps.google.com/..."
+          value={googleLink}
+          onChange={(e) => {
+            setGoogleLink(e.target.value);
+            setPreviewed(false);
+          }}
+          onBlur={() => void handleGoogleLinkBlur()}
+          autoFocus
+          autoComplete="off"
+        />
+        {previewLoading && (
+          <p className="text-xs text-muted-foreground">Fetching from Google…</p>
+        )}
+      </div>
+
       <div className="space-y-2">
         <Label htmlFor="add-location-name">Location name</Label>
         <Input
@@ -130,7 +150,6 @@ export function AddLocationForm({
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
-          autoFocus
           autoComplete="off"
         />
       </div>
@@ -155,24 +174,6 @@ export function AddLocationForm({
           onChange={(e) => setCity(e.target.value)}
           autoComplete="off"
         />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="add-location-google-link">
-          Google Maps link (optional)
-        </Label>
-        <Input
-          id="add-location-google-link"
-          type="url"
-          placeholder="https://maps.google.com/..."
-          value={googleLink}
-          onChange={(e) => setGoogleLink(e.target.value)}
-          onBlur={() => void handleGoogleLinkBlur()}
-          autoComplete="off"
-        />
-        {previewLoading && (
-          <p className="text-xs text-muted-foreground">Fetching from Google…</p>
-        )}
       </div>
 
       <div className="space-y-2">
