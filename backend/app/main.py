@@ -14,6 +14,7 @@ from backend.app.routers import (
     itinerary_options,
     itinerary_routes,
     itinerary_tree,
+    locations_google,
     trip_locations,
     trips,
 )
@@ -49,6 +50,7 @@ app.add_middleware(RequestLoggingMiddleware)
 app.include_router(infra.router)
 app.include_router(trips.router, prefix="/api/v1")
 app.include_router(trip_locations.router, prefix="/api/v1")
+app.include_router(locations_google.router, prefix="/api/v1")
 app.include_router(itinerary_days.router, prefix="/api/v1")
 app.include_router(itinerary_options.router, prefix="/api/v1")
 app.include_router(itinerary_option_locations.router, prefix="/api/v1")

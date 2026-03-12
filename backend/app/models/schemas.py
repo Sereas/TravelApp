@@ -43,7 +43,15 @@ CATEGORY_VALUES = frozenset(
     }
 )
 
-_NULLABLE_TEXT_FIELDS = ("address", "google_link", "note", "city", "working_hours")
+_NULLABLE_TEXT_FIELDS = (
+    "address",
+    "google_link",
+    "note",
+    "city",
+    "working_hours",
+    "google_place_id",
+    "google_source_type",
+)
 
 # Max lengths aligned with DB / audit (city varchar(255); others reasonable limits)
 _LOCATION_NAME_MAX = 500
@@ -102,6 +110,9 @@ class AddLocationBody(_LocationFieldsMixin):
         description="One of: no, yes, yes_done",
     )
     category: str | None = None
+    google_place_id: str | None = None
+    google_source_type: str | None = None
+    google_raw: dict | None = None
 
 
 class LocationResponse(BaseModel):
@@ -111,6 +122,9 @@ class LocationResponse(BaseModel):
     name: str = Field(..., description="Location name")
     address: str | None = None
     google_link: str | None = None
+    google_place_id: str | None = None
+    google_source_type: str | None = None
+    google_raw: dict | None = None
     note: str | None = None
     added_by_user_id: str | None = None
     added_by_email: str | None = None
@@ -148,6 +162,9 @@ class UpdateLocationBody(_LocationFieldsMixin):
     working_hours: str | None = Field(None, max_length=_LOCATION_WORKING_HOURS_MAX)
     requires_booking: str | None = None
     category: str | None = None
+    google_place_id: str | None = None
+    google_source_type: str | None = None
+    google_raw: dict | None = None
 
 
 # -------- Itinerary schemas (trip_days, day_options, option_locations) --------
@@ -351,6 +368,21 @@ class ItineraryResponse(BaseModel):
     """Full itinerary for a trip: list of days with nested options and locations."""
 
     days: list[ItineraryDay] = Field(default_factory=list)
+
+
+class LocationPreviewResponse(BaseModel):
+    """Response body for Google-based location preview (no DB write)."""
+
+    name: str
+    address: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    google_place_id: str
+    suggested_category: str | None = None
+    working_hours: list[str] = Field(default_factory=list)
+    website: str | None = None
+    phone: str | None = None
+    google_raw: dict
 
 
 # -------- Route schemas (option_routes, route_stops) --------

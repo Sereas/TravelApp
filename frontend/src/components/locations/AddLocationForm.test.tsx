@@ -4,10 +4,14 @@ import userEvent from "@testing-library/user-event";
 import { AddLocationForm } from "./AddLocationForm";
 
 const mockAdd = vi.fn();
+const mockPreview = vi.fn();
 vi.mock("@/lib/api", () => ({
   api: {
     locations: {
       add: (...args: unknown[]) => mockAdd(...args),
+    },
+    google: {
+      previewLocationFromLink: (...args: unknown[]) => mockPreview(...args),
     },
   },
 }));
@@ -83,6 +87,9 @@ describe("AddLocationForm", () => {
         name: "Louvre",
         address: "Rue de Rivoli",
         google_link: null,
+        google_place_id: null,
+        google_source_type: null,
+        google_raw: null,
         note: "Book ahead",
         city: "Paris",
         working_hours: "9-18",
@@ -121,6 +128,9 @@ describe("AddLocationForm", () => {
         name: "Place",
         address: null,
         google_link: null,
+        google_place_id: null,
+        google_source_type: null,
+        google_raw: null,
         note: null,
         city: null,
         working_hours: null,
@@ -165,5 +175,45 @@ describe("AddLocationForm", () => {
     );
 
     expect(screen.getByRole("button", { name: /adding/i })).toBeInTheDocument();
+  });
+
+  it("calls Google preview on blur and prefills fields", async () => {
+    mockPreview.mockResolvedValue({
+      name: "Louvre Museum",
+      address: "Rue de Rivoli, 75001 Paris, France",
+      latitude: 48.8606111,
+      longitude: 2.337644,
+      google_place_id: "ChIJCzYy5IS16lQRQrfeQ5K5Oxw",
+      suggested_category: "Museum",
+      working_hours: ["Tuesday: 9-18"],
+      website: "https://www.louvre.fr/en",
+      phone: "+33 1 40 20 50 50",
+      google_raw: { status: "OK" },
+    });
+
+    render(
+      <AddLocationForm tripId={tripId} onAdded={onAdded} onCancel={onCancel} />
+    );
+
+    const linkInput = screen.getByLabelText(/google maps link/i);
+    await userEvent.type(
+      linkInput,
+      "https://maps.app.goo.gl/HFaERRSAPvPePT1D6"
+    );
+    await userEvent.tab(); // trigger blur
+
+    await waitFor(() => {
+      expect(mockPreview).toHaveBeenCalledWith({
+        google_link: "https://maps.app.goo.gl/HFaERRSAPvPePT1D6",
+      });
+    });
+
+    // Name and address should be prefilled from preview
+    expect(
+      (screen.getByLabelText(/location name/i) as HTMLInputElement).value
+    ).toBe("Louvre Museum");
+    expect(
+      (screen.getByLabelText(/address/i) as HTMLInputElement).value
+    ).toContain("Rue de Rivoli");
   });
 });

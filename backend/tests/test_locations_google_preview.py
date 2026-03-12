@@ -1,0 +1,86 @@
+"""Tests for POST /api/v1/locations/google/preview."""
+
+from uuid import uuid4
+
+from fastapi.testclient import TestClient
+
+from backend.app.clients.google_places import PlaceResolution
+from backend.app.routers import locations_google
+from backend.app.db.supabase import get_supabase_client
+from backend.app.dependencies import get_current_user_id
+from backend.app.main import app
+
+
+class _DummySupabase:
+    def table(self, name):  # pragma: no cover - preview does not touch DB
+        raise AssertionError(f"Preview should not access table {name}")
+
+
+def _override_auth_and_supabase(client: TestClient, user_id):
+    async def override_user():
+        return user_id
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: _DummySupabase()
+
+
+def test_preview_location_from_google_link_returns_200(client: TestClient, monkeypatch):
+    """Valid google_link and mocked Google client -> 200 with normalized fields and raw JSON."""
+    user_id = uuid4()
+    _override_auth_and_supabase(client, user_id)
+
+    def fake_resolve_from_link(_link: str) -> PlaceResolution:
+        return PlaceResolution(
+            place_id="ChIJCzYy5IS16lQRQrfeQ5K5Oxw",
+            name="Louvre Museum",
+            formatted_address="Rue de Rivoli, 75001 Paris, France",
+            latitude=48.8606111,
+            longitude=2.337644,
+            types=["museum", "tourist_attraction"],
+            website="https://www.louvre.fr/en",
+            formatted_phone_number="+33 1 40 20 50 50",
+            opening_hours_text=[
+                "Monday: Closed",
+                "Tuesday: 9:00 AM – 6:00 PM",
+            ],
+            raw={"result": {"place_id": "ChIJCzYy5IS16lQRQrfeQ5K5Oxw"}, "status": "OK"},
+        )
+
+    class FakeClient:
+        def resolve_from_link(self, _link: str) -> PlaceResolution:
+            return fake_resolve_from_link(_link)
+
+    monkeypatch.setattr(locations_google, "get_google_places_client", lambda: FakeClient())
+    try:
+        r = client.post(
+            "/api/v1/locations/google/preview",
+            json={"google_link": "https://maps.app.goo.gl/HFaERRSAPvPePT1D6"},
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["name"] == "Louvre Museum"
+        assert data["address"].startswith("Rue de Rivoli")
+        assert data["google_place_id"] == "ChIJCzYy5IS16lQRQrfeQ5K5Oxw"
+        assert data["google_raw"]["status"] == "OK"
+        # Category suggestion from types
+        assert data["suggested_category"] == "Museum"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_preview_location_missing_google_link_returns_422(client: TestClient, monkeypatch):
+    """Missing google_link -> 422."""
+    user_id = uuid4()
+    _override_auth_and_supabase(client, user_id)
+
+    # Prevent accidental real HTTP calls if the handler changes
+    def fake_get_client():
+        raise AssertionError("get_google_places_client should not be called for empty link")
+
+    monkeypatch.setattr(locations_google, "get_google_places_client", fake_get_client)
+    try:
+        r = client.post("/api/v1/locations/google/preview", json={})
+        assert r.status_code == 422
+    finally:
+        app.dependency_overrides.clear()
+

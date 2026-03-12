@@ -18,8 +18,9 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger("locations")
 router = APIRouter(prefix="/trips", tags=["trips-locations"])
 
 _LOCATIONS_SELECT = (
-    "location_id, trip_id, name, address, google_link, note, "
-    "added_by_user_id, city, working_hours, requires_booking, category"
+    "location_id, trip_id, name, address, google_link, google_place_id, "
+    "google_source_type, google_raw, note, added_by_user_id, city, "
+    "working_hours, requires_booking, category"
 )
 
 
@@ -46,6 +47,9 @@ def _loc_to_response(supabase_client, loc: dict) -> LocationResponse:
         name=loc.get("name", ""),
         address=loc.get("address"),
         google_link=loc.get("google_link"),
+        google_place_id=loc.get("google_place_id"),
+        google_source_type=loc.get("google_source_type"),
+        google_raw=loc.get("google_raw"),
         note=loc.get("note"),
         added_by_user_id=uid_str,
         added_by_email=_resolve_user_email(supabase_client, uid_str),
@@ -90,6 +94,9 @@ async def add_location(
         "name": body.name,
         "address": body.address,
         "google_link": body.google_link,
+        "google_place_id": body.google_place_id,
+        "google_source_type": body.google_source_type,
+        "google_raw": body.google_raw,
         "note": body.note,
         "added_by_user_id": str(user_id),
         "city": body.city,
@@ -203,6 +210,9 @@ async def batch_add_locations(
             "name": item.name,
             "address": item.address,
             "google_link": item.google_link,
+            "google_place_id": item.google_place_id,
+            "google_source_type": item.google_source_type,
+            "google_raw": item.google_raw,
             "note": item.note,
             "added_by_user_id": str(user_id),
             "city": item.city,
@@ -297,6 +307,9 @@ async def update_location(
         "name",
         "address",
         "google_link",
+        "google_place_id",
+        "google_source_type",
+        "google_raw",
         "note",
         "city",
         "working_hours",
