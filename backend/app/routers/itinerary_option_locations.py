@@ -399,11 +399,13 @@ async def remove_location_from_option(
     _ensure_trip_owned(supabase, trip_id, user_id)
     _ensure_day_in_trip(supabase, trip_id, day_id)
     _ensure_option_in_day(supabase, day_id, option_id)
+    option_id_str = str(option_id)
+    location_id_str = str(location_id)
     existing = (
         supabase.table("option_locations")
         .select("option_id, location_id")
-        .eq("option_id", str(option_id))
-        .eq("location_id", str(location_id))
+        .eq("option_id", option_id_str)
+        .eq("location_id", location_id_str)
         .execute()
     )
     if not existing.data or len(existing.data) == 0:
@@ -411,8 +413,52 @@ async def remove_location_from_option(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Option-location not found",
         )
-    supabase.table("option_locations").delete().eq("option_id", str(option_id)).eq(
-        "location_id", str(location_id)
+    # If this location participates in any routes for this option, update those routes.
+    # Behaviour:
+    # - For any route that would end up with < 2 stops after removal, delete the route.
+    # - Otherwise, delete only the stops for this location (route remains with remaining stops).
+    routes_result = (
+        supabase.table("route_stops")
+        .select("route_id, location_id, stop_order")
+        .eq("location_id", location_id_str)
+        .execute()
+    )
+    route_ids = {str(r["route_id"]) for r in (routes_result.data or [])}
+    if route_ids:
+        option_routes = (
+            supabase.table("option_routes")
+            .select("route_id")
+            .eq("option_id", option_id_str)
+            .in_("route_id", list(route_ids))
+            .execute()
+        )
+        option_route_ids = {str(r["route_id"]) for r in (option_routes.data or [])}
+        if option_route_ids:
+            # Fetch all stops for these routes to know how many remain after removal.
+            all_stops_result = (
+                supabase.table("route_stops")
+                .select("route_id, location_id, stop_order")
+                .in_("route_id", list(option_route_ids))
+                .execute()
+            )
+            stops_by_route: dict[str, list[dict]] = {}
+            for s in all_stops_result.data or []:
+                rid = str(s["route_id"])
+                stops_by_route.setdefault(rid, []).append(s)
+            for rid, stops in stops_by_route.items():
+                remaining = [
+                    s for s in stops if str(s.get("location_id")) != location_id_str
+                ]
+                if len(remaining) < 2:
+                    # Route is no longer meaningful; delete it (stops cascade).
+                    supabase.table("option_routes").delete().eq("route_id", rid).execute()
+                else:
+                    # Just remove the stop(s) for this location; keep route.
+                    supabase.table("route_stops").delete().eq("route_id", rid).eq(
+                        "location_id", location_id_str
+                    ).execute()
+    supabase.table("option_locations").delete().eq("option_id", option_id_str).eq(
+        "location_id", location_id_str
     ).execute()
     logger.info(
         "option_location_removed",

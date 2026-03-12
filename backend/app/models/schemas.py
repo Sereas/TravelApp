@@ -132,6 +132,8 @@ class LocationResponse(BaseModel):
     working_hours: str | None = None
     requires_booking: str | None = None
     category: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
 
 
 # Batch add: same shape as AddLocationBody per item

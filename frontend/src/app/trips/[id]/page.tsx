@@ -335,7 +335,12 @@ export default function TripDetailPage() {
     const currentOption = itinerary?.days
       .find((d) => d.id === dayId)
       ?.options.find((o) => o.id === optionId);
-    const startOrder = currentOption?.locations.length ?? 0;
+    // Append new locations after the current highest sort_order, not just by count.
+    const maxSortOrder =
+      currentOption && currentOption.locations.length > 0
+        ? Math.max(...currentOption.locations.map((l) => l.sort_order))
+        : -1;
+    const startOrder = maxSortOrder + 1;
 
     const items = locationIds.map((lid, i) => ({
       location_id: lid,
@@ -365,6 +370,47 @@ export default function TripDetailPage() {
     locationId: string
   ) {
     setItineraryActionError(null);
+    // Optimistically update locations and routes for this option so UI reacts immediately.
+    setItinerary((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        days: prev.days.map((d) =>
+          d.id === dayId
+            ? {
+                ...d,
+                options: d.options.map((o) => {
+                  if (o.id !== optionId) return o;
+                  // Remove location from option locations
+                  const nextLocations = o.locations.filter(
+                    (l) => l.location_id !== locationId
+                  );
+                  // Update routes: drop this location from each route; delete routes with < 2 stops
+                  const nextRoutes =
+                    o.routes?.length > 0
+                      ? (o.routes
+                          .map((r) => {
+                            const remainingIds = r.location_ids.filter(
+                              (id) => id !== locationId
+                            );
+                            if (remainingIds.length < 2) {
+                              return null;
+                            }
+                            return { ...r, location_ids: remainingIds };
+                          })
+                          .filter(Boolean) as typeof o.routes)
+                      : o.routes;
+                  return {
+                    ...o,
+                    locations: nextLocations,
+                    routes: nextRoutes,
+                  };
+                }),
+              }
+            : d
+        ),
+      };
+    });
     try {
       await api.itinerary.removeLocationFromOption(
         tripId,
@@ -372,33 +418,12 @@ export default function TripDetailPage() {
         optionId,
         locationId
       );
-      setItinerary((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          days: prev.days.map((d) =>
-            d.id === dayId
-              ? {
-                  ...d,
-                  options: d.options.map((o) =>
-                    o.id === optionId
-                      ? {
-                          ...o,
-                          locations: o.locations.filter(
-                            (l) => l.location_id !== locationId
-                          ),
-                        }
-                      : o
-                  ),
-                }
-              : d
-          ),
-        };
-      });
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to remove location";
       setItineraryActionError(message);
+      // Backend rejected the change; refresh from server to correct optimistic state.
+      await fetchItinerary();
     }
   }
 

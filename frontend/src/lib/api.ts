@@ -73,6 +73,8 @@ export interface Location {
   working_hours: string | null;
   requires_booking: string | null; // no | yes | yes_done
   category: string | null;
+  latitude: number | null;
+  longitude: number | null;
 }
 
 /** Minimal location info embedded in itinerary tree. */

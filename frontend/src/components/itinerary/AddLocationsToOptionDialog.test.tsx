@@ -16,6 +16,8 @@ const defaultLocations = [
     working_hours: null,
     requires_booking: null,
     category: "Viewpoint",
+    latitude: null,
+    longitude: null,
   },
   {
     id: "loc-2",
@@ -29,6 +31,8 @@ const defaultLocations = [
     working_hours: null,
     requires_booking: null,
     category: "Museum",
+    latitude: null,
+    longitude: null,
   },
   {
     id: "loc-3",
@@ -42,6 +46,8 @@ const defaultLocations = [
     working_hours: null,
     requires_booking: null,
     category: null,
+    latitude: null,
+    longitude: null,
   },
 ];
 

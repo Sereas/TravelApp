@@ -20,7 +20,7 @@ router = APIRouter(prefix="/trips", tags=["trips-locations"])
 _LOCATIONS_SELECT = (
     "location_id, trip_id, name, address, google_link, google_place_id, "
     "google_source_type, google_raw, note, added_by_user_id, city, "
-    "working_hours, requires_booking, category"
+    "working_hours, requires_booking, category, latitude, longitude"
 )
 
 
@@ -36,6 +36,22 @@ def _resolve_user_email(supabase_client, user_id: str | None) -> str | None:
         return None
     except Exception:
         return None
+
+
+def _extract_lat_lng_from_google_raw(raw: dict | None) -> tuple[float | None, float | None]:
+    """Best-effort extraction of latitude/longitude from stored Google raw JSON."""
+    if not isinstance(raw, dict):
+        return None, None
+    places = raw.get("places")
+    if isinstance(places, list) and places:
+        location = places[0].get("location") or {}
+        return location.get("latitude"), location.get("longitude")
+    result = raw.get("result")
+    if isinstance(result, dict):
+        geom = result.get("geometry") or {}
+        loc = geom.get("location") or {}
+        return loc.get("lat"), loc.get("lng")
+    return None, None
 
 
 def _loc_to_response(supabase_client, loc: dict) -> LocationResponse:
@@ -57,6 +73,8 @@ def _loc_to_response(supabase_client, loc: dict) -> LocationResponse:
         working_hours=loc.get("working_hours"),
         requires_booking=loc.get("requires_booking"),
         category=loc.get("category"),
+        latitude=loc.get("latitude"),
+        longitude=loc.get("longitude"),
     )
 
 
@@ -104,6 +122,12 @@ async def add_location(
         "requires_booking": body.requires_booking,
         "category": body.category,
     }
+    # If this location came from a Google preview, persist coordinates into dedicated columns.
+    lat, lng = _extract_lat_lng_from_google_raw(body.google_raw)
+    if lat is not None:
+        row["latitude"] = lat
+    if lng is not None:
+        row["longitude"] = lng
     result = supabase.table("locations").insert(row).execute()
     if not result.data or len(result.data) == 0:
         logger.error("location_insert_failed", trip_id=str(trip_id))
@@ -204,8 +228,9 @@ async def batch_add_locations(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Trip not owned by user",
         )
-    rows = [
-        {
+    rows = []
+    for item in body:
+        row = {
             "trip_id": str(trip_id),
             "name": item.name,
             "address": item.address,
@@ -220,8 +245,12 @@ async def batch_add_locations(
             "requires_booking": item.requires_booking,
             "category": item.category,
         }
-        for item in body
-    ]
+        lat, lng = _extract_lat_lng_from_google_raw(item.google_raw)
+        if lat is not None:
+            row["latitude"] = lat
+        if lng is not None:
+            row["longitude"] = lng
+        rows.append(row)
     result = supabase.table("locations").insert(rows).execute()
     if not result.data or len(result.data) != len(body):
         logger.error(

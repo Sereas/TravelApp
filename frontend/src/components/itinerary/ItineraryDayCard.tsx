@@ -17,6 +17,7 @@ import {
   type ItineraryOptionLocation,
   type Location,
 } from "@/lib/api";
+import { ItineraryDayMap } from "@/components/itinerary/ItineraryDayMap";
 import { AddLocationsToOptionDialog } from "@/components/itinerary/AddLocationsToOptionDialog";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -170,9 +171,57 @@ function formatDate(dateStr: string): string {
   });
 }
 
-// Grid column template shared by header + rows
+function previewText(value: string | null | undefined, max: number): string {
+  if (!value) return "—";
+  if (value.length <= max) return value;
+  return `${value.slice(0, max - 1)}…`;
+}
+
+function formatHoursLines(value: string | null | undefined): string[] {
+  if (!value) return [];
+  // Normalize newlines
+  const normalized = value.replace(/\r\n/g, "\n");
+  // If there are explicit delimiters like | or ;, prefer those
+  if (/[|;]/.test(normalized)) {
+    return normalized
+      .split(/[|;]+/)
+      .map((v) => v.trim())
+      .filter(Boolean);
+  }
+  // Otherwise, if there are line breaks, keep them as separate rows
+  if (/\n/.test(normalized)) {
+    return normalized
+      .split("\n")
+      .map((v) => v.trim())
+      .filter(Boolean);
+  }
+  // Fallback: single line as-is
+  const trimmed = normalized.trim();
+  return trimmed ? [trimmed] : [];
+}
+
+function formatRouteTime(route?: {
+  duration_seconds?: number | null;
+}): string {
+  if (!route || route.duration_seconds == null) return "— min";
+  return `${Math.round(route.duration_seconds / 60)} min`;
+}
+
+function formatRouteDistance(route?: {
+  distance_meters?: number | null;
+}): string {
+  if (!route || route.distance_meters == null) return "— km";
+  const km = route.distance_meters / 1000;
+  const decimals = km >= 10 ? 0 : 1;
+  return `${km.toFixed(decimals)} km`;
+}
+
+// Grid column template shared by header + rows.
+// Layout priorities:
+// - Time + location get most space.
+// - Remaining columns are compact action/info columns.
 const GRID_COLS =
-  "grid-cols-[1.5rem_5.5rem_minmax(7rem,1.5fr)_minmax(3rem,0.5fr)_minmax(3rem,0.5fr)_minmax(3rem,0.5fr)_auto_auto_1.5rem]";
+  "grid-cols-[1.5rem_5.5rem_minmax(7rem,1.5fr)_auto_1.5rem_auto_1.5rem]";
 
 export interface ItineraryDayCardProps {
   day: ItineraryDay;
@@ -359,7 +408,6 @@ export function ItineraryDayCard({
 
   const [showMap, setShowMap] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [expandedColKey, setExpandedColKey] = useState<string | null>(null);
 
   const sorted = useMemo(
     () =>
@@ -369,6 +417,28 @@ export function ItineraryDayCard({
           )
         : [],
     [currentOption]
+  );
+
+  const mapLocations = useMemo(
+    () =>
+      sorted
+        .map((ol) =>
+          tripLocations.find((loc) => loc.id === ol.location_id)
+        )
+        .filter(
+          (loc): loc is Location =>
+            !!loc &&
+            typeof loc.latitude === "number" &&
+            typeof loc.longitude === "number"
+        )
+        .map((loc) => ({
+          id: loc.id,
+          name: loc.name,
+          address: loc.address,
+          latitude: loc.latitude as number,
+          longitude: loc.longitude as number,
+        })),
+    [sorted, tripLocations]
   );
 
   // Drag handlers
@@ -432,7 +502,7 @@ export function ItineraryDayCard({
       <div key={ol.location_id}>
         <div
           className={cn(
-            "group grid gap-x-2 items-center rounded-md px-1 py-1.5 text-sm transition-colors",
+            "group grid gap-x-3 items-center rounded-md px-1 py-1.5 text-sm transition-colors",
             GRID_COLS,
             isDrag && "opacity-40",
             isDrop && "ring-1 ring-primary ring-inset bg-accent/60",
@@ -522,68 +592,8 @@ export function ItineraryDayCard({
             )}
           </button>
 
-          {/* Col 4: category */}
-          <button
-            type="button"
-            className={cn(
-              "text-left text-xs text-muted-foreground min-w-0",
-              expandedColKey === `${ol.location_id}-category`
-                ? "whitespace-pre-wrap break-words"
-                : "truncate"
-            )}
-            onClick={() =>
-              setExpandedColKey((p) =>
-                p === `${ol.location_id}-category`
-                  ? null
-                  : `${ol.location_id}-category`
-              )
-            }
-          >
-            {ol.location.category ?? "—"}
-          </button>
-
-          {/* Col 5: note */}
-          <button
-            type="button"
-            className={cn(
-              "text-left text-xs text-muted-foreground min-w-0",
-              expandedColKey === `${ol.location_id}-note`
-                ? "whitespace-pre-wrap break-words"
-                : "truncate"
-            )}
-            title={ol.location.note ?? undefined}
-            onClick={() =>
-              setExpandedColKey((p) =>
-                p === `${ol.location_id}-note` ? null : `${ol.location_id}-note`
-              )
-            }
-          >
-            {ol.location.note ?? "—"}
-          </button>
-
-          {/* Col 6: hours */}
-          <button
-            type="button"
-            className={cn(
-              "text-left text-xs text-muted-foreground min-w-0",
-              expandedColKey === `${ol.location_id}-hours`
-                ? "whitespace-pre-wrap break-words"
-                : "truncate"
-            )}
-            title={ol.location.working_hours ?? undefined}
-            onClick={() =>
-              setExpandedColKey((p) =>
-                p === `${ol.location_id}-hours`
-                  ? null
-                  : `${ol.location_id}-hours`
-              )
-            }
-          >
-            {ol.location.working_hours ?? "—"}
-          </button>
-
-          {/* Col 7: booking */}
-          <div>
+          {/* Col 4: booking */}
+          <div className="flex justify-start">
             {showBk && (
               <span
                 className={cn(
@@ -599,7 +609,10 @@ export function ItineraryDayCard({
             )}
           </div>
 
-          {/* Col 8: map */}
+          {/* Col 5: spacer */}
+          <div />
+
+          {/* Col 6: map */}
           <div className="flex justify-center">
             {ol.location.google_link ? (
               <a
@@ -617,7 +630,7 @@ export function ItineraryDayCard({
             )}
           </div>
 
-          {/* Col 9: remove */}
+          {/* Col 7: remove */}
           {!creating && currentOption && (
             <button
               type="button"
@@ -654,6 +667,20 @@ export function ItineraryDayCard({
                 <span className="whitespace-pre-wrap">{ol.location.note}</span>
               </div>
             )}
+            {ol.location.working_hours && (
+              <div>
+                <span className="text-muted-foreground">Hours:</span>{" "}
+                <span className="whitespace-pre-wrap">
+                  {formatHoursLines(ol.location.working_hours).map(
+                    (line, idx) => (
+                      <span key={idx} className="block">
+                        {line}
+                      </span>
+                    )
+                  )}
+                </span>
+              </div>
+            )}
           </div>
         )}
 
@@ -670,9 +697,8 @@ export function ItineraryDayCard({
               <span className="text-muted-foreground/60">↓</span>
               <TransportIcon size={10} />
               <span>
-                {routeInfo.route.duration_seconds
-                  ? `${Math.round(routeInfo.route.duration_seconds / 60)} min`
-                  : "—"}
+                {formatRouteTime(routeInfo.route)} ·{" "}
+                {formatRouteDistance(routeInfo.route)}
               </span>
             </div>
           </div>
@@ -859,17 +885,15 @@ export function ItineraryDayCard({
               {sorted.length > 0 && (
                 <div
                   className={cn(
-                    "grid gap-x-2 px-1 pb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60 border-b border-border/50 mb-1",
+                    "grid gap-x-3 px-1 pb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60 border-b border-border/50 mb-1",
                     GRID_COLS
                   )}
                 >
                   <div />
                   <div>Time</div>
                   <div>Location</div>
-                  <div>Category</div>
-                  <div>Note</div>
-                  <div>Hours</div>
-                  <div>Booking</div>
+                  <div className="text-left">Booking</div>
+                  <div />
                   <div className="text-center">Map</div>
                   <div />
                 </div>
@@ -965,13 +989,9 @@ export function ItineraryDayCard({
                         >
                           {names}
                         </span>
-                        {r.duration_seconds ? (
-                          <span className="text-muted-foreground">
-                            {Math.round(r.duration_seconds / 60)} min
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground/50">—</span>
-                        )}
+                        <span className="text-muted-foreground">
+                          {formatRouteTime(r)} · {formatRouteDistance(r)}
+                        </span>
                         <button
                           type="button"
                           className="shrink-0 text-muted-foreground hover:text-destructive"
@@ -1049,18 +1069,17 @@ export function ItineraryDayCard({
               {/* Map panel */}
               {showMap && (
                 <div className="mt-2 rounded-lg border border-border bg-muted/20 p-4">
-                  <div className="flex flex-col items-center gap-2 py-6 text-center text-muted-foreground">
-                    <MapPin size={28} className="opacity-30" />
-                    <p className="text-sm font-medium">Map view</p>
-                    <p className="text-xs">
-                      {sorted.length} location{sorted.length !== 1 ? "s" : ""}
-                      {routes.length > 0 &&
-                        `, ${routes.length} route${routes.length !== 1 ? "s" : ""}`}
-                    </p>
-                    <p className="text-[10px] italic">
-                      Google Maps integration coming soon
-                    </p>
-                  </div>
+                  {mapLocations.length === 0 ? (
+                    <div className="flex flex-col items-center gap-2 py-6 text-center text-muted-foreground">
+                      <MapPin size={28} className="opacity-30" />
+                      <p className="text-sm">
+                        Map will appear when locations with coordinates are
+                        added.
+                      </p>
+                    </div>
+                  ) : (
+                    <ItineraryDayMap locations={mapLocations} />
+                  )}
                 </div>
               )}
             </>
