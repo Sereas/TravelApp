@@ -200,9 +200,7 @@ function formatHoursLines(value: string | null | undefined): string[] {
   return trimmed ? [trimmed] : [];
 }
 
-function formatRouteTime(route?: {
-  duration_seconds?: number | null;
-}): string {
+function formatRouteTime(route?: { duration_seconds?: number | null }): string {
   if (!route || route.duration_seconds == null) return "— min";
   return `${Math.round(route.duration_seconds / 60)} min`;
 }
@@ -424,9 +422,7 @@ export function ItineraryDayCard({
   const mapLocations = useMemo(
     () =>
       sorted
-        .map((ol) =>
-          tripLocations.find((loc) => loc.id === ol.location_id)
-        )
+        .map((ol) => tripLocations.find((loc) => loc.id === ol.location_id))
         .filter(
           (loc): loc is Location =>
             !!loc &&
@@ -439,6 +435,7 @@ export function ItineraryDayCard({
           address: loc.address,
           latitude: loc.latitude as number,
           longitude: loc.longitude as number,
+          category: loc.category ?? null,
         })),
     [sorted, tripLocations]
   );
@@ -690,11 +687,10 @@ export function ItineraryDayCard({
 
         {/* Route connector between consecutive stops */}
         {routeInfos.map((info) => {
-          const isLastLeg =
-            info.idx === info.route.location_ids.length - 1;
+          const isLastLeg = info.idx === info.route.location_ids.length - 1;
           const Icon =
-            TRANSPORT.find((t) => t.key === info.route.transport_mode)
-              ?.icon ?? null;
+            TRANSPORT.find((t) => t.key === info.route.transport_mode)?.icon ??
+            null;
           if (isLastLeg || !Icon) return null;
           return (
             <div

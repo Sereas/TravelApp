@@ -446,9 +446,7 @@ async def remove_location_from_option(
                 rid = str(s["route_id"])
                 stops_by_route.setdefault(rid, []).append(s)
             for rid, stops in stops_by_route.items():
-                remaining = [
-                    s for s in stops if str(s.get("location_id")) != location_id_str
-                ]
+                remaining = [s for s in stops if str(s.get("location_id")) != location_id_str]
                 if len(remaining) < 2:
                     # Route is no longer meaningful; delete it (stops cascade).
                     supabase.table("option_routes").delete().eq("route_id", rid).execute()
