@@ -31,7 +31,7 @@ export const CATEGORY_META: Record<
   CategoryKey,
   { icon: string; bg: string; text: string }
 > = {
-  Museum: { icon: "Landmark", bg: "bg-indigo-50", text: "text-indigo-700" },
+  Museum: { icon: "Landmark", bg: "bg-slate-100", text: "text-slate-700" },
   Restaurant: {
     icon: "UtensilsCrossed",
     bg: "bg-orange-50",
@@ -55,7 +55,7 @@ export const CATEGORY_META: Record<
     bg: "bg-slate-100",
     text: "text-slate-700",
   },
-  Shopping: { icon: "ShoppingBag", bg: "bg-pink-50", text: "text-pink-700" },
+  Shopping: { icon: "ShoppingBag", bg: "bg-blue-50", text: "text-blue-700" },
   "Park / nature": {
     icon: "TreePine",
     bg: "bg-green-50",

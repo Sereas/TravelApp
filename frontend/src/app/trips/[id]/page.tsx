@@ -18,6 +18,7 @@ import { ItineraryDayCard } from "@/components/itinerary/ItineraryDayCard";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { LoadingSpinner } from "@/components/feedback/LoadingSpinner";
 import { ErrorBanner } from "@/components/feedback/ErrorBanner";
+import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -654,28 +655,24 @@ export default function TripDetailPage() {
         requires_booking={loc.requires_booking}
         working_hours={loc.working_hours}
         added_by_email={loc.added_by_email}
-        actions={
-          <>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setEditingLocationId(loc.id)}
-            >
-              Edit
-            </Button>
-            <ConfirmDialog
-              trigger={
-                <Button variant="ghost" size="sm" className="text-destructive">
-                  Delete
-                </Button>
-              }
-              title="Delete location?"
-              description={`"${loc.name}" will be permanently removed from this trip.`}
-              confirmLabel="Delete"
-              variant="destructive"
-              onConfirm={() => handleDeleteLocation(loc.id)}
-            />
-          </>
+        onEdit={() => setEditingLocationId(loc.id)}
+        deleteTrigger={
+          <ConfirmDialog
+            trigger={
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-destructive hover:bg-destructive/10"
+              >
+                <Trash2 size={14} />
+                Delete
+              </button>
+            }
+            title="Delete location?"
+            description={`"${loc.name}" will be permanently removed from this trip.`}
+            confirmLabel="Delete"
+            variant="destructive"
+            onConfirm={() => handleDeleteLocation(loc.id)}
+          />
         }
       />
     );

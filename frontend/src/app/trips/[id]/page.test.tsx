@@ -1,5 +1,5 @@
 /// <reference types="vitest/globals" />
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import TripDetailPage from "./page";
 
@@ -145,7 +145,8 @@ describe("TripDetailPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("9:00-23:00")).toBeInTheDocument();
     expect(screen.getByText("Booking needed")).toBeInTheDocument();
-    expect(screen.getByText("alice@example.com")).toBeInTheDocument();
+    expect(screen.getByText(/Created by:/)).toBeInTheDocument();
+    expect(screen.getByText(/alice@example\.com/)).toBeInTheDocument();
     expect(screen.getByText("Museum")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /open in google maps/i })
@@ -351,8 +352,12 @@ describe("TripDetailPage", () => {
     render(<TripDetailPage />);
 
     await screen.findByText("Eiffel Tower");
-    const editButtons = screen.getAllByRole("button", { name: /^edit$/i });
-    expect(editButtons).toHaveLength(2);
+    const menuButtons = screen.getAllByRole("button", {
+      name: /location actions/i,
+    });
+    expect(menuButtons).toHaveLength(2);
+    await userEvent.click(menuButtons[0]);
+    expect(screen.getByRole("button", { name: /^edit$/i })).toBeInTheDocument();
   });
 
   it("edits a location inline and saves", async () => {
@@ -365,8 +370,11 @@ describe("TripDetailPage", () => {
     render(<TripDetailPage />);
 
     await screen.findByText("Eiffel Tower");
-    const editButtons = screen.getAllByRole("button", { name: /^edit$/i });
-    await userEvent.click(editButtons[0]);
+    const menuButtons = screen.getAllByRole("button", {
+      name: /location actions/i,
+    });
+    await userEvent.click(menuButtons[0]);
+    await userEvent.click(screen.getByRole("button", { name: /^edit$/i }));
 
     const nameInput = screen.getByDisplayValue("Eiffel Tower");
     await userEvent.clear(nameInput);
@@ -389,8 +397,11 @@ describe("TripDetailPage", () => {
     render(<TripDetailPage />);
 
     await screen.findByText("Eiffel Tower");
-    const editButtons = screen.getAllByRole("button", { name: /^edit$/i });
-    await userEvent.click(editButtons[0]);
+    const menuButtons = screen.getAllByRole("button", {
+      name: /location actions/i,
+    });
+    await userEvent.click(menuButtons[0]);
+    await userEvent.click(screen.getByRole("button", { name: /^edit$/i }));
 
     await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
 
@@ -577,10 +588,14 @@ describe("TripDetailPage", () => {
     render(<TripDetailPage />);
 
     await screen.findByText("Eiffel Tower");
-    const deleteButtons = screen.getAllByRole("button", {
-      name: /^delete$/i,
+    const menuButtons = screen.getAllByRole("button", {
+      name: /location actions/i,
     });
-    expect(deleteButtons).toHaveLength(2);
+    expect(menuButtons).toHaveLength(2);
+    await userEvent.click(menuButtons[0]);
+    expect(
+      screen.getByRole("button", { name: /^delete$/i })
+    ).toBeInTheDocument();
   });
 
   it("deletes a location and removes it from the list", async () => {
@@ -590,20 +605,23 @@ describe("TripDetailPage", () => {
     render(<TripDetailPage />);
 
     await screen.findByText("Eiffel Tower");
-    const deleteButtons = screen.getAllByRole("button", {
-      name: /^delete$/i,
+    const menuButtons = screen.getAllByRole("button", {
+      name: /location actions/i,
     });
-    await userEvent.click(deleteButtons[0]);
+    await userEvent.click(menuButtons[0]);
+    await userEvent.click(screen.getByRole("button", { name: /^delete$/i }));
 
     // Confirm in the dialog
-    expect(screen.getByText("Delete location?")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("Delete location?")).toBeInTheDocument();
+    });
     expect(
       screen.getByText(/permanently removed from this trip/)
     ).toBeInTheDocument();
-    const dialogConfirmBtns = screen.getAllByRole("button", {
-      name: /^delete$/i,
-    });
-    await userEvent.click(dialogConfirmBtns[dialogConfirmBtns.length - 1]);
+    const dialog = screen.getByRole("dialog");
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: /^delete$/i })
+    );
 
     await waitFor(() => {
       expect(mockDeleteLocation).toHaveBeenCalledWith("trip-1", "loc-1");
@@ -620,11 +638,15 @@ describe("TripDetailPage", () => {
     render(<TripDetailPage />);
 
     await screen.findByText("Eiffel Tower");
-    const deleteButtons = screen.getAllByRole("button", {
-      name: /^delete$/i,
+    const menuButtons = screen.getAllByRole("button", {
+      name: /location actions/i,
     });
-    await userEvent.click(deleteButtons[0]);
+    await userEvent.click(menuButtons[0]);
+    await userEvent.click(screen.getByRole("button", { name: /^delete$/i }));
 
+    await waitFor(() => {
+      expect(screen.getByText("Delete location?")).toBeInTheDocument();
+    });
     await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
 
     expect(mockDeleteLocation).not.toHaveBeenCalled();
@@ -638,15 +660,19 @@ describe("TripDetailPage", () => {
     render(<TripDetailPage />);
 
     await screen.findByText("Eiffel Tower");
-    const deleteButtons = screen.getAllByRole("button", {
-      name: /^delete$/i,
+    const menuButtons = screen.getAllByRole("button", {
+      name: /location actions/i,
     });
-    await userEvent.click(deleteButtons[0]);
+    await userEvent.click(menuButtons[0]);
+    await userEvent.click(screen.getByRole("button", { name: /^delete$/i }));
 
-    const dialogConfirmBtns = screen.getAllByRole("button", {
+    await waitFor(() => {
+      expect(screen.getByText("Delete location?")).toBeInTheDocument();
+    });
+    const confirmDeleteBtn = screen.getByRole("button", {
       name: /^delete$/i,
     });
-    await userEvent.click(dialogConfirmBtns[dialogConfirmBtns.length - 1]);
+    await userEvent.click(confirmDeleteBtn);
 
     await waitFor(() => {
       expect(mockDeleteLocation).toHaveBeenCalled();

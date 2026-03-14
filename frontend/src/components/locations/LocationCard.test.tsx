@@ -1,5 +1,6 @@
 /// <reference types="vitest/globals" />
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { LocationCard } from "./LocationCard";
 
 describe("LocationCard", () => {
@@ -56,9 +57,42 @@ describe("LocationCard", () => {
     expect(link).toBeInTheDocument();
   });
 
-  it("renders working hours with clock context", () => {
+  it("renders simple working hours inline", () => {
     render(<LocationCard id="1" name="Louvre" working_hours="9:00-18:00" />);
     expect(screen.getByText("9:00-18:00")).toBeInTheDocument();
+    expect(screen.queryByText("View opening hours")).not.toBeInTheDocument();
+  });
+
+  it("shows View opening hours for detailed weekly schedule", () => {
+    render(
+      <LocationCard
+        id="1"
+        name="Louvre"
+        working_hours="Mon: Closed | Tue: 9:30 AM–6:00 PM | Wed: 9:30 AM–6:00 PM"
+      />
+    );
+    expect(screen.getByText("View opening hours")).toBeInTheDocument();
+    expect(screen.queryByText("Mon: Closed")).not.toBeInTheDocument();
+  });
+
+  it("expands and shows full schedule when View opening hours is clicked", async () => {
+    const user = userEvent.setup();
+    render(
+      <LocationCard
+        id="1"
+        name="Louvre"
+        working_hours="Mon: Closed | Tue: 9:30 AM–6:00 PM"
+      />
+    );
+    await user.click(
+      screen.getByRole("button", { name: /view opening hours/i })
+    );
+    expect(screen.getByText("Mon: Closed")).toBeInTheDocument();
+    expect(screen.getByText("Tue: 9:30 AM–6:00 PM")).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: /collapse opening hours/i })
+    );
+    expect(screen.queryByText("Mon: Closed")).not.toBeInTheDocument();
   });
 
   it("renders booking needed badge for requires_booking=yes", () => {
@@ -77,24 +111,40 @@ describe("LocationCard", () => {
     expect(screen.queryByText(/Booked/)).not.toBeInTheDocument();
   });
 
-  it("renders note with italic styling", () => {
+  it("renders note in a prominent block", () => {
     render(
       <LocationCard id="1" name="Louvre" note="Book tickets in advance" />
     );
     const noteEl = screen.getByText("Book tickets in advance");
     expect(noteEl).toBeInTheDocument();
-    expect(noteEl).toHaveClass("italic");
   });
 
-  it("renders added_by_email", () => {
+  it("collapses long notes with View note and expands with Show less", async () => {
+    const user = userEvent.setup();
+    const longNote =
+      "This is a very long note that exceeds the character threshold so it gets collapsed by default and the user can expand it to read the full content.";
+    render(<LocationCard id="1" name="Louvre" note={longNote} />);
+    expect(screen.getByText(/View note/)).toBeInTheDocument();
+    expect(screen.queryByText(longNote)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /view note/i }));
+    expect(screen.getByText(longNote)).toBeInTheDocument();
+    expect(screen.getByText(/Show less/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /show less/i }));
+    expect(screen.queryByText(longNote)).not.toBeInTheDocument();
+    expect(screen.getByText(/View note/)).toBeInTheDocument();
+  });
+
+  it("renders Created by footer when added_by_email is provided", () => {
     render(
       <LocationCard id="1" name="Louvre" added_by_email="alice@example.com" />
     );
-    expect(screen.getByText("alice@example.com")).toBeInTheDocument();
+    expect(screen.getByText(/Created by:/)).toBeInTheDocument();
+    expect(screen.getByText(/alice@example\.com/)).toBeInTheDocument();
   });
 
-  it("does not render added_by_email when null", () => {
+  it("does not render Created by footer when added_by_email is null", () => {
     render(<LocationCard id="1" name="Louvre" />);
+    expect(screen.queryByText(/Created by:/)).not.toBeInTheDocument();
     expect(screen.queryByText("alice@example.com")).not.toBeInTheDocument();
   });
 
@@ -108,7 +158,7 @@ describe("LocationCard", () => {
   it("renders a sparse card (name only) without errors", () => {
     render(<LocationCard id="1" name="Random Place" />);
     expect(screen.getByText("Random Place")).toBeInTheDocument();
-    expect(screen.queryByText(/Added by/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Created by/)).not.toBeInTheDocument();
     expect(screen.queryByText("Booking needed")).not.toBeInTheDocument();
   });
 
@@ -133,7 +183,8 @@ describe("LocationCard", () => {
     expect(screen.getByText("9:30-23:00")).toBeInTheDocument();
     expect(screen.getByText("Booking needed")).toBeInTheDocument();
     expect(screen.getByText("Must visit at sunset")).toBeInTheDocument();
-    expect(screen.getByText("alice@example.com")).toBeInTheDocument();
+    expect(screen.getByText(/Created by:/)).toBeInTheDocument();
+    expect(screen.getByText(/alice@example\.com/)).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /open in google maps/i })
     ).toBeInTheDocument();
