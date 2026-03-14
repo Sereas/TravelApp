@@ -331,6 +331,14 @@ class ItineraryOptionLocation(BaseModel):
     location: LocationSummary
 
 
+class RouteSegmentSummary(BaseModel):
+    """Per-segment metrics in itinerary tree (one per leg between consecutive stops)."""
+
+    segment_order: int = Field(..., ge=0, description="0-based index: leg from stop[i] to stop[i+1]")
+    duration_seconds: int | None = None
+    distance_meters: int | None = None
+
+
 class ItineraryRoute(BaseModel):
     """Itinerary tree node: route within an option."""
 
@@ -341,6 +349,14 @@ class ItineraryRoute(BaseModel):
     distance_meters: int | None = None
     sort_order: int = 0
     location_ids: list[str] = Field(default_factory=list)
+    route_status: str = Field(
+        "pending",
+        description="pending | ok | error; enables UI to show loading/error state",
+    )
+    segments: list[RouteSegmentSummary] = Field(
+        default_factory=list,
+        description="Per-leg metrics in order; segment_order i = leg from stop i to stop i+1",
+    )
 
 
 class ItineraryOption(BaseModel):
@@ -408,6 +424,9 @@ class CreateRouteBody(BaseModel):
         return v
 
 
+ROUTE_STATUS_VALUES = frozenset({"pending", "ok", "error"})
+
+
 class RouteResponse(BaseModel):
     """Response body for route operations."""
 
@@ -419,3 +438,58 @@ class RouteResponse(BaseModel):
     distance_meters: int | None = None
     sort_order: int = Field(..., ge=0)
     location_ids: list[str] = Field(default_factory=list)
+    route_status: str = Field(
+        "pending",
+        description="pending = metrics not yet calculated; ok = all segments success; error = one or more segments failed",
+    )
+
+
+# -------- Route segment schemas (recalculate, get with segments) --------
+
+
+class RecalculateRouteBody(BaseModel):
+    """Optional body for POST recalculate/refresh route."""
+
+    transport_mode: str | None = Field(None, description="walk | drive | transit; uses route's mode if omitted")
+    force_refresh: bool = Field(False, description="If true, recompute all segments ignoring cache/cooldown")
+
+    @field_validator("transport_mode")
+    @classmethod
+    def validate_transport_mode(cls, v: str | None) -> str | None:
+        if v is not None and v not in TRANSPORT_MODE_VALUES:
+            raise ValueError("must be one of: walk, drive, transit")
+        return v
+
+
+class RouteSegmentResponse(BaseModel):
+    """One segment (leg) of a route: from_location -> to_location; includes retry metadata when not success."""
+
+    segment_order: int = Field(..., ge=0)
+    from_location_id: str = Field(..., description="Location UUID (origin of this leg)")
+    to_location_id: str = Field(..., description="Location UUID (destination of this leg)")
+    distance_meters: int | None = None
+    duration_seconds: int | None = None
+    encoded_polyline: str | None = Field(None, description="Google encoded polyline for MapLibre")
+    status: str = Field("success", description="success | retryable_error | config_error | input_error | no_route")
+    error_type: str | None = Field(None, description="e.g. forbidden_or_unauthorized, server_or_rate_limit")
+    error_message: str | None = None
+    provider_http_status: int | None = Field(None, description="e.g. 403, 500")
+    next_retry_at: str | None = Field(None, description="ISO8601; next time retry is eligible on view")
+
+
+class RouteWithSegmentsResponse(BaseModel):
+    """Route plus per-segment data and geometry (for recalculate and get-with-segments)."""
+
+    route_id: str = Field(..., description="Route UUID")
+    option_id: str = Field(..., description="Parent option UUID")
+    label: str | None = None
+    transport_mode: str = Field(..., description="walk | drive | transit")
+    duration_seconds: int | None = None
+    distance_meters: int | None = None
+    sort_order: int = Field(..., ge=0)
+    location_ids: list[str] = Field(default_factory=list)
+    segments: list[RouteSegmentResponse] = Field(default_factory=list)
+    route_status: str = Field(
+        "ok",
+        description="ok = all segments success; error = one or more segments failed (partial or total)",
+    )

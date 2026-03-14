@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/", "/login", "/auth/callback"];
+const PUBLIC_PATHS = ["/", "/login", "/auth/callback", "/auth/update-password"];
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -40,6 +40,7 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Redirect logged-in users away from login/home only (not from update-password recovery flow)
   if (user && (pathname === "/login" || pathname === "/")) {
     const url = request.nextUrl.clone();
     url.pathname = "/trips";

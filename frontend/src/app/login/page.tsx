@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +12,8 @@ type AuthMode = "login" | "signup";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const passwordUpdated = searchParams.get("message") === "password_updated";
   const [mode, setMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -103,7 +105,7 @@ export default function LoginPage() {
 
     const supabase = createBrowserClient();
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/callback`,
+      redirectTo: `${window.location.origin}/auth/update-password`,
     });
 
     setLoading(false);
@@ -131,6 +133,13 @@ export default function LoginPage() {
         </div>
 
         {error && <ErrorBanner message={error} />}
+
+        {passwordUpdated && (
+          <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+            Your password has been updated successfully. You can sign in with
+            your new password.
+          </div>
+        )}
 
         {resetSent && (
           <div className="rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">

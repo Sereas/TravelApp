@@ -15,6 +15,7 @@ from backend.app.models.schemas import (
     ItineraryResponse,
     ItineraryRoute,
     LocationSummary,
+    RouteSegmentSummary,
 )
 from backend.app.routers.trip_ownership import _ensure_trip_owned
 
@@ -246,18 +247,55 @@ async def get_itinerary(
             for s in stops_result.data or []:
                 rid = str(s["route_id"])
                 stops_by_route.setdefault(rid, []).append(str(s["location_id"]))
+            # Load per-segment metrics (route_segments -> segment_cache)
+            rs_result = (
+                supabase.table("route_segments")
+                .select("route_id, segment_order, segment_cache_id")
+                .in_("route_id", route_ids)
+                .order("segment_order")
+                .execute()
+            )
+            seg_rows = rs_result.data or []
+            cache_ids = list({str(s["segment_cache_id"]) for s in seg_rows})
+            cache_by_id: dict[str, dict] = {}
+            if cache_ids:
+                cache_result = (
+                    supabase.table("segment_cache")
+                    .select("id, duration_seconds, distance_meters")
+                    .in_("id", cache_ids)
+                    .execute()
+                )
+                cache_by_id = {str(r["id"]): r for r in (cache_result.data or [])}
+            segments_by_route: dict[str, list[RouteSegmentSummary]] = {}
+            for s in seg_rows:
+                rid = str(s["route_id"])
+                cache_row = cache_by_id.get(str(s.get("segment_cache_id") or "")) or {}
+                segments_by_route.setdefault(rid, []).append(
+                    RouteSegmentSummary(
+                        segment_order=int(s.get("segment_order", 0)),
+                        duration_seconds=cache_row.get("duration_seconds"),
+                        distance_meters=cache_row.get("distance_meters"),
+                    )
+                )
+            for rid in segments_by_route:
+                segments_by_route[rid].sort(key=lambda x: x.segment_order)
             routes_by_option: dict[str, list[ItineraryRoute]] = {}
             for r in route_rows:
                 oid = str(r["option_id"])
                 rid = str(r["route_id"])
+                dur = r.get("duration_seconds")
+                dist = r.get("distance_meters")
+                route_status = "pending" if (dur is None and dist is None) else "ok"
                 route = ItineraryRoute(
                     route_id=rid,
                     label=r.get("label"),
                     transport_mode=r.get("transport_mode", "walk"),
-                    duration_seconds=r.get("duration_seconds"),
-                    distance_meters=r.get("distance_meters"),
+                    duration_seconds=dur,
+                    distance_meters=dist,
                     sort_order=int(r.get("sort_order", 0)),
                     location_ids=stops_by_route.get(rid, []),
+                    route_status=route_status,
+                    segments=segments_by_route.get(rid, []),
                 )
                 routes_by_option.setdefault(oid, []).append(route)
             for d in itinerary_response.days:

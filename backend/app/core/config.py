@@ -25,6 +25,8 @@ class Settings:
         self.supabase_jwt_secret: str = os.getenv("SUPABASE_JWT_SECRET", "")
         # Optional Google Places API key; when absent, Google integration is disabled.
         self.google_places_api_key: str | None = os.getenv("GOOGLE_PLACES_API_KEY") or None
+        # Optional Google Routes API key (Routes API only; not shared with Places).
+        self.google_routes_api_key: str | None = os.getenv("GOOGLE_ROUTES_API_KEY") or None
 
 
 @lru_cache

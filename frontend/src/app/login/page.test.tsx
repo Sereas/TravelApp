@@ -5,8 +5,10 @@ import LoginPage from "./page";
 
 const mockPush = vi.fn();
 const mockRefresh = vi.fn();
+const mockGet = vi.fn(() => null);
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockPush, refresh: mockRefresh }),
+  useSearchParams: () => ({ get: mockGet }),
 }));
 
 const mockSignInWithPassword = vi.fn();

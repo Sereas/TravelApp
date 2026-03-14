@@ -97,6 +97,16 @@ export interface ItineraryOptionLocation {
   location: LocationSummary;
 }
 
+/** Route status for UI: pending = metrics not yet calculated; ok = success; error = one or more segments failed. */
+export type RouteStatus = "pending" | "ok" | "error";
+
+/** Per-segment metrics in itinerary tree (one per leg between consecutive stops). segment_order i = leg from stop i to stop i+1. */
+export interface RouteSegmentSummary {
+  segment_order: number;
+  duration_seconds: number | null;
+  distance_meters: number | null;
+}
+
 export interface ItineraryOptionRoute {
   route_id: string;
   label: string | null;
@@ -105,6 +115,9 @@ export interface ItineraryOptionRoute {
   distance_meters: number | null;
   sort_order: number;
   location_ids: string[];
+  route_status?: RouteStatus;
+  /** Per-leg metrics in order; use segments[idx] for pill between stop idx and idx+1. */
+  segments?: RouteSegmentSummary[];
 }
 
 export interface ItineraryOption {
@@ -161,6 +174,26 @@ export interface RouteResponse {
   distance_meters: number | null;
   sort_order: number;
   location_ids: string[];
+  route_status?: RouteStatus;
+}
+
+export interface RouteSegmentResponse {
+  segment_order: number;
+  from_location_id: string;
+  to_location_id: string;
+  distance_meters: number | null;
+  duration_seconds: number | null;
+  encoded_polyline: string | null;
+  status: string;
+  error_type: string | null;
+  error_message: string | null;
+  provider_http_status: number | null;
+  next_retry_at: string | null;
+}
+
+export interface RouteWithSegmentsResponse extends RouteResponse {
+  segments: RouteSegmentResponse[];
+  route_status: RouteStatus;
 }
 
 export interface ItineraryResponse {
@@ -451,6 +484,33 @@ export const api = {
       request<RouteResponse>(
         `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/routes`,
         { method: "POST", body: JSON.stringify(body) }
+      ),
+
+    /** Get one route with segment details and trigger calculation if needed (retry-on-view). */
+    getRouteWithSegments: (
+      tripId: string,
+      dayId: string,
+      optionId: string,
+      routeId: string
+    ) =>
+      request<RouteWithSegmentsResponse>(
+        `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/routes/${routeId}?include_segments=true`
+      ),
+
+    /** Recalculate route segments (force refresh optional). */
+    recalculateRoute: (
+      tripId: string,
+      dayId: string,
+      optionId: string,
+      routeId: string,
+      body?: { transport_mode?: string; force_refresh?: boolean }
+    ) =>
+      request<RouteWithSegmentsResponse>(
+        `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/routes/${routeId}/recalculate`,
+        {
+          method: "POST",
+          body: JSON.stringify(body ?? {}),
+        }
       ),
 
     /** Delete a route. */

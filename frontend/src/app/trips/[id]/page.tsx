@@ -9,6 +9,8 @@ import {
   type ItineraryResponse,
   type ItineraryDay,
   type ItineraryOption,
+  type RouteResponse,
+  type RouteWithSegmentsResponse,
 } from "@/lib/api";
 import { LocationCard } from "@/components/locations/LocationCard";
 import { AddLocationForm } from "@/components/locations/AddLocationForm";
@@ -133,6 +135,12 @@ export default function TripDetailPage() {
   const [createOptionLoading, setCreateOptionLoading] = useState<string | null>(
     null
   );
+  const [calculatingRouteId, setCalculatingRouteId] = useState<string | null>(
+    null
+  );
+  const [routeMetricsError, setRouteMetricsError] = useState<
+    Record<string, string>
+  >({});
 
   async function fetchData() {
     setError(null);
@@ -475,6 +483,109 @@ export default function TripDetailPage() {
       setItineraryActionError(message);
       // Refresh from server to avoid stale/incorrect optimistic state
       await fetchItinerary();
+    }
+  }
+
+  async function handleRouteCreated(
+    dayId: string,
+    optionId: string,
+    routeResponse: RouteResponse
+  ) {
+    const routeId = routeResponse.route_id;
+    setRouteMetricsError((prev) => {
+      const next = { ...prev };
+      delete next[routeId];
+      return next;
+    });
+    setCalculatingRouteId(routeId);
+    await fetchItinerary();
+    try {
+      const withSegments = await api.itinerary.getRouteWithSegments(
+        tripId,
+        dayId,
+        optionId,
+        routeId
+      );
+      setItinerary((prev) => {
+        if (!prev) return prev;
+        return patchRouteInItinerary(prev, dayId, optionId, routeId, withSegments);
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Could not calculate distance and duration";
+      setRouteMetricsError((prev) => ({ ...prev, [routeId]: message }));
+    } finally {
+      setCalculatingRouteId(null);
+    }
+  }
+
+  function patchRouteInItinerary(
+    prev: ItineraryResponse,
+    dayId: string,
+    optionId: string,
+    routeId: string,
+    data: RouteWithSegmentsResponse
+  ): ItineraryResponse {
+    return {
+      ...prev,
+      days: prev.days.map((d) => {
+        if (d.id !== dayId) return d;
+        return {
+          ...d,
+          options: d.options.map((o) => {
+            if (o.id !== optionId) return o;
+            return {
+              ...o,
+              routes: o.routes.map((r) =>
+                r.route_id === routeId
+                  ? {
+                      ...r,
+                      duration_seconds: data.duration_seconds,
+                      distance_meters: data.distance_meters,
+                      route_status: data.route_status,
+                      segments: data.segments.map((s) => ({
+                        segment_order: s.segment_order,
+                        duration_seconds: s.duration_seconds,
+                        distance_meters: s.distance_meters,
+                      })),
+                    }
+                  : r
+              ),
+            };
+          }),
+        };
+      }),
+    };
+  }
+
+  async function handleRetryRouteMetrics(
+    dayId: string,
+    optionId: string,
+    routeId: string
+  ) {
+    setRouteMetricsError((prev) => {
+      const next = { ...prev };
+      delete next[routeId];
+      return next;
+    });
+    setCalculatingRouteId(routeId);
+    try {
+      const withSegments = await api.itinerary.getRouteWithSegments(
+        tripId,
+        dayId,
+        optionId,
+        routeId
+      );
+      setItinerary((prev) => {
+        if (!prev) return prev;
+        return patchRouteInItinerary(prev, dayId, optionId, routeId, withSegments);
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Could not calculate distance and duration";
+      setRouteMetricsError((prev) => ({ ...prev, [routeId]: message }));
+    } finally {
+      setCalculatingRouteId(null);
     }
   }
 
@@ -976,6 +1087,8 @@ export default function TripDetailPage() {
                       currentOption={currentOption}
                       tripLocations={locations}
                       createOptionLoading={createOptionLoading === day.id}
+                      calculatingRouteId={calculatingRouteId}
+                      routeMetricsError={routeMetricsError}
                       onSelectOption={(dayId, optId) =>
                         setSelectedOptionByDay((prev) => ({
                           ...prev,
@@ -990,6 +1103,8 @@ export default function TripDetailPage() {
                       onUpdateTimePeriod={handleUpdateLocationTimePeriod}
                       onReorderLocations={handleReorderOptionLocations}
                       onRoutesChanged={fetchItinerary}
+                      onRouteCreated={handleRouteCreated}
+                      onRetryRouteMetrics={handleRetryRouteMetrics}
                     />
                   );
                 })}

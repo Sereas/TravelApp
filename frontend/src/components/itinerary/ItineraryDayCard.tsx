@@ -22,6 +22,7 @@ import { AddLocationsToOptionDialog } from "@/components/itinerary/AddLocationsT
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { LoadingSpinner } from "@/components/feedback/LoadingSpinner";
 import { cn } from "@/lib/utils";
 import {
   Sunrise,
@@ -39,6 +40,7 @@ import {
   X,
   ArrowRight,
   Trash2,
+  AlertCircle,
 } from "lucide-react";
 
 const TIME_META: Record<
@@ -200,18 +202,45 @@ function formatHoursLines(value: string | null | undefined): string[] {
   return trimmed ? [trimmed] : [];
 }
 
-function formatRouteTime(route?: { duration_seconds?: number | null }): string {
-  if (!route || route.duration_seconds == null) return "— min";
+/** Format duration for route totals only. Do not use for segment pills. */
+function formatRouteTotalDuration(route: {
+  duration_seconds?: number | null;
+}): string {
+  if (route.duration_seconds == null) return "— min";
   return `${Math.round(route.duration_seconds / 60)} min`;
 }
 
-function formatRouteDistance(route?: {
+/** Format distance for route totals only. Do not use for segment pills. */
+function formatRouteTotalDistance(route: {
   distance_meters?: number | null;
 }): string {
-  if (!route || route.distance_meters == null) return "— km";
+  if (route.distance_meters == null) return "— km";
   const km = route.distance_meters / 1000;
   const decimals = km >= 10 ? 0 : 1;
   return `${km.toFixed(decimals)} km`;
+}
+
+/** Format a single segment's metrics (one leg). Use only for segment pills, never for route totals. */
+function formatSegmentMetrics(segment: {
+  duration_seconds?: number | null;
+  distance_meters?: number | null;
+} | null | undefined): string {
+  if (!segment || (segment.duration_seconds == null && segment.distance_meters == null)) {
+    return "— min · — km";
+  }
+  const dur =
+    segment.duration_seconds != null
+      ? `${Math.round(segment.duration_seconds / 60)} min`
+      : "— min";
+  const dist =
+    segment.distance_meters != null
+      ? (() => {
+          const km = segment.distance_meters / 1000;
+          const decimals = km >= 10 ? 0 : 1;
+          return `${km.toFixed(decimals)} km`;
+        })()
+      : "— km";
+  return `${dur} · ${dist}`;
 }
 
 // Grid column template shared by header + rows.
@@ -261,6 +290,20 @@ export interface ItineraryDayCardProps {
     locationIds: string[]
   ) => void;
   onRoutesChanged: () => void;
+  /** After route is created, parent triggers calculation and passes back updated route. */
+  onRouteCreated: (
+    dayId: string,
+    optionId: string,
+    routeResponse: import("@/lib/api").RouteResponse
+  ) => Promise<void>;
+  /** Retry calculating metrics for a route that previously failed. */
+  onRetryRouteMetrics: (
+    dayId: string,
+    optionId: string,
+    routeId: string
+  ) => Promise<void>;
+  calculatingRouteId: string | null;
+  routeMetricsError: Record<string, string>;
 }
 
 export function ItineraryDayCard({
@@ -278,6 +321,10 @@ export function ItineraryDayCard({
   onUpdateTimePeriod,
   onReorderLocations,
   onRoutesChanged,
+  onRouteCreated,
+  onRetryRouteMetrics,
+  calculatingRouteId,
+  routeMetricsError,
 }: ItineraryDayCardProps) {
   const dayLabel = day.date
     ? formatDate(day.date)
@@ -307,14 +354,19 @@ export function ItineraryDayCard({
     if (pickIds.length < 2 || !currentOption) return;
     setSavingRoute(true);
     try {
-      await api.itinerary.createRoute(tripId, day.id, currentOption.id, {
-        transport_mode: pickTransport,
-        label: null,
-        location_ids: pickIds,
-      });
-      onRoutesChanged();
+      const routeResponse = await api.itinerary.createRoute(
+        tripId,
+        day.id,
+        currentOption.id,
+        {
+          transport_mode: pickTransport,
+          label: null,
+          location_ids: pickIds,
+        }
+      );
       setCreating(false);
       setPickIds([]);
+      await onRouteCreated(day.id, currentOption.id, routeResponse);
     } catch {
       /* error shown by parent */
     } finally {
@@ -692,6 +744,7 @@ export function ItineraryDayCard({
             TRANSPORT.find((t) => t.key === info.route.transport_mode)?.icon ??
             null;
           if (isLastLeg || !Icon) return null;
+          const isCalculatingLeg = calculatingRouteId === info.route.route_id;
           return (
             <div
               key={info.route.route_id}
@@ -707,8 +760,16 @@ export function ItineraryDayCard({
                 <span className="text-muted-foreground/60">↓</span>
                 <Icon size={10} />
                 <span>
-                  {formatRouteTime(info.route)} ·{" "}
-                  {formatRouteDistance(info.route)}
+                  {isCalculatingLeg ? (
+                    <>
+                      <LoadingSpinner size="sm" className="inline-block h-3 w-3 align-middle" />{" "}
+                      Calculating…
+                    </>
+                  ) : (
+                    <>
+                      {formatSegmentMetrics(info.route.segments?.[info.idx])}
+                    </>
+                  )}
                 </span>
               </div>
             </div>
@@ -982,6 +1043,8 @@ export function ItineraryDayCard({
                             .name ?? "?"
                       )
                       .join(" → ");
+                    const isCalculating = calculatingRouteId === r.route_id;
+                    const metricsError = routeMetricsError[r.route_id];
                     return (
                       <div
                         key={r.route_id}
@@ -1000,14 +1063,48 @@ export function ItineraryDayCard({
                         >
                           {names}
                         </span>
-                        <span className="text-muted-foreground">
-                          {formatRouteTime(r)} · {formatRouteDistance(r)}
-                        </span>
+                        {isCalculating && (
+                          <span className="flex shrink-0 items-center gap-1 text-muted-foreground">
+                            <LoadingSpinner size="sm" className="shrink-0" />
+                            <span>Calculating…</span>
+                          </span>
+                        )}
+                        {!isCalculating && metricsError && (
+                          <span className="flex shrink-0 items-center gap-1.5">
+                            <span className="flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">
+                              <AlertCircle size={11} />
+                              <span className="max-w-[140px] truncate" title={metricsError}>
+                                Metrics unavailable
+                              </span>
+                            </span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-5 px-1.5 text-[10px]"
+                              onClick={() =>
+                                onRetryRouteMetrics(day.id, currentOption!.id, r.route_id)
+                              }
+                            >
+                              Retry
+                            </Button>
+                          </span>
+                        )}
+                        {!isCalculating && !metricsError && (
+                          <span className="text-muted-foreground">
+                            {formatRouteTotalDuration(r)} · {formatRouteTotalDistance(r)}
+                            {r.route_status === "error" && (
+                              <span className="ml-1 text-amber-600" title="Some segments could not be calculated">
+                                (partial)
+                              </span>
+                            )}
+                          </span>
+                        )}
                         <button
                           type="button"
-                          className="shrink-0 text-muted-foreground hover:text-destructive"
+                          className="shrink-0 text-muted-foreground hover:text-destructive disabled:opacity-50"
                           onClick={() => handleDeleteRoute(r.route_id)}
                           aria-label="Delete route"
+                          disabled={isCalculating}
                         >
                           <Trash2 size={12} />
                         </button>

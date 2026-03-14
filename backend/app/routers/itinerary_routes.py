@@ -1,20 +1,33 @@
-"""Option routes (itinerary) API: list, create, delete routes for an option."""
+"""Option routes (itinerary) API: list, create, get one, recalculate, delete routes for an option."""
 
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from backend.app.db.supabase import get_supabase_client
 from backend.app.dependencies import get_current_user_id
-from backend.app.models.schemas import CreateRouteBody, RouteResponse
+from backend.app.models.schemas import (
+    CreateRouteBody,
+    RecalculateRouteBody,
+    RouteResponse,
+    RouteWithSegmentsResponse,
+)
 from backend.app.routers.itinerary_option_locations import _ensure_option_in_day
 from backend.app.routers.itinerary_options import _ensure_day_in_trip
 from backend.app.routers.trip_ownership import _ensure_trip_owned
+from backend.app.services.route_calculation import get_route_with_fresh_segments, get_route_with_segments
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger("itinerary_routes")
 
 router = APIRouter(prefix="/trips", tags=["itinerary-routes"])
+
+
+def _route_status_from_totals(duration_seconds: int | None, distance_meters: int | None) -> str:
+    """Derive route_status for list/get: pending when metrics not yet calculated."""
+    if duration_seconds is None and distance_meters is None:
+        return "pending"
+    return "ok"
 
 
 def _rpc_row_to_response(row: dict) -> RouteResponse:
@@ -22,15 +35,18 @@ def _rpc_row_to_response(row: dict) -> RouteResponse:
     location_ids = row.get("location_ids") or []
     if isinstance(location_ids, str):
         location_ids = [lid.strip() for lid in location_ids.split(",") if lid.strip()]
+    duration = row.get("duration_seconds")
+    distance = row.get("distance_meters")
     return RouteResponse(
         route_id=str(row["route_id"]),
         option_id=str(row["option_id"]),
         label=row.get("label"),
         transport_mode=str(row.get("transport_mode", "")),
-        duration_seconds=row.get("duration_seconds"),
-        distance_meters=row.get("distance_meters"),
+        duration_seconds=duration,
+        distance_meters=distance,
         sort_order=int(row.get("sort_order", 0)),
         location_ids=[str(lid) for lid in location_ids],
+        route_status=row.get("route_status") or _route_status_from_totals(duration, distance),
     )
 
 
@@ -111,6 +127,8 @@ async def create_route(
         )
     row = result.data if isinstance(result.data, dict) else result.data[0]
     row["location_ids"] = body.location_ids
+    # New route has no segments yet; metrics will be calculated when client calls get with segments or recalculate
+    row["route_status"] = "pending"
     logger.info(
         "route_created",
         trip_id=str(trip_id),
@@ -119,6 +137,111 @@ async def create_route(
         route_id=str(row.get("route_id", "")),
     )
     return _rpc_row_to_response(row)
+
+
+@router.get(
+    "/{trip_id}/days/{day_id}/options/{option_id}/routes/{route_id}",
+    response_model=RouteResponse | RouteWithSegmentsResponse,
+)
+async def get_route(
+    trip_id: UUID,
+    day_id: UUID,
+    option_id: UUID,
+    route_id: UUID,
+    include_segments: bool = Query(False, description="Include per-segment distance, duration, and polyline"),
+    user_id: UUID = Depends(get_current_user_id),
+    supabase=Depends(get_supabase_client),
+):
+    """
+    Get one route by id. If include_segments=true, returns segment data and geometry for MapLibre.
+    """
+    _ensure_trip_owned(supabase, trip_id, user_id)
+    _ensure_day_in_trip(supabase, trip_id, day_id)
+    _ensure_option_in_day(supabase, day_id, option_id)
+    existing = (
+        supabase.table("option_routes")
+        .select("route_id, option_id, label, transport_mode, duration_seconds, distance_meters, sort_order")
+        .eq("route_id", str(route_id))
+        .eq("option_id", str(option_id))
+        .execute()
+    )
+    if not existing.data or len(existing.data) == 0:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
+    if include_segments:
+        # Retry-on-view: reuse cache or recompute only eligible segments
+        try:
+            with_segments = get_route_with_fresh_segments(
+                supabase, str(route_id), transport_mode=None, force_refresh=False
+            )
+        except LookupError:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        return with_segments
+    stops = (
+        supabase.table("route_stops")
+        .select("location_id, stop_order")
+        .eq("route_id", str(route_id))
+        .order("stop_order")
+        .execute()
+    )
+    location_ids = [str(s["location_id"]) for s in sorted((stops.data or []), key=lambda r: r["stop_order"])]
+    row = existing.data[0]
+    duration = row.get("duration_seconds")
+    distance = row.get("distance_meters")
+    return RouteResponse(
+        route_id=str(row["route_id"]),
+        option_id=str(row["option_id"]),
+        label=row.get("label"),
+        transport_mode=str(row.get("transport_mode", "walk")),
+        duration_seconds=duration,
+        distance_meters=distance,
+        sort_order=int(row.get("sort_order", 0)),
+        location_ids=location_ids,
+        route_status=_route_status_from_totals(duration, distance),
+    )
+
+
+@router.post(
+    "/{trip_id}/days/{day_id}/options/{option_id}/routes/{route_id}/recalculate",
+    response_model=RouteWithSegmentsResponse,
+)
+async def recalculate_route_endpoint(
+    trip_id: UUID,
+    day_id: UUID,
+    option_id: UUID,
+    route_id: UUID,
+    body: RecalculateRouteBody | None = None,
+    user_id: UUID = Depends(get_current_user_id),
+    supabase=Depends(get_supabase_client),
+):
+    """
+    Refresh route segments (retry-on-view). Recomputes only segments eligible for retry
+    unless force_refresh=true. No automated retries; only when user views or calls this.
+    """
+    _ensure_trip_owned(supabase, trip_id, user_id)
+    _ensure_day_in_trip(supabase, trip_id, day_id)
+    _ensure_option_in_day(supabase, day_id, option_id)
+    existing = (
+        supabase.table("option_routes")
+        .select("route_id, transport_mode")
+        .eq("route_id", str(route_id))
+        .eq("option_id", str(option_id))
+        .execute()
+    )
+    if not existing.data or len(existing.data) == 0:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
+    transport_mode = (body.transport_mode if body else None) or existing.data[0].get("transport_mode") or "walk"
+    force_refresh = bool(body and body.force_refresh)
+    try:
+        result = get_route_with_fresh_segments(
+            supabase, str(route_id), transport_mode=transport_mode, force_refresh=force_refresh
+        )
+    except LookupError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return result
 
 
 @router.delete(
