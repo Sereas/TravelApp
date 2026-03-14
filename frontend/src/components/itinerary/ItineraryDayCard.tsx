@@ -339,7 +339,7 @@ export function ItineraryDayCard({
     }
   }
 
-  // Build lookup: locationId → route
+  // Build lookup: locationId → all route memberships (a location can belong to multiple routes).
   const locRouteMap = useMemo(() => {
     const m = new Map<
       string,
@@ -347,13 +347,15 @@ export function ItineraryDayCard({
         route: (typeof routes)[0];
         idx: number;
         color: (typeof ROUTE_COLORS)[0];
-      }
+      }[]
     >();
     routes.forEach((r, ri) => {
       const color = ROUTE_COLORS[ri % ROUTE_COLORS.length];
-      r.location_ids.forEach((lid, idx) =>
-        m.set(lid, { route: r, idx, color })
-      );
+      r.location_ids.forEach((lid, idx) => {
+        const arr = m.get(lid) ?? [];
+        arr.push({ route: r, idx, color });
+        m.set(lid, arr);
+      });
     });
     return m;
   }, [routes]);
@@ -489,17 +491,13 @@ export function ItineraryDayCard({
     const isDrop = dropId === ol.location_id && !isDrag;
     const bk = ol.location.requires_booking ?? "no";
     const showBk = bk === "yes" || bk === "yes_done";
-    const routeInfo = locRouteMap.get(ol.location_id);
-    const isLast =
-      routeInfo && routeInfo.idx === routeInfo.route.location_ids.length - 1;
+    const routeInfos = locRouteMap.get(ol.location_id) ?? [];
     const picking = creating && pickIds.includes(ol.location_id);
     const pickSeq = pickIds.indexOf(ol.location_id) + 1;
-    const TransportIcon = routeInfo
-      ? TRANSPORT.find((t) => t.key === routeInfo.route.transport_mode)?.icon
-      : null;
 
     return (
       <div key={ol.location_id}>
+        {/* Between rows: only forward segment connector (current → next). No incoming/reverse chip. */}
         <div
           className={cn(
             "group grid gap-x-3 items-center rounded-md px-1 py-1.5 text-sm transition-colors",
@@ -574,14 +572,20 @@ export function ItineraryDayCard({
             }
             aria-expanded={expanded}
           >
-            {routeInfo && (
-              <span
-                className={cn(
-                  "inline-flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold text-white mr-1.5 shrink-0",
-                  routeInfo.color.dot
-                )}
-              >
-                {routeInfo.idx + 1}
+            {routeInfos.length > 0 && (
+              <span className="inline-flex items-center gap-1 mr-1.5 shrink-0">
+                {routeInfos.map((info) => (
+                  <span
+                    key={info.route.route_id}
+                    className={cn(
+                      "inline-flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold text-white",
+                      info.color.dot
+                    )}
+                    title={`${info.route.transport_mode} route, stop ${info.idx + 1}`}
+                  >
+                    {info.idx + 1}
+                  </span>
+                ))}
               </span>
             )}
             <span className="font-medium truncate">{ol.location.name}</span>
@@ -685,24 +689,35 @@ export function ItineraryDayCard({
         )}
 
         {/* Route connector between consecutive stops */}
-        {routeInfo && !isLast && TransportIcon && (
-          <div className="flex items-center gap-2 py-0.5 pl-[1.5rem] ml-[6rem]">
+        {routeInfos.map((info) => {
+          const isLastLeg =
+            info.idx === info.route.location_ids.length - 1;
+          const Icon =
+            TRANSPORT.find((t) => t.key === info.route.transport_mode)
+              ?.icon ?? null;
+          if (isLastLeg || !Icon) return null;
+          return (
             <div
-              className={cn(
-                "flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-medium",
-                routeInfo.color.bg,
-                routeInfo.color.text
-              )}
+              key={info.route.route_id}
+              className="flex items-center gap-2 py-0.5 pl-[1.5rem] ml-[6rem]"
             >
-              <span className="text-muted-foreground/60">↓</span>
-              <TransportIcon size={10} />
-              <span>
-                {formatRouteTime(routeInfo.route)} ·{" "}
-                {formatRouteDistance(routeInfo.route)}
-              </span>
+              <div
+                className={cn(
+                  "flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-medium",
+                  info.color.bg,
+                  info.color.text
+                )}
+              >
+                <span className="text-muted-foreground/60">↓</span>
+                <Icon size={10} />
+                <span>
+                  {formatRouteTime(info.route)} ·{" "}
+                  {formatRouteDistance(info.route)}
+                </span>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })}
       </div>
     );
   }
