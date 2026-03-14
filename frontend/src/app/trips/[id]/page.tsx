@@ -508,11 +508,19 @@ export default function TripDetailPage() {
       );
       setItinerary((prev) => {
         if (!prev) return prev;
-        return patchRouteInItinerary(prev, dayId, optionId, routeId, withSegments);
+        return patchRouteInItinerary(
+          prev,
+          dayId,
+          optionId,
+          routeId,
+          withSegments
+        );
       });
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : "Could not calculate distance and duration";
+        err instanceof Error
+          ? err.message
+          : "Could not calculate distance and duration";
       setRouteMetricsError((prev) => ({ ...prev, [routeId]: message }));
     } finally {
       setCalculatingRouteId(null);
@@ -578,11 +586,19 @@ export default function TripDetailPage() {
       );
       setItinerary((prev) => {
         if (!prev) return prev;
-        return patchRouteInItinerary(prev, dayId, optionId, routeId, withSegments);
+        return patchRouteInItinerary(
+          prev,
+          dayId,
+          optionId,
+          routeId,
+          withSegments
+        );
       });
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : "Could not calculate distance and duration";
+        err instanceof Error
+          ? err.message
+          : "Could not calculate distance and duration";
       setRouteMetricsError((prev) => ({ ...prev, [routeId]: message }));
     } finally {
       setCalculatingRouteId(null);

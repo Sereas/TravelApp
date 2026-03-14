@@ -6,7 +6,7 @@ Cache is reused when eligible; only missing/stale/retry-eligible segments are re
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -55,10 +55,12 @@ def _input_fingerprint(
     transport_mode: str,
 ) -> str:
     """Deterministic fingerprint for cache invalidation when inputs change."""
+
     def _ll(lat: float | None, lng: float | None) -> str:
         if lat is not None and lng is not None:
             return f"{round(lat, 5)}_{round(lng, 5)}"
         return "none"
+
     o_place = origin_place_id or "n"
     d_place = dest_place_id or "n"
     o_ll = _ll(origin_lat, origin_lng)
@@ -78,19 +80,22 @@ def _cache_key(
     """Lookup key (same as before); direction matters."""
     if origin_place_id and dest_place_id:
         return f"{origin_place_id}|{dest_place_id}|{transport_mode}"
+
     def _ll(a: float | None, b: float | None) -> str:
         if a is not None and b is not None:
             return f"{round(a, 5)}_{round(b, 5)}"
         return "none"
+
     return f"latlng:{_ll(origin_lat, origin_lng)}:{_ll(dest_lat, dest_lng)}|{transport_mode}"
 
 
 def _now_utc() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _add_minutes(dt: datetime, minutes: int) -> datetime:
     from datetime import timedelta
+
     return dt + timedelta(minutes=minutes)
 
 
@@ -230,13 +235,21 @@ def _compute_one_segment(
     Returns (segment_cache_id, row_dict for response).
     """
     cache_key = _cache_key(
-        origin_place_id, dest_place_id,
-        origin_lat, origin_lng, dest_lat, dest_lng,
+        origin_place_id,
+        dest_place_id,
+        origin_lat,
+        origin_lng,
+        dest_lat,
+        dest_lng,
         transport_mode,
     )
     fingerprint = _input_fingerprint(
-        origin_place_id, dest_place_id,
-        origin_lat, origin_lng, dest_lat, dest_lng,
+        origin_place_id,
+        dest_place_id,
+        origin_lat,
+        origin_lng,
+        dest_lat,
+        dest_lng,
         transport_mode,
     )
     now = _now_utc()
@@ -278,13 +291,19 @@ def _compute_one_segment(
 
     try:
         leg = google_client.compute_leg(
-            origin_lat, origin_lng, dest_lat, dest_lng, transport_mode,
+            origin_lat,
+            origin_lng,
+            dest_lat,
+            dest_lng,
+            transport_mode,
         )
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         http_status = getattr(getattr(e, "response", None), "status_code", None)
         msg = str(e)
         status, error_type, cooldown_minutes = classify_provider_error(
-            http_status, msg, transport_mode,
+            http_status,
+            msg,
+            transport_mode,
         )
         next_retry = _add_minutes(now, cooldown_minutes) if cooldown_minutes else None
         existing = _fetch_cached_segment(supabase, cache_key)
@@ -311,7 +330,7 @@ def _compute_one_segment(
         again = _fetch_cached_segment(supabase, cache_key)
         if again:
             return str(again["id"]), {**again, **row}
-        raise RuntimeError("Failed to upsert segment_cache after error")
+        raise RuntimeError("Failed to upsert segment_cache after error") from e
 
     # Success
     cache_expires_at = None
@@ -375,9 +394,10 @@ def get_route_with_fresh_segments(
     force_refresh: bool = False,
 ) -> RouteWithSegmentsResponse:
     """
-    Load route and segments; for each segment decide reuse vs recompute (retry-on-view only).
-    Recompute only when: force_refresh, or missing cache, or fingerprint changed, or status allows retry and cooldown expired.
-    Update option_routes totals and route_segments; return route with per-segment status and error metadata.
+    Load route and segments; for each segment decide reuse vs recompute (retry-on-view).
+    Recompute when: force_refresh, or missing cache, or fingerprint changed, or
+    status allows retry and cooldown expired.
+    Update option_routes totals and route_segments; return route with segment status.
     """
     route_row = (
         supabase.table("option_routes")
@@ -402,10 +422,12 @@ def get_route_with_fresh_segments(
     location_ids = [str(s["location_id"]) for s in ordered]
     if len(ordered) < 2:
         # Zero or one stop: no segments to compute; persist zero totals
-        supabase.table("option_routes").update({
-            "duration_seconds": 0,
-            "distance_meters": 0,
-        }).eq("route_id", route_id).execute()
+        supabase.table("option_routes").update(
+            {
+                "duration_seconds": 0,
+                "distance_meters": 0,
+            }
+        ).eq("route_id", route_id).execute()
         return RouteWithSegmentsResponse(
             route_id=route_id,
             option_id=option_id,
@@ -443,8 +465,10 @@ def get_route_with_fresh_segments(
         cache_list = (
             supabase.table("segment_cache")
             .select(
-                "id, cache_key, status, input_fingerprint, distance_meters, duration_seconds, encoded_polyline, "
-                "error_type, error_code, error_message, provider_http_status, next_retry_at, cache_expires_at, retry_count"
+                "id, cache_key, status, input_fingerprint, distance_meters, "
+                "duration_seconds, encoded_polyline, error_type, error_code, "
+                "error_message, provider_http_status, next_retry_at, "
+                "cache_expires_at, retry_count"
             )
             .in_("id", cache_ids)
             .execute()
@@ -455,7 +479,8 @@ def get_route_with_fresh_segments(
     total_distance = 0
     total_duration = 0
     any_non_success = False
-    segment_order_to_cache_id: dict[int, str] = {}  # after loop we'll write route_segments for new/changed
+    # After loop we'll write route_segments for new/changed
+    segment_order_to_cache_id: dict[int, str] = {}
 
     for i in range(len(ordered) - 1):
         from_stop = ordered[i]
@@ -477,39 +502,51 @@ def get_route_with_fresh_segments(
 
         # Skip Google call if either endpoint is missing coordinates (avoid 0,0 requests)
         missing_coords = (
-            from_lat_raw is None or from_lng_raw is None
-            or to_lat_raw is None or to_lng_raw is None
+            from_lat_raw is None or from_lng_raw is None or to_lat_raw is None or to_lng_raw is None
         )
         if missing_coords:
-            segments_out.append(RouteSegmentResponse(
-                segment_order=i,
-                from_location_id=from_loc_id,
-                to_location_id=to_loc_id,
-                distance_meters=None,
-                duration_seconds=None,
-                encoded_polyline=None,
-                status=STATUS_INPUT_ERROR,
-                error_type="missing_coordinates",
-                error_message="One or both locations are missing coordinates",
-                provider_http_status=None,
-                next_retry_at=None,
-            ))
+            segments_out.append(
+                RouteSegmentResponse(
+                    segment_order=i,
+                    from_location_id=from_loc_id,
+                    to_location_id=to_loc_id,
+                    distance_meters=None,
+                    duration_seconds=None,
+                    encoded_polyline=None,
+                    status=STATUS_INPUT_ERROR,
+                    error_type="missing_coordinates",
+                    error_message="One or both locations are missing coordinates",
+                    provider_http_status=None,
+                    next_retry_at=None,
+                )
+            )
             any_non_success = True
             continue
 
         fingerprint = _input_fingerprint(
-            from_place, to_place,
-            from_lat, from_lng, to_lat, to_lng,
+            from_place,
+            to_place,
+            from_lat,
+            from_lng,
+            to_lat,
+            to_lng,
             mode,
         )
         cache_key = _cache_key(
-            from_place, to_place,
-            from_lat, from_lng, to_lat, to_lng,
+            from_place,
+            to_place,
+            from_lat,
+            from_lng,
+            to_lat,
+            to_lng,
             mode,
         )
 
         # Existing segment cache row (by segment_order)
-        existing_for_order = next((s for s in existing_segments if int(s["segment_order"]) == i), None)
+        existing_for_order = next(
+            (s for s in existing_segments if int(s["segment_order"]) == i),
+            None,
+        )
         cache_row: dict[str, Any] | None = None
         if existing_for_order:
             cache_row = cache_rows_by_id.get(str(existing_for_order["segment_cache_id"]))
@@ -522,9 +559,14 @@ def get_route_with_fresh_segments(
 
         if do_recompute:
             cache_id, new_row = _compute_one_segment(
-                supabase, google_client,
-                from_place, from_lat, from_lng,
-                to_place, to_lat, to_lng,
+                supabase,
+                google_client,
+                from_place,
+                from_lat,
+                from_lng,
+                to_place,
+                to_lat,
+                to_lng,
                 mode,
             )
             cache_row = new_row
@@ -544,35 +586,41 @@ def get_route_with_fresh_segments(
             segments_out.append(_segment_response(i, from_loc_id, to_loc_id, cache_row))
         else:
             any_non_success = True
-            segments_out.append(RouteSegmentResponse(
-                segment_order=i,
-                from_location_id=from_loc_id,
-                to_location_id=to_loc_id,
-                distance_meters=None,
-                duration_seconds=None,
-                encoded_polyline=None,
-                status=STATUS_INPUT_ERROR,
-                error_type="missing_cache",
-                error_message="No cache and compute failed",
-            ))
+            segments_out.append(
+                RouteSegmentResponse(
+                    segment_order=i,
+                    from_location_id=from_loc_id,
+                    to_location_id=to_loc_id,
+                    distance_meters=None,
+                    duration_seconds=None,
+                    encoded_polyline=None,
+                    status=STATUS_INPUT_ERROR,
+                    error_type="missing_cache",
+                    error_message="No cache and compute failed",
+                )
+            )
 
     # Persist route_segments: replace all for this route so order and links are correct
     supabase.table("route_segments").delete().eq("route_id", route_id).execute()
     for seg_order, cache_id in segment_order_to_cache_id.items():
         from_loc_id = str(ordered[seg_order]["location_id"])
         to_loc_id = str(ordered[seg_order + 1]["location_id"])
-        supabase.table("route_segments").insert({
-            "route_id": route_id,
-            "segment_order": seg_order,
-            "from_location_id": from_loc_id,
-            "to_location_id": to_loc_id,
-            "segment_cache_id": cache_id,
-        }).execute()
+        supabase.table("route_segments").insert(
+            {
+                "route_id": route_id,
+                "segment_order": seg_order,
+                "from_location_id": from_loc_id,
+                "to_location_id": to_loc_id,
+                "segment_cache_id": cache_id,
+            }
+        ).execute()
 
-    supabase.table("option_routes").update({
-        "duration_seconds": total_duration,
-        "distance_meters": total_distance,
-    }).eq("route_id", route_id).execute()
+    supabase.table("option_routes").update(
+        {
+            "duration_seconds": total_duration,
+            "distance_meters": total_distance,
+        }
+    ).eq("route_id", route_id).execute()
 
     return RouteWithSegmentsResponse(
         route_id=route_id,
@@ -589,10 +637,13 @@ def get_route_with_fresh_segments(
 
 
 def get_route_with_segments(supabase: Any, route_id: str) -> RouteWithSegmentsResponse | None:
-    """Load option_route + route_stops + route_segments JOIN segment_cache; build response (no recompute)."""
+    """Load option_route + route_stops + route_segments JOIN segment_cache (no recompute)."""
     route_row = (
         supabase.table("option_routes")
-        .select("route_id, option_id, label, transport_mode, duration_seconds, distance_meters, sort_order")
+        .select(
+            "route_id, option_id, label, transport_mode, duration_seconds, "
+            "distance_meters, sort_order",
+        )
         .eq("route_id", route_id)
         .execute()
     )
@@ -648,12 +699,14 @@ def get_route_with_segments(supabase: Any, route_id: str) -> RouteWithSegmentsRe
         status = STATUS_LEGACY_TO_NEW.get(status, status)
         if status != STATUS_SUCCESS:
             any_error = True
-        segments_out.append(_segment_response(
-            int(s["segment_order"]),
-            str(s["from_location_id"]),
-            str(s["to_location_id"]),
-            c,
-        ))
+        segments_out.append(
+            _segment_response(
+                int(s["segment_order"]),
+                str(s["from_location_id"]),
+                str(s["to_location_id"]),
+                c,
+            )
+        )
     return RouteWithSegmentsResponse(
         route_id=str(route["route_id"]),
         option_id=str(route["option_id"]),

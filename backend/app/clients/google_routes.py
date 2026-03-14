@@ -1,6 +1,7 @@
 """Google Routes API client for computing a single leg (origin -> destination).
 
-Uses GOOGLE_ROUTES_API_KEY only. When the key is missing, callers should treat the client as disabled.
+Uses GOOGLE_ROUTES_API_KEY only. When the key is missing, callers should
+treat the client as disabled.
 """
 
 from __future__ import annotations

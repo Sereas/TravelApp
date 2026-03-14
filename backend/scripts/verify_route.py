@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Verify route calculation for a given route_id. Run from repo root with .env set.
 
-  .venv/bin/python backend/scripts/verify_route.py 15d46353-ff6e-4ff0-bf74-a1a77c2ed7d6
-  .venv/bin/python backend/scripts/verify_route.py 15d46353-ff6e-4ff0-bf74-a1a77c2ed7d6 --force
+.venv/bin/python backend/scripts/verify_route.py 15d46353-ff6e-4ff0-bf74-a1a77c2ed7d6
+.venv/bin/python backend/scripts/verify_route.py 15d46353-ff6e-4ff0-bf74-a1a77c2ed7d6 --force
 """
+
 import json
 import sys
 
@@ -11,7 +12,10 @@ import sys
 sys.path.insert(0, ".")
 
 from backend.app.db.supabase import get_supabase_client
-from backend.app.services.route_calculation import get_route_with_fresh_segments, get_route_with_segments
+from backend.app.services.route_calculation import (
+    get_route_with_fresh_segments,
+    get_route_with_segments,
+)
 
 ROUTE_ID = "15d46353-ff6e-4ff0-bf74-a1a77c2ed7d6"
 
@@ -22,13 +26,24 @@ def main():
     supabase = get_supabase_client()
 
     # 1) Check route exists and get context
-    r = supabase.table("option_routes").select("route_id, option_id, transport_mode").eq("route_id", route_id).execute()
+    r = (
+        supabase.table("option_routes")
+        .select("route_id, option_id, transport_mode")
+        .eq("route_id", route_id)
+        .execute()
+    )
     if not r.data or len(r.data) == 0:
         print(f"ERROR: Route {route_id} not found in option_routes")
         sys.exit(1)
     print("Route found:", r.data[0])
 
-    stops = supabase.table("route_stops").select("location_id, stop_order").eq("route_id", route_id).order("stop_order").execute()
+    stops = (
+        supabase.table("route_stops")
+        .select("location_id, stop_order")
+        .eq("route_id", route_id)
+        .order("stop_order")
+        .execute()
+    )
     n_stops = len(stops.data or [])
     print(f"Stops: {n_stops}")
     if n_stops < 2:
@@ -48,7 +63,9 @@ def main():
     mode = (r.data[0].get("transport_mode")) or "walk"
     print(f"\n--- get_route_with_fresh_segments (transport_mode={mode}, force_refresh={force}) ---")
     try:
-        fresh = get_route_with_fresh_segments(supabase, route_id, transport_mode=mode, force_refresh=force)
+        fresh = get_route_with_fresh_segments(
+            supabase, route_id, transport_mode=mode, force_refresh=force
+        )
         print(json.dumps(fresh.model_dump(), indent=2, default=str))
         _print_retry_metadata(fresh)
         print("\nOK: get_route_with_fresh_segments succeeded")

@@ -221,11 +221,19 @@ function formatRouteTotalDistance(route: {
 }
 
 /** Format a single segment's metrics (one leg). Use only for segment pills, never for route totals. */
-function formatSegmentMetrics(segment: {
-  duration_seconds?: number | null;
-  distance_meters?: number | null;
-} | null | undefined): string {
-  if (!segment || (segment.duration_seconds == null && segment.distance_meters == null)) {
+function formatSegmentMetrics(
+  segment:
+    | {
+        duration_seconds?: number | null;
+        distance_meters?: number | null;
+      }
+    | null
+    | undefined
+): string {
+  if (
+    !segment ||
+    (segment.duration_seconds == null && segment.distance_meters == null)
+  ) {
     return "— min · — km";
   }
   const dur =
@@ -762,13 +770,14 @@ export function ItineraryDayCard({
                 <span>
                   {isCalculatingLeg ? (
                     <>
-                      <LoadingSpinner size="sm" className="inline-block h-3 w-3 align-middle" />{" "}
+                      <LoadingSpinner
+                        size="sm"
+                        className="inline-block h-3 w-3 align-middle"
+                      />{" "}
                       Calculating…
                     </>
                   ) : (
-                    <>
-                      {formatSegmentMetrics(info.route.segments?.[info.idx])}
-                    </>
+                    <>{formatSegmentMetrics(info.route.segments?.[info.idx])}</>
                   )}
                 </span>
               </div>
@@ -1073,7 +1082,10 @@ export function ItineraryDayCard({
                           <span className="flex shrink-0 items-center gap-1.5">
                             <span className="flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">
                               <AlertCircle size={11} />
-                              <span className="max-w-[140px] truncate" title={metricsError}>
+                              <span
+                                className="max-w-[140px] truncate"
+                                title={metricsError}
+                              >
                                 Metrics unavailable
                               </span>
                             </span>
@@ -1082,7 +1094,11 @@ export function ItineraryDayCard({
                               size="sm"
                               className="h-5 px-1.5 text-[10px]"
                               onClick={() =>
-                                onRetryRouteMetrics(day.id, currentOption!.id, r.route_id)
+                                onRetryRouteMetrics(
+                                  day.id,
+                                  currentOption!.id,
+                                  r.route_id
+                                )
                               }
                             >
                               Retry
@@ -1091,9 +1107,13 @@ export function ItineraryDayCard({
                         )}
                         {!isCalculating && !metricsError && (
                           <span className="text-muted-foreground">
-                            {formatRouteTotalDuration(r)} · {formatRouteTotalDistance(r)}
+                            {formatRouteTotalDuration(r)} ·{" "}
+                            {formatRouteTotalDistance(r)}
                             {r.route_status === "error" && (
-                              <span className="ml-1 text-amber-600" title="Some segments could not be calculated">
+                              <span
+                                className="ml-1 text-amber-600"
+                                title="Some segments could not be calculated"
+                              >
                                 (partial)
                               </span>
                             )}

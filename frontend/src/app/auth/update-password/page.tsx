@@ -181,11 +181,7 @@ export default function UpdatePasswordPage() {
               autoComplete="new-password"
             />
           </div>
-          <Button
-            type="submit"
-            className="w-full"
-            disabled={loading}
-          >
+          <Button type="submit" className="w-full" disabled={loading}>
             {loading ? "Updating…" : "Update password"}
           </Button>
         </form>

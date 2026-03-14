@@ -334,7 +334,7 @@ class ItineraryOptionLocation(BaseModel):
 class RouteSegmentSummary(BaseModel):
     """Per-segment metrics in itinerary tree (one per leg between consecutive stops)."""
 
-    segment_order: int = Field(..., ge=0, description="0-based index: leg from stop[i] to stop[i+1]")
+    segment_order: int = Field(..., ge=0, description="0-based: leg stop[i] to stop[i+1]")
     duration_seconds: int | None = None
     distance_meters: int | None = None
 
@@ -440,7 +440,10 @@ class RouteResponse(BaseModel):
     location_ids: list[str] = Field(default_factory=list)
     route_status: str = Field(
         "pending",
-        description="pending = metrics not yet calculated; ok = all segments success; error = one or more segments failed",
+        description=(
+            "pending = metrics not yet calculated; ok = all segments success; "
+            "error = one or more segments failed"
+        ),
     )
 
 
@@ -450,8 +453,12 @@ class RouteResponse(BaseModel):
 class RecalculateRouteBody(BaseModel):
     """Optional body for POST recalculate/refresh route."""
 
-    transport_mode: str | None = Field(None, description="walk | drive | transit; uses route's mode if omitted")
-    force_refresh: bool = Field(False, description="If true, recompute all segments ignoring cache/cooldown")
+    transport_mode: str | None = Field(
+        None, description="walk | drive | transit; default: route's mode"
+    )
+    force_refresh: bool = Field(
+        False, description="If true, recompute all segments (ignore cache/cooldown)"
+    )
 
     @field_validator("transport_mode")
     @classmethod
@@ -462,7 +469,7 @@ class RecalculateRouteBody(BaseModel):
 
 
 class RouteSegmentResponse(BaseModel):
-    """One segment (leg) of a route: from_location -> to_location; includes retry metadata when not success."""
+    """One segment (leg): from_location -> to_location; retry metadata when not success."""
 
     segment_order: int = Field(..., ge=0)
     from_location_id: str = Field(..., description="Location UUID (origin of this leg)")
@@ -470,11 +477,16 @@ class RouteSegmentResponse(BaseModel):
     distance_meters: int | None = None
     duration_seconds: int | None = None
     encoded_polyline: str | None = Field(None, description="Google encoded polyline for MapLibre")
-    status: str = Field("success", description="success | retryable_error | config_error | input_error | no_route")
-    error_type: str | None = Field(None, description="e.g. forbidden_or_unauthorized, server_or_rate_limit")
+    status: str = Field(
+        "success",
+        description="success | retryable_error | config_error | input_error | no_route",
+    )
+    error_type: str | None = Field(
+        None, description="e.g. forbidden_or_unauthorized, server_or_rate_limit"
+    )
     error_message: str | None = None
     provider_http_status: int | None = Field(None, description="e.g. 403, 500")
-    next_retry_at: str | None = Field(None, description="ISO8601; next time retry is eligible on view")
+    next_retry_at: str | None = Field(None, description="ISO8601; next eligible retry on view")
 
 
 class RouteWithSegmentsResponse(BaseModel):
@@ -491,5 +503,7 @@ class RouteWithSegmentsResponse(BaseModel):
     segments: list[RouteSegmentResponse] = Field(default_factory=list)
     route_status: str = Field(
         "ok",
-        description="ok = all segments success; error = one or more segments failed (partial or total)",
+        description=(
+            "ok = all segments success; error = one or more segments failed (partial or total)"
+        ),
     )

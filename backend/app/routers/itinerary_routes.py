@@ -1,4 +1,4 @@
-"""Option routes (itinerary) API: list, create, get one, recalculate, delete routes for an option."""
+"""Option routes (itinerary) API: list, create, get, recalculate, delete."""
 
 from uuid import UUID
 
@@ -16,7 +16,9 @@ from backend.app.models.schemas import (
 from backend.app.routers.itinerary_option_locations import _ensure_option_in_day
 from backend.app.routers.itinerary_options import _ensure_day_in_trip
 from backend.app.routers.trip_ownership import _ensure_trip_owned
-from backend.app.services.route_calculation import get_route_with_fresh_segments, get_route_with_segments
+from backend.app.services.route_calculation import (
+    get_route_with_fresh_segments,
+)
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger("itinerary_routes")
 
@@ -127,7 +129,7 @@ async def create_route(
         )
     row = result.data if isinstance(result.data, dict) else result.data[0]
     row["location_ids"] = body.location_ids
-    # New route has no segments yet; metrics will be calculated when client calls get with segments or recalculate
+    # New route has no segments yet; metrics when client calls get with segments or recalculate
     row["route_status"] = "pending"
     logger.info(
         "route_created",
@@ -148,7 +150,9 @@ async def get_route(
     day_id: UUID,
     option_id: UUID,
     route_id: UUID,
-    include_segments: bool = Query(False, description="Include per-segment distance, duration, and polyline"),
+    include_segments: bool = Query(
+        False, description="Include per-segment distance, duration, and polyline"
+    ),
     user_id: UUID = Depends(get_current_user_id),
     supabase=Depends(get_supabase_client),
 ):
@@ -160,7 +164,10 @@ async def get_route(
     _ensure_option_in_day(supabase, day_id, option_id)
     existing = (
         supabase.table("option_routes")
-        .select("route_id, option_id, label, transport_mode, duration_seconds, distance_meters, sort_order")
+        .select(
+            "route_id, option_id, label, transport_mode, duration_seconds, "
+            "distance_meters, sort_order"
+        )
         .eq("route_id", str(route_id))
         .eq("option_id", str(option_id))
         .execute()
@@ -174,9 +181,11 @@ async def get_route(
                 supabase, str(route_id), transport_mode=None, force_refresh=False
             )
         except LookupError:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Route not found"
+            ) from None
         except ValueError as e:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
         return with_segments
     stops = (
         supabase.table("route_stops")
@@ -185,7 +194,8 @@ async def get_route(
         .order("stop_order")
         .execute()
     )
-    location_ids = [str(s["location_id"]) for s in sorted((stops.data or []), key=lambda r: r["stop_order"])]
+    stops_sorted = sorted((stops.data or []), key=lambda r: r["stop_order"])
+    location_ids = [str(s["location_id"]) for s in stops_sorted]
     row = existing.data[0]
     duration = row.get("duration_seconds")
     distance = row.get("distance_meters")
@@ -231,16 +241,20 @@ async def recalculate_route_endpoint(
     )
     if not existing.data or len(existing.data) == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
-    transport_mode = (body.transport_mode if body else None) or existing.data[0].get("transport_mode") or "walk"
+    transport_mode = (
+        (body.transport_mode if body else None) or existing.data[0].get("transport_mode") or "walk"
+    )
     force_refresh = bool(body and body.force_refresh)
     try:
         result = get_route_with_fresh_segments(
             supabase, str(route_id), transport_mode=transport_mode, force_refresh=force_refresh
         )
     except LookupError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Route not found"
+        ) from None
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     return result
 
 
