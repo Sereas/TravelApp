@@ -28,9 +28,10 @@ app = FastAPI(
 
 _cors_origins = [
     o.strip()
-    for o in os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001").split(
-        ","
-    )
+    for o in os.getenv(
+        "CORS_ALLOWED_ORIGINS",
+        "http://localhost:3000,http://localhost:3001,https://shtabtravel.vercel.app",
+    ).split(",")
 ]
 app.add_middleware(
     CORSMiddleware,
