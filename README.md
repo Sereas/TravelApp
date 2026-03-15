@@ -2,6 +2,8 @@
 
 Trip planning and in-trip assistance: collect locations, organize day-by-day itineraries, and (later) visualize on a map. Backend API (FastAPI + Supabase) and Web client (Next.js).
 
+**Deployment:** See [DEPLOYMENT.md](DEPLOYMENT.md). Tech stack: [TECH-STACK.md](TECH-STACK.md).
+
 ---
 
 ## Quick start

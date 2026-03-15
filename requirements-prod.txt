@@ -1,0 +1,11 @@
+# Production dependencies only (used by Dockerfile).
+# For local dev and CI use requirements.txt.
+
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+PyJWT[crypto]>=2.8.0
+python-multipart>=0.0.6
+pydantic[email]>=2.5.0
+supabase>=2.0.0
+python-dotenv>=1.0.0
+structlog>=24.1.0

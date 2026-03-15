@@ -19,3 +19,7 @@ docs
 .idea
 .vscode
 .cursor
+# Exclude dev-only code from production image
+backend/tests
+backend/scripts
+frontend
