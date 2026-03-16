@@ -31,6 +31,8 @@ known-first-party = ["backend"]
 
 [tool.pytest.ini_options]
 testpaths = ["backend/tests"]
+markers = ["live: marks tests as live integration tests that hit real external APIs (deselect with '-m not live')"]
+addopts = "-m 'not live'"
 
 [tool.pyright]
 venvPath = "."

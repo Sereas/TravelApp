@@ -10,10 +10,13 @@ import pytest
 
 from backend.app.clients.google_places import GooglePlacesClient
 
-pytestmark = pytest.mark.skipif(
-    not os.environ.get("GOOGLE_PLACES_API_KEY"),
-    reason="GOOGLE_PLACES_API_KEY not set",
-)
+pytestmark = [
+    pytest.mark.live,
+    pytest.mark.skipif(
+        not os.environ.get("GOOGLE_PLACES_API_KEY"),
+        reason="GOOGLE_PLACES_API_KEY not set",
+    ),
+]
 
 TEST_LINK = "https://maps.app.goo.gl/m42uZygTpKWywZx78"
 
