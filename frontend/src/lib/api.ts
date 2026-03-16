@@ -105,6 +105,7 @@ export interface RouteSegmentSummary {
   segment_order: number;
   duration_seconds: number | null;
   distance_meters: number | null;
+  encoded_polyline: string | null;
 }
 
 export interface ItineraryOptionRoute {

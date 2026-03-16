@@ -17,8 +17,48 @@ export interface ItineraryDayMapLocation {
   category?: string | null;
 }
 
+export interface MapRoutePolyline {
+  routeId: string;
+  color: string;
+  encodedPolylines: string[];
+  /** Pre-formatted label, e.g. "26 min · 1.9 km" */
+  label?: string;
+}
+
 interface ItineraryDayMapProps {
   locations: ItineraryDayMapLocation[];
+  routes?: MapRoutePolyline[];
+}
+
+/** Decode a Google-encoded polyline string into [lng, lat] pairs for GeoJSON. */
+export function decodePolyline(encoded: string): [number, number][] {
+  const coords: [number, number][] = [];
+  let index = 0;
+  let lat = 0;
+  let lng = 0;
+  while (index < encoded.length) {
+    let shift = 0;
+    let result = 0;
+    let byte: number;
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20);
+    lat += result & 1 ? ~(result >> 1) : result >> 1;
+
+    shift = 0;
+    result = 0;
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20);
+    lng += result & 1 ? ~(result >> 1) : result >> 1;
+
+    coords.push([lng * 1e-5, lat * 1e-5]);
+  }
+  return coords;
 }
 
 function MapMarkerContent({
@@ -103,7 +143,7 @@ function PopupCard({
   );
 }
 
-export function ItineraryDayMap({ locations }: ItineraryDayMapProps) {
+export function ItineraryDayMap({ locations, routes }: ItineraryDayMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(
@@ -222,7 +262,83 @@ export function ItineraryDayMap({ locations }: ItineraryDayMapProps) {
       locations,
     };
 
+    const labelMarkers: maplibregl.Marker[] = [];
+    const pendingLabels: {
+      color: string;
+      label: string;
+      coords: [number, number][];
+    }[] = [];
+
     map.once("load", () => {
+      // Add route polylines
+      if (routes && routes.length > 0) {
+        routes.forEach((route, routeIdx) => {
+          const allCoords: [number, number][] = [];
+          for (const encoded of route.encodedPolylines) {
+            const decoded = decodePolyline(encoded);
+            allCoords.push(...decoded);
+          }
+          if (allCoords.length === 0) return;
+
+          // Extend bounds to include route path
+          for (const coord of allCoords) {
+            bounds.extend(coord as [number, number]);
+          }
+
+          const sourceId = `route-${route.routeId}-${routeIdx}`;
+          const color = route.color;
+
+          map.addSource(sourceId, {
+            type: "geojson",
+            data: {
+              type: "Feature",
+              properties: {},
+              geometry: {
+                type: "LineString",
+                coordinates: allCoords,
+              },
+            },
+          });
+
+          // Outer stroke for contrast against the map
+          map.addLayer({
+            id: `${sourceId}-outline`,
+            type: "line",
+            source: sourceId,
+            layout: {
+              "line-join": "round",
+              "line-cap": "round",
+            },
+            paint: {
+              "line-color": "#ffffff",
+              "line-width": 7,
+              "line-opacity": 0.9,
+            },
+          });
+
+          // Main colored line
+          map.addLayer({
+            id: `${sourceId}-line`,
+            type: "line",
+            source: sourceId,
+            layout: {
+              "line-join": "round",
+              "line-cap": "round",
+            },
+            paint: {
+              "line-color": color,
+              "line-width": 4,
+              "line-opacity": 0.9,
+            },
+          });
+
+          // Store coords for deferred label placement (after fitBounds)
+          if (route.label && allCoords.length >= 2) {
+            pendingLabels.push({ color, label: route.label, coords: allCoords });
+          }
+        });
+      }
+
       if (locations.length === 1) {
         map.setCenter([first.longitude, first.latitude]);
         map.setZoom(14.5);
@@ -234,6 +350,86 @@ export function ItineraryDayMap({ locations }: ItineraryDayMapProps) {
         });
       }
       map.resize();
+
+      // Place route labels avoiding marker overlap.
+      // We check whether the label's bounding box (estimated from text)
+      // would overlap any marker's bounding box on screen.
+      if (pendingLabels.length > 0) {
+        const MARKER_HALF_W = 18;
+        const MARKER_HALF_H = 18;
+        const LABEL_PAD = 6; // extra breathing room around label
+        const SAMPLE_STEP = 2;
+
+        const markerScreenPts = locations.map((loc) =>
+          map.project([loc.longitude, loc.latitude])
+        );
+
+        // Check if a label rect overlaps any marker rect
+        const overlapsAnyMarker = (
+          cx: number,
+          cy: number,
+          halfW: number,
+          halfH: number,
+        ): boolean => {
+          for (const mp of markerScreenPts) {
+            if (
+              cx - halfW < mp.x + MARKER_HALF_W &&
+              cx + halfW > mp.x - MARKER_HALF_W &&
+              cy - halfH < mp.y + MARKER_HALF_H &&
+              cy + halfH > mp.y - MARKER_HALF_H
+            ) {
+              return true;
+            }
+          }
+          return false;
+        }
+
+        for (const { color, label, coords } of pendingLabels) {
+          // Estimate label size from text length
+          const labelHalfW = label.length * 3.5 + 10 + LABEL_PAD;
+          const labelHalfH = 12 + LABEL_PAD;
+
+          let bestPt: [number, number] | null = null;
+          let bestMinDist = -1;
+
+          for (let i = 0; i < coords.length; i += SAMPLE_STEP) {
+            const sp = map.project(coords[i]);
+
+            // Skip if label rect would overlap any marker
+            if (overlapsAnyMarker(sp.x, sp.y, labelHalfW, labelHalfH)) continue;
+
+            // Among non-overlapping candidates, pick the one farthest from any marker
+            let minDist = Infinity;
+            for (const mp of markerScreenPts) {
+              const dx = sp.x - mp.x;
+              const dy = sp.y - mp.y;
+              const d = dx * dx + dy * dy;
+              if (d < minDist) minDist = d;
+            }
+            if (minDist > bestMinDist) {
+              bestMinDist = minDist;
+              bestPt = coords[i];
+            }
+          }
+
+          // Only place the label if we found a non-overlapping position
+          if (bestPt) {
+            const el = document.createElement("div");
+            el.style.cssText =
+              `background:white;color:#374151;font-size:11px;font-weight:500;` +
+              `padding:2px 6px;border-radius:10px;border:1.5px solid ${color};` +
+              `white-space:nowrap;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.12);`;
+            el.textContent = label;
+            const labelMarker = new maplibregl.Marker({
+              element: el,
+              anchor: "center",
+            })
+              .setLngLat(bestPt)
+              .addTo(map);
+            labelMarkers.push(labelMarker);
+          }
+        }
+      }
     });
 
     requestAnimationFrame(() => map.resize());
@@ -250,13 +446,14 @@ export function ItineraryDayMap({ locations }: ItineraryDayMapProps) {
       window.removeEventListener("resize", handleResize);
       roots.forEach((r) => r.unmount());
       popupRoots.forEach((r) => r.unmount());
+      labelMarkers.forEach((m) => m.remove());
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
       }
       markerStateRef.current = null;
     };
-  }, [locations]);
+  }, [locations, routes]);
 
   useEffect(() => {
     const state = markerStateRef.current;

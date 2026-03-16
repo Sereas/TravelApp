@@ -595,6 +595,7 @@ export default function TripDetailPage() {
                         segment_order: s.segment_order,
                         duration_seconds: s.duration_seconds,
                         distance_meters: s.distance_meters,
+                        encoded_polyline: s.encoded_polyline,
                       })),
                     }
                   : r

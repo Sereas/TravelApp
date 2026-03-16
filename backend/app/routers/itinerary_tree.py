@@ -237,6 +237,7 @@ async def get_itinerary(
                     segment_order=int(s["segment_order"]),
                     duration_seconds=s.get("duration_seconds"),
                     distance_meters=s.get("distance_meters"),
+                    encoded_polyline=s.get("encoded_polyline"),
                 )
                 for s in (r.get("segments") or [])
             ]

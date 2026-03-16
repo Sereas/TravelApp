@@ -1015,6 +1015,9 @@ def mock_supabase_trips_and_days():
         def execute(self):
             return type("Result", (), {"data": []})()
 
+    # Store for pre-built route RPC rows (shape matches get_itinerary_routes output)
+    routes_rpc_store: list[dict] = []
+
     class MockSupabaseTripsAndDays:
         def __init__(self, trip_owners, user_id):
             self._trip_owners = {str(k): str(v) for k, v in trip_owners.items()}
@@ -1024,6 +1027,7 @@ def mock_supabase_trips_and_days():
             self._options_store = day_options_store
             self._locations_store = locations_store
             self._option_locations_store = option_locations_store
+            self._routes_rpc_store = routes_rpc_store
 
         def table(self, name):
             if name == "trips":
@@ -1121,6 +1125,12 @@ def mock_supabase_trips_and_days():
                     self._option_locations_store.append(row)
                     inserted.append(row)
                 return type("RpcChain", (), {"execute": lambda _: _RpcResult(inserted)})()
+            if name == "get_itinerary_routes":
+                option_ids = {str(x) for x in (params.get("p_option_ids") or [])}
+                filtered = [
+                    r for r in self._routes_rpc_store if str(r.get("option_id")) in option_ids
+                ]
+                return type("RpcChain", (), {"execute": lambda _: _RpcResult(filtered)})()
             if name == "remove_location_from_option":
                 oid = str(params.get("p_option_id", ""))
                 lid = str(params.get("p_location_id", ""))

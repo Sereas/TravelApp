@@ -337,6 +337,7 @@ class RouteSegmentSummary(BaseModel):
     segment_order: int = Field(..., ge=0, description="0-based: leg stop[i] to stop[i+1]")
     duration_seconds: int | None = None
     distance_meters: int | None = None
+    encoded_polyline: str | None = None
 
 
 class ItineraryRoute(BaseModel):

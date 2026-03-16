@@ -260,6 +260,134 @@ def test_get_itinerary_other_users_trip_returns_404(
         app.dependency_overrides.clear()
 
 
+def test_get_itinerary_includes_route_polylines(
+    client: TestClient,
+    mock_user_id,
+    mock_supabase_trips_and_days,
+):
+    """Routes with segments (including encoded_polyline) appear in itinerary response."""
+    (
+        trip_id,
+        _day1,
+        _day2,
+        _option1,
+        option2,
+        loc1,
+        loc2,
+        mock_sb,
+    ) = _setup_full_itinerary(mock_supabase_trips_and_days, mock_user_id)
+
+    route_id = str(uuid4())
+    mock_sb._routes_rpc_store.append(
+        {
+            "route_id": route_id,
+            "option_id": option2,
+            "label": "Walking tour",
+            "transport_mode": "walk",
+            "duration_seconds": 1560,
+            "distance_meters": 1900,
+            "sort_order": 0,
+            "stop_location_ids": [loc1, loc2],
+            "segments": [
+                {
+                    "segment_order": 0,
+                    "duration_seconds": 1560,
+                    "distance_meters": 1900,
+                    "encoded_polyline": "m}hiHkwyi@dBjBzBdC",
+                },
+            ],
+        }
+    )
+
+    async def override_user():
+        return mock_user_id
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        r = client.get(f"/api/v1/trips/{trip_id}/itinerary")
+        assert r.status_code == 200
+        data = r.json()
+        # Find the option with routes (option2 on day1)
+        day1_node = next(d for d in data["days"] if d["id"] == _day1)
+        opt2_node = next(o for o in day1_node["options"] if o["id"] == option2)
+        assert len(opt2_node["routes"]) == 1
+        route = opt2_node["routes"][0]
+        assert route["route_id"] == route_id
+        assert route["transport_mode"] == "walk"
+        assert route["duration_seconds"] == 1560
+        assert route["distance_meters"] == 1900
+        assert route["route_status"] == "ok"
+        assert route["location_ids"] == [loc1, loc2]
+        # Segments include encoded_polyline
+        assert len(route["segments"]) == 1
+        seg = route["segments"][0]
+        assert seg["segment_order"] == 0
+        assert seg["duration_seconds"] == 1560
+        assert seg["distance_meters"] == 1900
+        assert seg["encoded_polyline"] == "m}hiHkwyi@dBjBzBdC"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_get_itinerary_route_without_polyline(
+    client: TestClient,
+    mock_user_id,
+    mock_supabase_trips_and_days,
+):
+    """Route segments with null polyline (pending calculation) are returned correctly."""
+    (
+        trip_id,
+        _day1,
+        _day2,
+        _option1,
+        option2,
+        loc1,
+        loc2,
+        mock_sb,
+    ) = _setup_full_itinerary(mock_supabase_trips_and_days, mock_user_id)
+
+    route_id = str(uuid4())
+    mock_sb._routes_rpc_store.append(
+        {
+            "route_id": route_id,
+            "option_id": option2,
+            "label": None,
+            "transport_mode": "drive",
+            "duration_seconds": None,
+            "distance_meters": None,
+            "sort_order": 0,
+            "stop_location_ids": [loc1, loc2],
+            "segments": [
+                {
+                    "segment_order": 0,
+                    "duration_seconds": None,
+                    "distance_meters": None,
+                    "encoded_polyline": None,
+                },
+            ],
+        }
+    )
+
+    async def override_user():
+        return mock_user_id
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        r = client.get(f"/api/v1/trips/{trip_id}/itinerary")
+        assert r.status_code == 200
+        data = r.json()
+        day1_node = next(d for d in data["days"] if d["id"] == _day1)
+        opt2_node = next(o for o in day1_node["options"] if o["id"] == option2)
+        route = opt2_node["routes"][0]
+        assert route["route_status"] == "pending"
+        seg = route["segments"][0]
+        assert seg["encoded_polyline"] is None
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_get_itinerary_no_jwt_returns_401(client: TestClient):
     trip_id = uuid4()
     r = client.get(f"/api/v1/trips/{trip_id}/itinerary")

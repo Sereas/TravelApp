@@ -17,7 +17,10 @@ import {
   type ItineraryOptionLocation,
   type Location,
 } from "@/lib/api";
-import { ItineraryDayMap } from "@/components/itinerary/ItineraryDayMap";
+import {
+  ItineraryDayMap,
+  type MapRoutePolyline,
+} from "@/components/itinerary/ItineraryDayMap";
 import { AddLocationsToOptionDialog } from "@/components/itinerary/AddLocationsToOptionDialog";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -90,30 +93,35 @@ const ROUTE_COLORS = [
     bg: "bg-blue-50",
     text: "text-blue-700",
     dot: "bg-blue-400",
+    hex: "#60a5fa",
   },
   {
     bar: "border-l-emerald-400",
     bg: "bg-emerald-50",
     text: "text-emerald-700",
     dot: "bg-emerald-400",
+    hex: "#34d399",
   },
   {
     bar: "border-l-orange-400",
     bg: "bg-orange-50",
     text: "text-orange-700",
     dot: "bg-orange-400",
+    hex: "#fb923c",
   },
   {
     bar: "border-l-violet-400",
     bg: "bg-violet-50",
     text: "text-violet-700",
     dot: "bg-violet-400",
+    hex: "#a78bfa",
   },
   {
     bar: "border-l-rose-400",
     bg: "bg-rose-50",
     text: "text-rose-700",
     dot: "bg-rose-400",
+    hex: "#fb7185",
   },
 ];
 
@@ -499,6 +507,27 @@ export function ItineraryDayCard({
         })),
     [sorted, tripLocations]
   );
+
+  const mapRoutes: MapRoutePolyline[] = useMemo(() => {
+    if (!routes.length) return [];
+    return routes
+      .map((route, ri) => {
+        const polylines = (route.segments ?? [])
+          .filter((s) => s.encoded_polyline)
+          .sort((a, b) => a.segment_order - b.segment_order)
+          .map((s) => s.encoded_polyline!);
+        if (polylines.length === 0) return null;
+        const dur = formatRouteTotalDuration(route);
+        const dist = formatRouteTotalDistance(route);
+        return {
+          routeId: route.route_id,
+          color: ROUTE_COLORS[ri % ROUTE_COLORS.length].hex,
+          encodedPolylines: polylines,
+          label: `${dur} · ${dist}`,
+        };
+      })
+      .filter((r): r is NonNullable<typeof r> => r !== null);
+  }, [routes]);
 
   // Drag handlers
   function onDragStart(locId: string, e: React.DragEvent) {
@@ -1206,7 +1235,7 @@ export function ItineraryDayCard({
                       </p>
                     </div>
                   ) : (
-                    <ItineraryDayMap locations={mapLocations} />
+                    <ItineraryDayMap locations={mapLocations} routes={mapRoutes} />
                   )}
                 </div>
               )}
