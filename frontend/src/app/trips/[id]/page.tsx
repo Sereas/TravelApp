@@ -1035,6 +1035,7 @@ export default function TripDetailPage() {
             <div className="mb-4">
               <AddLocationForm
                 tripId={tripId}
+                existingLocations={locations}
                 onAdded={handleLocationAdded}
                 onCancel={() => setAddingLocation(false)}
               />

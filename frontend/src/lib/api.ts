@@ -66,6 +66,7 @@ export interface Location {
   name: string;
   address: string | null;
   google_link: string | null;
+  google_place_id: string | null;
   note: string | null;
   added_by_user_id: string | null;
   added_by_email: string | null;

@@ -86,6 +86,26 @@ async def add_location(
     Trip must exist and be owned by the authenticated user; else 404.
     """
     _ensure_resource_chain(supabase, trip_id, user_id)
+
+    # Dedup: if a google_place_id is provided, check if it already exists in this trip.
+    if body.google_place_id:
+        dup = (
+            supabase.table("locations")
+            .select("location_id, name")
+            .eq("trip_id", str(trip_id))
+            .eq("google_place_id", body.google_place_id)
+            .limit(1)
+            .execute()
+        )
+        if dup.data:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"A location with this Google Place already exists in the trip: "
+                    f"\"{dup.data[0]['name']}\" (id: {dup.data[0]['location_id']})"
+                ),
+            )
+
     row = {
         "trip_id": str(trip_id),
         "name": body.name,

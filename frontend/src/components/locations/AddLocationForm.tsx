@@ -14,12 +14,14 @@ import {
 
 interface AddLocationFormProps {
   tripId: string;
+  existingLocations: Location[];
   onAdded: (location: Location) => void;
   onCancel: () => void;
 }
 
 export function AddLocationForm({
   tripId,
+  existingLocations,
   onAdded,
   onCancel,
 }: AddLocationFormProps) {
@@ -41,6 +43,7 @@ export function AddLocationForm({
   const [googleRaw, setGoogleRaw] = useState<Record<string, unknown> | null>(
     null
   );
+  const [duplicateName, setDuplicateName] = useState<string | null>(null);
 
   async function handleGoogleLinkBlur() {
     const trimmed = googleLink.trim();
@@ -61,6 +64,16 @@ export function AddLocationForm({
       setGooglePlaceId(preview.google_place_id);
       setGoogleSourceType("manual_url");
       setGoogleRaw(preview.google_raw);
+
+      // Check if this Google Place already exists in the trip's locations.
+      const existing = existingLocations.find(
+        (loc) => loc.google_place_id === preview.google_place_id
+      );
+      if (existing) {
+        setDuplicateName(existing.name);
+      } else {
+        setDuplicateName(null);
+      }
       if (!name) {
         setName(preview.name);
       }
@@ -132,6 +145,7 @@ export function AddLocationForm({
           onChange={(e) => {
             setGoogleLink(e.target.value);
             setPreviewed(false);
+            setDuplicateName(null);
           }}
           onBlur={() => void handleGoogleLinkBlur()}
           autoFocus
@@ -139,6 +153,11 @@ export function AddLocationForm({
         />
         {previewLoading && (
           <p className="text-xs text-muted-foreground">Fetching from Google…</p>
+        )}
+        {duplicateName && (
+          <p className="text-sm font-medium text-amber-600">
+            &quot;{duplicateName}&quot; already exists in this trip.
+          </p>
         )}
       </div>
 

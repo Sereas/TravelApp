@@ -234,6 +234,7 @@ def mock_supabase_trips_and_locations():
             "name": r.get("name", ""),
             "address": r.get("address"),
             "google_link": r.get("google_link"),
+            "google_place_id": r.get("google_place_id"),
             "note": r.get("note"),
             "added_by_user_id": r.get("added_by_user_id"),
             "added_by_email": r.get("added_by_email"),
@@ -307,11 +308,15 @@ def mock_supabase_trips_and_locations():
             self._delete_trip_id = None
             self._select_location_id = None
             self._in_location_ids = None
+            self._select_google_place_id = None
+            self._limit = None
 
         def select(self, *args):
             self._is_delete = False
             self._select_location_id = None
             self._in_location_ids = None
+            self._select_google_place_id = None
+            self._limit = None
             return self
 
         def delete(self):
@@ -334,11 +339,17 @@ def mock_supabase_trips_and_locations():
                     self._select_trip_id = val
                 elif key == "location_id":
                     self._select_location_id = val
+                elif key == "google_place_id":
+                    self._select_google_place_id = val
             return self
 
         def in_(self, key, values):
             if key == "location_id":
                 self._in_location_ids = [str(v) for v in values]
+            return self
+
+        def limit(self, n):
+            self._limit = n
             return self
 
         def insert(self, row):
@@ -372,6 +383,14 @@ def mock_supabase_trips_and_locations():
                     filtered = [
                         loc for loc in filtered if loc.get("location_id") in self._in_location_ids
                     ]
+                if self._select_google_place_id is not None:
+                    filtered = [
+                        loc
+                        for loc in filtered
+                        if loc.get("google_place_id") == self._select_google_place_id
+                    ]
+                if self._limit is not None:
+                    filtered = filtered[: self._limit]
                 return type("Result", (), {"data": filtered})()
             return type("Result", (), {"data": []})()
 

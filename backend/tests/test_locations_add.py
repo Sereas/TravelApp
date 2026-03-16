@@ -179,6 +179,106 @@ def test_add_location_no_jwt_returns_401(client: TestClient, monkeypatch):
     assert r.status_code == 401
 
 
+def test_add_location_duplicate_google_place_id_returns_409(
+    client: TestClient,
+    mock_user_id,
+    mock_supabase_trips_and_locations,
+):
+    """Adding a location with same google_place_id in the same trip -> 409."""
+    locations_inserted, MockSupabase = mock_supabase_trips_and_locations
+    trip_id = str(uuid4())
+    mock_sb = MockSupabase({trip_id: str(mock_user_id)}, mock_user_id)
+
+    async def override_user():
+        return mock_user_id
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        r1 = client.post(
+            f"/api/v1/trips/{trip_id}/locations",
+            json={"name": "Louvre", "google_place_id": "ChIJ123"},
+        )
+        assert r1.status_code == 201
+        assert len(locations_inserted) == 1
+
+        r2 = client.post(
+            f"/api/v1/trips/{trip_id}/locations",
+            json={"name": "Louvre Museum", "google_place_id": "ChIJ123"},
+        )
+        assert r2.status_code == 409
+        assert "already exists" in r2.json()["detail"]
+        assert len(locations_inserted) == 1  # no second insert
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_add_location_same_google_place_id_different_trip_allowed(
+    client: TestClient,
+    mock_user_id,
+    mock_supabase_trips_and_locations,
+):
+    """Same google_place_id in different trips -> allowed."""
+    locations_inserted, MockSupabase = mock_supabase_trips_and_locations
+    trip_id_1 = str(uuid4())
+    trip_id_2 = str(uuid4())
+    mock_sb = MockSupabase(
+        {trip_id_1: str(mock_user_id), trip_id_2: str(mock_user_id)}, mock_user_id
+    )
+
+    async def override_user():
+        return mock_user_id
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        r1 = client.post(
+            f"/api/v1/trips/{trip_id_1}/locations",
+            json={"name": "Louvre", "google_place_id": "ChIJ123"},
+        )
+        assert r1.status_code == 201
+
+        r2 = client.post(
+            f"/api/v1/trips/{trip_id_2}/locations",
+            json={"name": "Louvre", "google_place_id": "ChIJ123"},
+        )
+        assert r2.status_code == 201
+        assert len(locations_inserted) == 2
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_add_location_no_google_place_id_skips_dedup(
+    client: TestClient,
+    mock_user_id,
+    mock_supabase_trips_and_locations,
+):
+    """Locations without google_place_id should skip dedup check."""
+    locations_inserted, MockSupabase = mock_supabase_trips_and_locations
+    trip_id = str(uuid4())
+    mock_sb = MockSupabase({trip_id: str(mock_user_id)}, mock_user_id)
+
+    async def override_user():
+        return mock_user_id
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        r1 = client.post(
+            f"/api/v1/trips/{trip_id}/locations",
+            json={"name": "Cafe"},
+        )
+        r2 = client.post(
+            f"/api/v1/trips/{trip_id}/locations",
+            json={"name": "Cafe"},
+        )
+        assert r1.status_code == 201
+        assert r2.status_code == 201
+        assert len(locations_inserted) == 2
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_add_location_duplicate_names_allowed(
     client: TestClient,
     mock_user_id,
