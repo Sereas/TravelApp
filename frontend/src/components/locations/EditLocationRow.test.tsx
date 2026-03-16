@@ -24,6 +24,7 @@ const sampleLocation = {
   working_hours: "9-18",
   requires_booking: "yes",
   category: "Museum" as string | null,
+  google_place_id: null,
   latitude: null,
   longitude: null,
 };
@@ -156,6 +157,7 @@ describe("EditLocationRow", () => {
       working_hours: null,
       requires_booking: null,
       category: null,
+      google_place_id: null,
       latitude: null,
       longitude: null,
     };
