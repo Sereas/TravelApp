@@ -27,7 +27,7 @@ vi.mock("@/lib/supabase", () => ({
 describe("PageShell", () => {
   it("renders the header with site name", () => {
     render(<PageShell>content</PageShell>);
-    expect(screen.getByText("TravelApp")).toBeInTheDocument();
+    expect(screen.getByText("Shtab Travel")).toBeInTheDocument();
   });
 
   it("renders children inside main", () => {
@@ -43,7 +43,7 @@ describe("PageShell", () => {
 
   it("header links to home", () => {
     render(<PageShell>content</PageShell>);
-    const link = screen.getByRole("link", { name: /travelapp/i });
+    const link = screen.getByRole("link", { name: /shtab travel/i });
     expect(link).toHaveAttribute("href", "/");
   });
 });

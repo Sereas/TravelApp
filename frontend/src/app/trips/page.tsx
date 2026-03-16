@@ -38,7 +38,7 @@ export default function TripsPage() {
 
   const createButton = (
     <CreateTripDialog
-      trigger={<Button>New trip</Button>}
+      trigger={<Button className="rounded-xl px-6 shadow-md">New trip</Button>}
       onCreated={handleTripCreated}
     />
   );
@@ -46,7 +46,14 @@ export default function TripsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">My Trips</h1>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">My Trips</h1>
+          {!loading && trips.length > 0 && (
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              {trips.length} trip{trips.length !== 1 ? "s" : ""}
+            </p>
+          )}
+        </div>
         {!loading && trips.length > 0 && createButton}
       </div>
 

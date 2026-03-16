@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ErrorBanner } from "@/components/feedback/ErrorBanner";
 import { createBrowserClient } from "@/lib/supabase";
+import { MapPin } from "lucide-react";
 
 type AuthMode = "login" | "signup";
 
@@ -121,15 +122,20 @@ export function LoginForm() {
   return (
     <div className="flex min-h-[60vh] items-center justify-center">
       <div className="w-full max-w-sm space-y-6">
-        <div className="space-y-2 text-center">
-          <h1 className="text-2xl font-bold tracking-tight">
-            {isLogin ? "Welcome back" : "Create an account"}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {isLogin
-              ? "Sign in to plan your next trip"
-              : "Sign up to start planning trips"}
-          </p>
+        <div className="flex flex-col items-center space-y-3 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary shadow-md shadow-primary/20">
+            <MapPin size={24} className="text-primary-foreground" />
+          </div>
+          <div className="space-y-1">
+            <h1 className="text-2xl font-bold tracking-tight">
+              {isLogin ? "Welcome back" : "Create an account"}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {isLogin
+                ? "Sign in to plan your next trip"
+                : "Sign up to start planning trips"}
+            </p>
+          </div>
         </div>
 
         {error && <ErrorBanner message={error} />}
@@ -201,7 +207,11 @@ export function LoginForm() {
                 </div>
               )}
 
-              <Button type="submit" className="w-full" disabled={loading}>
+              <Button
+                type="submit"
+                className="w-full rounded-xl shadow-md"
+                disabled={loading}
+              >
                 {loading
                   ? isLogin
                     ? "Signing in…"
@@ -238,7 +248,7 @@ export function LoginForm() {
             <Button
               type="button"
               variant="outline"
-              className="w-full"
+              className="w-full rounded-xl"
               onClick={handleGoogleLogin}
             >
               <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">

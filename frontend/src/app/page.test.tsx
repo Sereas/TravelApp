@@ -6,17 +6,17 @@ describe("HomePage", () => {
   it("renders the app title and description", () => {
     render(<HomePage />);
     expect(
-      screen.getByRole("heading", { name: /travelapp/i })
+      screen.getByRole("heading", { name: /shtab travel/i })
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/plan trips, collect locations/i)
+      screen.getByText(/your travel planning headquarters/i)
     ).toBeInTheDocument();
   });
 
-  it("renders sign-in link", () => {
+  it("renders get started link", () => {
     render(<HomePage />);
     expect(
-      screen.getByRole("link", { name: /sign in to get started/i })
+      screen.getByRole("link", { name: /get started/i })
     ).toBeInTheDocument();
   });
 });

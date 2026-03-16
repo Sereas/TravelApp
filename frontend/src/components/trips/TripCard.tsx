@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Calendar, MapPin } from "lucide-react";
 
 export interface TripCardProps {
   id: string;
@@ -39,12 +34,11 @@ export function TripCard({
   onClick,
 }: TripCardProps) {
   const dateDisplay = formatDateDisplay(startDate, endDate);
+  const hasDates = startDate || endDate;
 
   return (
-    <Card
-      className={
-        onClick ? "cursor-pointer transition-shadow hover:shadow-md" : ""
-      }
+    <div
+      className={`group relative overflow-hidden rounded-xl border border-border/60 bg-card transition-all${onClick ? " cursor-pointer hover:shadow-md hover:border-primary/30" : ""}`}
       onClick={() => onClick?.(id)}
       role={onClick ? "button" : undefined}
       tabIndex={onClick ? 0 : undefined}
@@ -55,10 +49,23 @@ export function TripCard({
         }
       }}
     >
-      <CardHeader className="p-4">
-        <CardTitle className="text-base">{name}</CardTitle>
-        <CardDescription className="text-sm">{dateDisplay}</CardDescription>
-      </CardHeader>
-    </Card>
+      <div className="h-1 w-full bg-gradient-to-r from-primary/80 to-primary/30" />
+      <div className="flex flex-col gap-2 p-4">
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <MapPin size={18} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-[15px] font-semibold leading-snug tracking-tight">
+              {name}
+            </h3>
+            <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Calendar size={12} className="shrink-0" />
+              <span className={hasDates ? "" : "italic"}>{dateDisplay}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

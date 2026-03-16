@@ -6,8 +6,8 @@ import { PageShell } from "@/components/layout";
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "TravelApp",
-  description: "Trip planning and in-trip assistance",
+  title: "Shtab Travel",
+  description: "Your travel planning headquarters",
 };
 
 export default function RootLayout({
