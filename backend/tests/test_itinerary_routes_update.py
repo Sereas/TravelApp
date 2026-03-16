@@ -90,8 +90,8 @@ def test_update_route_changes_stops(
     mock_supabase_trips_and_days,
 ):
     """PATCH with new location_ids returns pending status."""
-    trip_id, day_id, option_id, route_id, loc1, loc2, loc3, mock_sb = (
-        _setup_with_route(mock_supabase_trips_and_days, mock_user_id)
+    trip_id, day_id, option_id, route_id, loc1, loc2, loc3, mock_sb = _setup_with_route(
+        mock_supabase_trips_and_days, mock_user_id
     )
 
     async def override_user():
@@ -123,8 +123,8 @@ def test_update_route_empty_body_returns_422(
     mock_supabase_trips_and_days,
 ):
     """PATCH with no fields returns 422."""
-    trip_id, day_id, option_id, route_id, *_, mock_sb = (
-        _setup_with_route(mock_supabase_trips_and_days, mock_user_id)
+    trip_id, day_id, option_id, route_id, *_, mock_sb = _setup_with_route(
+        mock_supabase_trips_and_days, mock_user_id
     )
 
     async def override_user():
@@ -148,8 +148,8 @@ def test_update_route_too_few_stops_returns_422(
     mock_supabase_trips_and_days,
 ):
     """PATCH with only 1 location_id returns 422 (need >= 2)."""
-    trip_id, day_id, option_id, route_id, loc1, *_, mock_sb = (
-        _setup_with_route(mock_supabase_trips_and_days, mock_user_id)
+    trip_id, day_id, option_id, route_id, loc1, *_, mock_sb = _setup_with_route(
+        mock_supabase_trips_and_days, mock_user_id
     )
 
     async def override_user():
@@ -173,8 +173,8 @@ def test_update_route_nonexistent_route_returns_404(
     mock_supabase_trips_and_days,
 ):
     """PATCH on non-existent route returns 404."""
-    trip_id, day_id, option_id, _route_id, loc1, loc2, _loc3, mock_sb = (
-        _setup_with_route(mock_supabase_trips_and_days, mock_user_id)
+    trip_id, day_id, option_id, _route_id, loc1, loc2, _loc3, mock_sb = _setup_with_route(
+        mock_supabase_trips_and_days, mock_user_id
     )
     fake_route_id = str(uuid4())
 

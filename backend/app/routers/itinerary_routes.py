@@ -248,9 +248,7 @@ async def update_route(
             ) from None
         raise
     if not result.data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Route not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
     row = result.data if isinstance(result.data, dict) else result.data[0]
     row["location_ids"] = body.location_ids or []
     # If stops changed, status is pending; otherwise preserve
