@@ -6,9 +6,8 @@ See docs/design/backend-and-supabase.md for when to use each key.
 
 from functools import lru_cache
 
-from supabase import create_client
-
 from backend.app.core.config import get_settings
+from supabase import create_client
 
 
 @lru_cache
