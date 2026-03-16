@@ -939,28 +939,10 @@ describe("TripDetailPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("calls createDay and refetches itinerary when Add day is clicked", async () => {
+  it("calls createDay and updates itinerary optimistically when Add day is clicked", async () => {
     mockGetTrip.mockResolvedValue(sampleTrip);
     mockListLocations.mockResolvedValue([]);
-    mockGetItinerary.mockResolvedValueOnce({ days: [] }).mockResolvedValueOnce({
-      days: [
-        {
-          id: "day-new",
-          date: null,
-          sort_order: 0,
-          options: [
-            {
-              id: "opt-1",
-              option_index: 1,
-              starting_city: null,
-              ending_city: null,
-              created_by: null,
-              locations: [],
-            },
-          ],
-        },
-      ],
-    });
+    mockGetItinerary.mockResolvedValueOnce({ days: [] });
     mockCreateDay.mockResolvedValue({
       id: "day-new",
       trip_id: "trip-1",
@@ -978,9 +960,8 @@ describe("TripDetailPage", () => {
     await waitFor(() => {
       expect(mockCreateDay).toHaveBeenCalledWith("trip-1");
     });
-    await waitFor(() => {
-      expect(mockGetItinerary).toHaveBeenCalledTimes(2);
-    });
+    // Optimistic update — no second fetchItinerary call on success.
+    expect(mockGetItinerary).toHaveBeenCalledTimes(1);
     expect(await screen.findByText("Day 1")).toBeInTheDocument();
   });
 
@@ -1216,56 +1197,28 @@ describe("TripDetailPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("calls createOption when '+ Alternative' is clicked", async () => {
+  it("calls createOption and updates itinerary optimistically when '+ Alternative' is clicked", async () => {
     mockGetTrip.mockResolvedValue(sampleTrip);
     mockListLocations.mockResolvedValue([]);
-    mockGetItinerary
-      .mockResolvedValueOnce({
-        days: [
-          {
-            id: "day-1",
-            date: "2026-06-01",
-            sort_order: 0,
-            options: [
-              {
-                id: "opt-1",
-                option_index: 1,
-                starting_city: null,
-                ending_city: null,
-                created_by: null,
-                locations: [],
-              },
-            ],
-          },
-        ],
-      })
-      .mockResolvedValueOnce({
-        days: [
-          {
-            id: "day-1",
-            date: "2026-06-01",
-            sort_order: 0,
-            options: [
-              {
-                id: "opt-1",
-                option_index: 1,
-                starting_city: null,
-                ending_city: null,
-                created_by: null,
-                locations: [],
-              },
-              {
-                id: "opt-2",
-                option_index: 2,
-                starting_city: null,
-                ending_city: null,
-                created_by: null,
-                locations: [],
-              },
-            ],
-          },
-        ],
-      });
+    mockGetItinerary.mockResolvedValueOnce({
+      days: [
+        {
+          id: "day-1",
+          date: "2026-06-01",
+          sort_order: 0,
+          options: [
+            {
+              id: "opt-1",
+              option_index: 1,
+              starting_city: null,
+              ending_city: null,
+              created_by: null,
+              locations: [],
+            },
+          ],
+        },
+      ],
+    });
     mockCreateOption.mockResolvedValue({
       id: "opt-2",
       day_id: "day-1",
@@ -1286,6 +1239,8 @@ describe("TripDetailPage", () => {
     await waitFor(() => {
       expect(mockCreateOption).toHaveBeenCalledWith("trip-1", "day-1");
     });
+    // Optimistic update — no second fetchItinerary call on success.
+    expect(mockGetItinerary).toHaveBeenCalledTimes(1);
   });
 
   it("shows delete button only when multiple options exist", async () => {
