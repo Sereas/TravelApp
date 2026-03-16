@@ -12,6 +12,7 @@ from backend.app.models.schemas import (
     RecalculateRouteBody,
     RouteResponse,
     RouteWithSegmentsResponse,
+    UpdateRouteBody,
 )
 from backend.app.routers.trip_ownership import _ensure_resource_chain
 from backend.app.services.route_calculation import (
@@ -202,6 +203,83 @@ async def get_route(
         location_ids=location_ids,
         route_status=_route_status_from_totals(duration, distance),
     )
+
+
+@router.patch(
+    "/{trip_id}/days/{day_id}/options/{option_id}/routes/{route_id}",
+    response_model=RouteResponse,
+)
+async def update_route(
+    trip_id: UUID,
+    day_id: UUID,
+    option_id: UUID,
+    route_id: UUID,
+    body: UpdateRouteBody,
+    user_id: UUID = Depends(get_current_user_id),
+    supabase=Depends(get_supabase_client),
+):
+    """
+    Update a route's stops, transport mode, and/or label.
+    When location_ids changes, stale route_segments are cleared and metrics reset to pending.
+    Segment cache is preserved so unchanged stop-pairs reuse cached results.
+    """
+    if body.transport_mode is None and body.label is None and body.location_ids is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="At least one of transport_mode, label, or location_ids is required",
+        )
+    _ensure_resource_chain(supabase, trip_id, user_id, day_id=day_id, option_id=option_id)
+    try:
+        result = supabase.rpc(
+            "update_route_with_stops",
+            {
+                "p_route_id": str(route_id),
+                "p_option_id": str(option_id),
+                "p_transport_mode": body.transport_mode,
+                "p_label": body.label,
+                "p_location_ids": body.location_ids,
+            },
+        ).execute()
+    except Exception as e:
+        err_msg = str(e)
+        if "ROUTE_NOT_FOUND" in err_msg:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Route not found"
+            ) from None
+        raise
+    if not result.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Route not found"
+        )
+    row = result.data if isinstance(result.data, dict) else result.data[0]
+    row["location_ids"] = body.location_ids or []
+    # If stops changed, status is pending; otherwise preserve
+    if body.location_ids is not None:
+        row["route_status"] = "pending"
+    else:
+        row["route_status"] = _route_status_from_totals(
+            row.get("duration_seconds"), row.get("distance_meters")
+        )
+    # If location_ids not changed, fetch current stops for the response
+    if body.location_ids is None:
+        stops = (
+            supabase.table("route_stops")
+            .select("location_id, stop_order")
+            .eq("route_id", str(route_id))
+            .order("stop_order")
+            .execute()
+        )
+        row["location_ids"] = [str(s["location_id"]) for s in (stops.data or [])]
+    logger.info(
+        "route_updated",
+        trip_id=str(trip_id),
+        day_id=str(day_id),
+        option_id=str(option_id),
+        route_id=str(route_id),
+        changed_stops=body.location_ids is not None,
+        changed_transport=body.transport_mode is not None,
+    )
+    return _rpc_row_to_response(row)
 
 
 @router.post(

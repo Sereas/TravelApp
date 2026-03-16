@@ -1146,6 +1146,37 @@ def mock_supabase_trips_and_days():
                     if not (str(r.get("option_id")) == oid and str(r.get("location_id")) == lid)
                 ]
                 return type("RpcChain", (), {"execute": lambda _: _RpcResult(None)})()
+            if name == "update_route_with_stops":
+                rid = str(params.get("p_route_id", ""))
+                oid = str(params.get("p_option_id", ""))
+                route = None
+                for r in self._routes_rpc_store:
+                    if str(r.get("route_id")) == rid and str(r.get("option_id")) == oid:
+                        route = r
+                        break
+                if route is None:
+                    raise Exception("ROUTE_NOT_FOUND")
+                tm = params.get("p_transport_mode")
+                lb = params.get("p_label")
+                lids = params.get("p_location_ids")
+                if tm is not None:
+                    route["transport_mode"] = tm
+                if lb is not None:
+                    route["label"] = lb
+                if lids is not None:
+                    route["stop_location_ids"] = lids
+                    route["duration_seconds"] = None
+                    route["distance_meters"] = None
+                row = {
+                    "route_id": route["route_id"],
+                    "option_id": route["option_id"],
+                    "label": route.get("label"),
+                    "transport_mode": route.get("transport_mode", "walk"),
+                    "duration_seconds": route.get("duration_seconds"),
+                    "distance_meters": route.get("distance_meters"),
+                    "sort_order": route.get("sort_order", 0),
+                }
+                return type("RpcChain", (), {"execute": lambda _: _RpcResult([row])})()
             return type("RpcChain", (), {"execute": lambda _: _RpcResult([])})()
 
     return trip_days_store, trips_store, MockSupabaseTripsAndDays

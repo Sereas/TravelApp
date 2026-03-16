@@ -487,6 +487,23 @@ export const api = {
         { method: "POST", body: JSON.stringify(body) }
       ),
 
+    /** Update a route's stops, transport mode, and/or label. */
+    updateRoute: (
+      tripId: string,
+      dayId: string,
+      optionId: string,
+      routeId: string,
+      body: {
+        transport_mode?: string;
+        label?: string | null;
+        location_ids?: string[];
+      }
+    ) =>
+      request<RouteResponse>(
+        `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/routes/${routeId}`,
+        { method: "PATCH", body: JSON.stringify(body) }
+      ),
+
     /** Get one route with segment details and trigger calculation if needed (retry-on-view). */
     getRouteWithSegments: (
       tripId: string,

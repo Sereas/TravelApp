@@ -44,6 +44,7 @@ import {
   ArrowRight,
   Trash2,
   AlertCircle,
+  Pencil,
 } from "lucide-react";
 
 const TIME_META: Record<
@@ -210,12 +211,21 @@ function formatHoursLines(value: string | null | undefined): string[] {
   return trimmed ? [trimmed] : [];
 }
 
+/** Format a duration in seconds to human-readable string. */
+function formatDuration(seconds: number): string {
+  const totalMin = Math.round(seconds / 60);
+  if (totalMin < 60) return `${totalMin} min`;
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return m === 0 ? `${h}h` : `${h}h ${m}min`;
+}
+
 /** Format duration for route totals only. Do not use for segment pills. */
 function formatRouteTotalDuration(route: {
   duration_seconds?: number | null;
 }): string {
   if (route.duration_seconds == null) return "— min";
-  return `${Math.round(route.duration_seconds / 60)} min`;
+  return formatDuration(route.duration_seconds);
 }
 
 /** Format distance for route totals only. Do not use for segment pills. */
@@ -246,7 +256,7 @@ function formatSegmentMetrics(
   }
   const dur =
     segment.duration_seconds != null
-      ? `${Math.round(segment.duration_seconds / 60)} min`
+      ? formatDuration(segment.duration_seconds)
       : "— min";
   const dist =
     segment.distance_meters != null
@@ -358,31 +368,65 @@ export function ItineraryDayCard({
     [currentOption?.routes]
   );
 
-  // Route creation
+  // Route creation / editing
   const [creating, setCreating] = useState(false);
+  const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
   const [pickIds, setPickIds] = useState<string[]>([]);
   const [pickTransport, setPickTransport] = useState<
     "walk" | "drive" | "transit"
   >("walk");
   const [savingRoute, setSavingRoute] = useState(false);
 
+  const isPickMode = creating || editingRouteId !== null;
+
+  function handleEditRoute(route: (typeof routes)[0]) {
+    setEditingRouteId(route.route_id);
+    setPickIds([...route.location_ids]);
+    setPickTransport(
+      (route.transport_mode as "walk" | "drive" | "transit") || "walk"
+    );
+    setCreating(false);
+  }
+
+  function handleCancelPick() {
+    setCreating(false);
+    setEditingRouteId(null);
+    setPickIds([]);
+  }
+
   async function handleSaveRoute() {
     if (pickIds.length < 2 || !currentOption) return;
     setSavingRoute(true);
     try {
-      const routeResponse = await api.itinerary.createRoute(
-        tripId,
-        day.id,
-        currentOption.id,
-        {
-          transport_mode: pickTransport,
-          label: null,
-          location_ids: pickIds,
-        }
-      );
-      setCreating(false);
-      setPickIds([]);
-      await onRouteCreated(day.id, currentOption.id, routeResponse);
+      if (editingRouteId) {
+        const routeResponse = await api.itinerary.updateRoute(
+          tripId,
+          day.id,
+          currentOption.id,
+          editingRouteId,
+          {
+            transport_mode: pickTransport,
+            location_ids: pickIds,
+          }
+        );
+        setEditingRouteId(null);
+        setPickIds([]);
+        await onRouteCreated(day.id, currentOption.id, routeResponse);
+      } else {
+        const routeResponse = await api.itinerary.createRoute(
+          tripId,
+          day.id,
+          currentOption.id,
+          {
+            transport_mode: pickTransport,
+            label: null,
+            location_ids: pickIds,
+          }
+        );
+        setCreating(false);
+        setPickIds([]);
+        await onRouteCreated(day.id, currentOption.id, routeResponse);
+      }
     } catch {
       /* error shown by parent */
     } finally {
@@ -578,7 +622,7 @@ export function ItineraryDayCard({
     const bk = ol.location.requires_booking ?? "no";
     const showBk = bk === "yes" || bk === "yes_done";
     const routeInfos = locRouteMap.get(ol.location_id) ?? [];
-    const picking = creating && pickIds.includes(ol.location_id);
+    const picking = isPickMode && pickIds.includes(ol.location_id);
     const pickSeq = pickIds.indexOf(ol.location_id) + 1;
 
     return (
@@ -597,7 +641,7 @@ export function ItineraryDayCard({
           onDrop={(e) => onDrop(ol.location_id, e)}
         >
           {/* Col 1: drag or pick */}
-          {creating ? (
+          {isPickMode ? (
             <button
               type="button"
               onClick={() =>
@@ -721,7 +765,7 @@ export function ItineraryDayCard({
           </div>
 
           {/* Col 7: remove */}
-          {!creating && currentOption && (
+          {!isPickMode && currentOption && (
             <button
               type="button"
               className="text-muted-foreground/30 opacity-0 transition hover:text-destructive group-hover:opacity-100"
@@ -1018,11 +1062,13 @@ export function ItineraryDayCard({
                 <div className="space-y-0">{sorted.map(renderRow)}</div>
               )}
 
-              {/* Route creation bar */}
-              {creating && (
+              {/* Route creation / edit bar */}
+              {isPickMode && (
                 <div className="mt-2 flex items-center gap-2 rounded-lg border border-dashed border-primary/30 bg-primary/5 px-3 py-2">
                   <span className="text-xs font-medium text-primary">
-                    Click locations in order
+                    {editingRouteId
+                      ? "Edit route — click to add/remove stops"
+                      : "Click locations in order"}
                   </span>
                   <div className="flex-1" />
                   {TRANSPORT.map((m) => {
@@ -1056,10 +1102,7 @@ export function ItineraryDayCard({
                     variant="ghost"
                     size="sm"
                     className="h-6 text-[11px]"
-                    onClick={() => {
-                      setCreating(false);
-                      setPickIds([]);
-                    }}
+                    onClick={handleCancelPick}
                   >
                     Cancel
                   </Button>
@@ -1067,7 +1110,7 @@ export function ItineraryDayCard({
               )}
 
               {/* Saved routes */}
-              {routes.length > 0 && !creating && (
+              {routes.length > 0 && !isPickMode && (
                 <div className="mt-2 space-y-1">
                   {routes.map((r, ri) => {
                     const color = ROUTE_COLORS[ri % ROUTE_COLORS.length];
@@ -1150,6 +1193,15 @@ export function ItineraryDayCard({
                         )}
                         <button
                           type="button"
+                          className="shrink-0 text-muted-foreground hover:text-primary disabled:opacity-50"
+                          onClick={() => handleEditRoute(r)}
+                          aria-label="Edit route"
+                          disabled={isCalculating}
+                        >
+                          <Pencil size={12} />
+                        </button>
+                        <button
+                          type="button"
                           className="shrink-0 text-muted-foreground hover:text-destructive disabled:opacity-50"
                           onClick={() => handleDeleteRoute(r.route_id)}
                           aria-label="Delete route"
@@ -1190,13 +1242,14 @@ export function ItineraryDayCard({
                 {sorted.length >= 2 && <div className="h-4 w-px bg-border" />}
 
                 {/* Middle: routes */}
-                {sorted.length >= 2 && !creating && (
+                {sorted.length >= 2 && !isPickMode && (
                   <Button
                     variant="ghost"
                     size="sm"
                     className="h-7 gap-1 text-xs text-muted-foreground"
                     onClick={() => {
                       setCreating(true);
+                      setEditingRouteId(null);
                       setPickIds([]);
                       setPickTransport("walk");
                     }}

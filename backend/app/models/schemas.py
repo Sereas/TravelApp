@@ -425,6 +425,22 @@ class CreateRouteBody(BaseModel):
         return v
 
 
+class UpdateRouteBody(BaseModel):
+    """Request body for PATCH update-route. All fields optional."""
+
+    transport_mode: str | None = None
+    label: str | None = None
+    location_ids: list[str] | None = Field(None, min_length=2, description="Ordered stop location UUIDs")
+
+    @field_validator("transport_mode")
+    @classmethod
+    def validate_transport_mode(cls, v: str | None) -> str | None:
+        if v is not None and v not in TRANSPORT_MODE_VALUES:
+            msg = f"transport_mode must be one of {sorted(TRANSPORT_MODE_VALUES)}"
+            raise ValueError(msg)
+        return v
+
+
 ROUTE_STATUS_VALUES = frozenset({"pending", "ok", "error"})
 
 
