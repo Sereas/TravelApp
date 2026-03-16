@@ -10,9 +10,7 @@ export function SiteHeader() {
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
             <MapPin size={16} className="text-primary-foreground" />
           </div>
-          <span className="text-lg font-bold tracking-tight">
-            Shtab Travel
-          </span>
+          <span className="text-lg font-bold tracking-tight">Shtab Travel</span>
         </Link>
         <UserNav />
       </div>
