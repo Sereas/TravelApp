@@ -102,7 +102,7 @@ async def add_location(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
                     f"A location with this Google Place already exists in the trip: "
-                    f"\"{dup.data[0]['name']}\" (id: {dup.data[0]['location_id']})"
+                    f'"{dup.data[0]["name"]}" (id: {dup.data[0]["location_id"]})'
                 ),
             )
 
