@@ -91,6 +91,9 @@ const sampleLocations = [
     working_hours: "9:00-23:00",
     requires_booking: "yes",
     category: "Viewpoint",
+    google_place_id: null,
+    latitude: null,
+    longitude: null,
   },
   {
     id: "loc-2",
@@ -104,6 +107,9 @@ const sampleLocations = [
     working_hours: null,
     requires_booking: null,
     category: "Museum",
+    google_place_id: null,
+    latitude: null,
+    longitude: null,
   },
 ];
 
@@ -145,7 +151,7 @@ describe("TripDetailPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("9:00-23:00")).toBeInTheDocument();
     expect(screen.getByText("Booking needed")).toBeInTheDocument();
-    expect(screen.getByText(/Created by:/)).toBeInTheDocument();
+    expect(screen.getByText(/Added by/)).toBeInTheDocument();
     expect(screen.getByText(/alice@example\.com/)).toBeInTheDocument();
     expect(screen.getByText("Museum")).toBeInTheDocument();
     expect(

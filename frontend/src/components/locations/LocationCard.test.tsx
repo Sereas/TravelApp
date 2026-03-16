@@ -23,7 +23,7 @@ describe("LocationCard", () => {
     render(
       <LocationCard id="1" name="Louvre" city="Paris" address="Rue de Rivoli" />
     );
-    expect(screen.getByText("Paris · Rue de Rivoli")).toBeInTheDocument();
+    expect(screen.getByText("Paris \u00B7 Rue de Rivoli")).toBeInTheDocument();
   });
 
   it("renders address alone when no city", () => {
@@ -31,7 +31,7 @@ describe("LocationCard", () => {
     expect(screen.getByText("Rue de Rivoli")).toBeInTheDocument();
   });
 
-  it("renders Google Maps link inline with address", () => {
+  it("renders Location details link when google_link provided", () => {
     render(
       <LocationCard
         id="1"
@@ -43,9 +43,10 @@ describe("LocationCard", () => {
     const link = screen.getByRole("link", { name: /open in google maps/i });
     expect(link).toBeInTheDocument();
     expect(link).toHaveAttribute("href", "https://maps.google.com/?q=louvre");
+    expect(screen.getByText("Location details")).toBeInTheDocument();
   });
 
-  it("renders standalone Google Maps link when no city/address", () => {
+  it("renders standalone Location details link when no city/address", () => {
     render(
       <LocationCard
         id="1"
@@ -134,17 +135,17 @@ describe("LocationCard", () => {
     expect(screen.getByText(/View note/)).toBeInTheDocument();
   });
 
-  it("renders Created by footer when added_by_email is provided", () => {
+  it("renders Added by footer when added_by_email is provided", () => {
     render(
       <LocationCard id="1" name="Louvre" added_by_email="alice@example.com" />
     );
-    expect(screen.getByText(/Created by:/)).toBeInTheDocument();
+    expect(screen.getByText(/Added by/)).toBeInTheDocument();
     expect(screen.getByText(/alice@example\.com/)).toBeInTheDocument();
   });
 
-  it("does not render Created by footer when added_by_email is null", () => {
+  it("does not render Added by footer when added_by_email is null", () => {
     render(<LocationCard id="1" name="Louvre" />);
-    expect(screen.queryByText(/Created by:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Added by/)).not.toBeInTheDocument();
     expect(screen.queryByText("alice@example.com")).not.toBeInTheDocument();
   });
 
@@ -158,7 +159,7 @@ describe("LocationCard", () => {
   it("renders a sparse card (name only) without errors", () => {
     render(<LocationCard id="1" name="Random Place" />);
     expect(screen.getByText("Random Place")).toBeInTheDocument();
-    expect(screen.queryByText(/Created by/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Added by/)).not.toBeInTheDocument();
     expect(screen.queryByText("Booking needed")).not.toBeInTheDocument();
   });
 
@@ -179,14 +180,49 @@ describe("LocationCard", () => {
     );
     expect(screen.getByText("Eiffel Tower")).toBeInTheDocument();
     expect(screen.getByText("Viewpoint")).toBeInTheDocument();
-    expect(screen.getByText("Paris · Champ de Mars")).toBeInTheDocument();
+    expect(screen.getByText("Paris \u00B7 Champ de Mars")).toBeInTheDocument();
     expect(screen.getByText("9:30-23:00")).toBeInTheDocument();
     expect(screen.getByText("Booking needed")).toBeInTheDocument();
     expect(screen.getByText("Must visit at sunset")).toBeInTheDocument();
-    expect(screen.getByText(/Created by:/)).toBeInTheDocument();
+    expect(screen.getByText(/Added by/)).toBeInTheDocument();
     expect(screen.getByText(/alice@example\.com/)).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /open in google maps/i })
     ).toBeInTheDocument();
+  });
+
+  // --- Itinerary status tests ---
+
+  it("shows 'Not scheduled' when inItinerary is false or undefined", () => {
+    render(<LocationCard id="1" name="Louvre" />);
+    expect(screen.getByText("Not scheduled")).toBeInTheDocument();
+  });
+
+  it("shows 'In itinerary' when inItinerary is true", () => {
+    render(<LocationCard id="1" name="Louvre" inItinerary />);
+    expect(screen.getByText("In itinerary")).toBeInTheDocument();
+    expect(screen.queryByText("Not scheduled")).not.toBeInTheDocument();
+  });
+
+  it("shows day label when inItinerary with itineraryDayLabel", () => {
+    render(
+      <LocationCard
+        id="1"
+        name="Louvre"
+        inItinerary
+        itineraryDayLabel="Day 1, Day 3"
+      />
+    );
+    expect(
+      screen.getByText("In itinerary \u00B7 Day 1, Day 3")
+    ).toBeInTheDocument();
+  });
+
+  it("highlights card border when in itinerary", () => {
+    const { container } = render(
+      <LocationCard id="1" name="Louvre" inItinerary />
+    );
+    const card = container.firstChild as HTMLElement;
+    expect(card.className).toContain("border-primary/30");
   });
 });

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import {
+  CalendarCheck,
   ChevronDown,
   ChevronUp,
   Clock,
@@ -34,6 +35,10 @@ export interface LocationCardProps {
   requires_booking?: string | null;
   working_hours?: string | null;
   added_by_email?: string | null;
+  /** When true, shows a visual indicator that this location is scheduled in the itinerary. */
+  inItinerary?: boolean;
+  /** Which day(s) (e.g. "Day 1", "Day 1, 3") this location appears on in the itinerary. */
+  itineraryDayLabel?: string | null;
   /** Legacy: inline Edit/Delete. Prefer onEdit + deleteTrigger for menu. */
   actions?: React.ReactNode;
   onEdit?: () => void;
@@ -97,7 +102,7 @@ function notePreview(text: string): string {
   const cut = text.slice(0, NOTE_LONG_THRESHOLD).trim();
   const lastSpace = cut.lastIndexOf(" ");
   const preview = lastSpace > 60 ? cut.slice(0, lastSpace) : cut;
-  return preview + "…";
+  return preview + "\u2026";
 }
 
 export function LocationCard({
@@ -110,6 +115,8 @@ export function LocationCard({
   requires_booking,
   working_hours,
   added_by_email,
+  inItinerary,
+  itineraryDayLabel,
   actions,
   onEdit,
   onDelete,
@@ -130,7 +137,8 @@ export function LocationCard({
   return (
     <div
       className={cn(
-        "flex min-h-[120px] flex-col rounded-lg border border-border bg-card px-3 py-2.5 transition-shadow hover:shadow-sm",
+        "flex flex-col rounded-lg border bg-card px-3 py-2.5 transition-shadow hover:shadow-sm",
+        inItinerary ? "border-primary/30" : "border-border",
         className
       )}
     >
@@ -216,13 +224,13 @@ export function LocationCard({
         )}
       </div>
 
-      {/* Main content block: address, hours, notes, Maps link */}
-      <div className="mt-1.5 flex min-h-0 flex-1 flex-col gap-0.5">
+      {/* Main content block: address, hours, notes, itinerary status, Maps link */}
+      <div className="mt-1.5 flex min-h-0 flex-1 flex-col gap-1">
         {hasGeo && (
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <MapPin size={11} className="shrink-0 opacity-70" />
             <span className="truncate">
-              {city && address ? `${city} · ${address}` : city || address}
+              {city && address ? `${city} \u00B7 ${address}` : city || address}
             </span>
           </div>
         )}
@@ -263,7 +271,7 @@ export function LocationCard({
         {note && (
           <div
             className={cn(
-              "rounded-r-md border-l-2 border-primary/25 bg-muted/30 py-1.5 pl-2 pr-2",
+              "rounded-r-md border-l-2 border-primary/25 bg-muted/30 py-1 pl-2 pr-2",
               "text-xs text-foreground/90"
             )}
           >
@@ -304,26 +312,49 @@ export function LocationCard({
             </div>
           </div>
         )}
-        {google_link && (
-          <a
-            href={google_link}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex w-fit items-center gap-0.5 text-xs text-primary hover:underline"
-            aria-label="Open in Google Maps"
-          >
-            <ExternalLink size={11} />
-            Maps
-          </a>
-        )}
       </div>
 
-      {/* Footer: Created by (always at bottom) */}
-      {added_by_email && (
-        <p className="mt-2 shrink-0 border-t border-border/50 pt-2 text-[11px] text-muted-foreground/70">
-          Created by: {added_by_email}
-        </p>
-      )}
+      {/* Footer: itinerary status, Maps link, Created by */}
+      <div className="mt-2 flex shrink-0 flex-col gap-1.5 border-t border-border/50 pt-2">
+        <div className="flex items-center justify-between gap-2">
+          {/* Itinerary status */}
+          <div className="flex items-center gap-1 text-xs">
+            {inItinerary ? (
+              <span className="inline-flex items-center gap-1 text-primary">
+                <CalendarCheck size={12} className="shrink-0" />
+                <span>
+                  {itineraryDayLabel
+                    ? `In itinerary \u00B7 ${itineraryDayLabel}`
+                    : "In itinerary"}
+                </span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-muted-foreground/60">
+                <CalendarCheck size={12} className="shrink-0" />
+                <span>Not scheduled</span>
+              </span>
+            )}
+          </div>
+          {/* Maps / Location details link */}
+          {google_link && (
+            <a
+              href={google_link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/5 hover:underline"
+              aria-label="Open in Google Maps"
+            >
+              <ExternalLink size={11} />
+              Location details
+            </a>
+          )}
+        </div>
+        {added_by_email && (
+          <p className="text-[11px] text-muted-foreground/70">
+            Added by {added_by_email}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

@@ -733,6 +733,26 @@ export default function TripDetailPage() {
     return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
   }, [filteredLocations, groupByCity]);
 
+  // Map location IDs → day labels for "in itinerary" indicator on location cards.
+  const itineraryLocationMap = useMemo(() => {
+    const map = new Map<string, string[]>();
+    if (!itinerary) return map;
+    for (const day of itinerary.days) {
+      const dayLabel = `Day ${day.sort_order + 1}`;
+      for (const option of day.options) {
+        for (const ol of option.locations) {
+          const existing = map.get(ol.location_id);
+          if (existing) {
+            if (!existing.includes(dayLabel)) existing.push(dayLabel);
+          } else {
+            map.set(ol.location_id, [dayLabel]);
+          }
+        }
+      }
+    }
+    return map;
+  }, [itinerary]);
+
   if (loading) {
     return (
       <div className="flex justify-center py-12">
@@ -810,6 +830,7 @@ export default function TripDetailPage() {
         />
       );
     }
+    const dayLabels = itineraryLocationMap.get(loc.id);
     return (
       <LocationCard
         key={loc.id}
@@ -823,6 +844,8 @@ export default function TripDetailPage() {
         requires_booking={loc.requires_booking}
         working_hours={loc.working_hours}
         added_by_email={loc.added_by_email}
+        inItinerary={dayLabels != null}
+        itineraryDayLabel={dayLabels?.join(", ") ?? null}
         onEdit={() => setEditingLocationId(loc.id)}
         deleteTrigger={
           <ConfirmDialog
