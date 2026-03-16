@@ -334,7 +334,11 @@ export function ItineraryDayMap({ locations, routes }: ItineraryDayMapProps) {
 
           // Store coords for deferred label placement (after fitBounds)
           if (route.label && allCoords.length >= 2) {
-            pendingLabels.push({ color, label: route.label, coords: allCoords });
+            pendingLabels.push({
+              color,
+              label: route.label,
+              coords: allCoords,
+            });
           }
         });
       }
@@ -369,7 +373,7 @@ export function ItineraryDayMap({ locations, routes }: ItineraryDayMapProps) {
           cx: number,
           cy: number,
           halfW: number,
-          halfH: number,
+          halfH: number
         ): boolean => {
           for (const mp of markerScreenPts) {
             if (
@@ -382,7 +386,7 @@ export function ItineraryDayMap({ locations, routes }: ItineraryDayMapProps) {
             }
           }
           return false;
-        }
+        };
 
         for (const { color, label, coords } of pendingLabels) {
           // Estimate label size from text length

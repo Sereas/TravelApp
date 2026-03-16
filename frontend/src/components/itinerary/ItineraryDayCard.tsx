@@ -1235,7 +1235,10 @@ export function ItineraryDayCard({
                       </p>
                     </div>
                   ) : (
-                    <ItineraryDayMap locations={mapLocations} routes={mapRoutes} />
+                    <ItineraryDayMap
+                      locations={mapLocations}
+                      routes={mapRoutes}
+                    />
                   )}
                 </div>
               )}
