@@ -192,25 +192,24 @@ async def get_itinerary(
     - Loads tree in one RPC call (get_itinerary_tree) after ownership check.
     - Orders days by sort_order, options by option_index, locations by sort_order.
     """
-    t0 = time.perf_counter()
-    _ensure_trip_owned(supabase, trip_id, user_id)
     trip_id_str = str(trip_id)
-    ownership_ms = round((time.perf_counter() - t0) * 1000, 1)
+    user_id_str = str(user_id)
 
+    # Ownership check is baked into the RPC via p_user_id (EXISTS subquery).
+    # 0 rows → trip missing, wrong owner, or genuinely empty; lazy 404 below.
     t1 = time.perf_counter()
-    rpc_result = supabase.rpc("get_itinerary_tree", {"p_trip_id": trip_id_str}).execute()
+    rpc_result = supabase.rpc(
+        "get_itinerary_tree", {"p_trip_id": trip_id_str, "p_user_id": user_id_str}
+    ).execute()
     rows = rpc_result.data or []
     rpc_ms = round((time.perf_counter() - t1) * 1000, 1)
 
     if not rows:
-        response.headers["X-Itinerary-Ownership-Ms"] = str(ownership_ms)
+        # Lazy 404: only hit the DB a second time when the result is empty.
+        # Common case (trip has days) saves one full round-trip.
+        _ensure_trip_owned(supabase, trip_id, user_id)
         response.headers["X-Itinerary-Rpc-Ms"] = str(rpc_ms)
-        logger.info(
-            "itinerary_empty",
-            trip_id=trip_id_str,
-            ownership_ms=ownership_ms,
-            rpc_ms=rpc_ms,
-        )
+        logger.info("itinerary_empty", trip_id=trip_id_str, rpc_ms=rpc_ms)
         return ItineraryResponse(days=[])
 
     t2 = time.perf_counter()
@@ -220,90 +219,44 @@ async def get_itinerary(
     itinerary_response = _build_itinerary_response(
         day_rows, option_rows, ol_rows, locations_by_id, include_empty_options
     )
-    # Attach routes to options (single query for all options in this trip)
+    # Attach routes via single RPC (replaces 4 sequential queries)
     all_option_ids = [opt.id for d in itinerary_response.days for opt in d.options]
     if all_option_ids:
-        routes_result = (
-            supabase.table("option_routes")
-            .select(
-                "route_id, option_id, label, transport_mode,"
-                " duration_seconds, distance_meters, sort_order"
-            )
-            .in_("option_id", all_option_ids)
-            .order("sort_order")
-            .execute()
-        )
-        route_rows = routes_result.data or []
-        if route_rows:
-            route_ids = [str(r["route_id"]) for r in route_rows]
-            stops_result = (
-                supabase.table("route_stops")
-                .select("route_id, location_id, stop_order")
-                .in_("route_id", route_ids)
-                .order("stop_order")
-                .execute()
-            )
-            stops_by_route: dict[str, list[str]] = {}
-            for s in stops_result.data or []:
-                rid = str(s["route_id"])
-                stops_by_route.setdefault(rid, []).append(str(s["location_id"]))
-            # Load per-segment metrics (route_segments -> segment_cache)
-            rs_result = (
-                supabase.table("route_segments")
-                .select("route_id, segment_order, segment_cache_id")
-                .in_("route_id", route_ids)
-                .order("segment_order")
-                .execute()
-            )
-            seg_rows = rs_result.data or []
-            cache_ids = list({str(s["segment_cache_id"]) for s in seg_rows})
-            cache_by_id: dict[str, dict] = {}
-            if cache_ids:
-                cache_result = (
-                    supabase.table("segment_cache")
-                    .select("id, duration_seconds, distance_meters")
-                    .in_("id", cache_ids)
-                    .execute()
+        routes_rpc = supabase.rpc(
+            "get_itinerary_routes", {"p_option_ids": all_option_ids}
+        ).execute()
+        routes_by_option: dict[str, list[ItineraryRoute]] = {}
+        for r in routes_rpc.data or []:
+            oid = str(r["option_id"])
+            rid = str(r["route_id"])
+            dur = r.get("duration_seconds")
+            dist = r.get("distance_meters")
+            route_status = "pending" if (dur is None and dist is None) else "ok"
+            segments = [
+                RouteSegmentSummary(
+                    segment_order=int(s["segment_order"]),
+                    duration_seconds=s.get("duration_seconds"),
+                    distance_meters=s.get("distance_meters"),
                 )
-                cache_by_id = {str(r["id"]): r for r in (cache_result.data or [])}
-            segments_by_route: dict[str, list[RouteSegmentSummary]] = {}
-            for s in seg_rows:
-                rid = str(s["route_id"])
-                cache_row = cache_by_id.get(str(s.get("segment_cache_id") or "")) or {}
-                segments_by_route.setdefault(rid, []).append(
-                    RouteSegmentSummary(
-                        segment_order=int(s.get("segment_order", 0)),
-                        duration_seconds=cache_row.get("duration_seconds"),
-                        distance_meters=cache_row.get("distance_meters"),
-                    )
-                )
-            for rid in segments_by_route:
-                segments_by_route[rid].sort(key=lambda x: x.segment_order)
-            routes_by_option: dict[str, list[ItineraryRoute]] = {}
-            for r in route_rows:
-                oid = str(r["option_id"])
-                rid = str(r["route_id"])
-                dur = r.get("duration_seconds")
-                dist = r.get("distance_meters")
-                route_status = "pending" if (dur is None and dist is None) else "ok"
-                route = ItineraryRoute(
-                    route_id=rid,
-                    label=r.get("label"),
-                    transport_mode=r.get("transport_mode", "walk"),
-                    duration_seconds=dur,
-                    distance_meters=dist,
-                    sort_order=int(r.get("sort_order", 0)),
-                    location_ids=stops_by_route.get(rid, []),
-                    route_status=route_status,
-                    segments=segments_by_route.get(rid, []),
-                )
-                routes_by_option.setdefault(oid, []).append(route)
-            for d in itinerary_response.days:
-                for opt in d.options:
-                    opt.routes = routes_by_option.get(opt.id, [])
+                for s in (r.get("segments") or [])
+            ]
+            route = ItineraryRoute(
+                route_id=rid,
+                label=r.get("label"),
+                transport_mode=r.get("transport_mode", "walk"),
+                duration_seconds=dur,
+                distance_meters=dist,
+                sort_order=int(r.get("sort_order", 0)),
+                location_ids=[str(lid) for lid in (r.get("stop_location_ids") or [])],
+                route_status=route_status,
+                segments=segments,
+            )
+            routes_by_option.setdefault(oid, []).append(route)
+        for d in itinerary_response.days:
+            for opt in d.options:
+                opt.routes = routes_by_option.get(opt.id, [])
     build_ms = round((time.perf_counter() - t2) * 1000, 1)
 
-    response.headers["X-Itinerary-Ownership-Ms"] = str(ownership_ms)
     response.headers["X-Itinerary-Rpc-Ms"] = str(rpc_ms)
     response.headers["X-Itinerary-Build-Ms"] = str(build_ms)
     response.headers["X-Itinerary-Rows"] = str(len(rows))
@@ -311,7 +264,6 @@ async def get_itinerary(
         "itinerary_built",
         trip_id=trip_id_str,
         days=len(itinerary_response.days),
-        ownership_ms=ownership_ms,
         rpc_ms=rpc_ms,
         build_ms=build_ms,
         rows=len(rows),
