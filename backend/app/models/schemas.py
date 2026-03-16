@@ -430,7 +430,9 @@ class UpdateRouteBody(BaseModel):
 
     transport_mode: str | None = None
     label: str | None = None
-    location_ids: list[str] | None = Field(None, min_length=2, description="Ordered stop location UUIDs")
+    location_ids: list[str] | None = Field(
+        None, min_length=2, description="Ordered stop location UUIDs"
+    )
 
     @field_validator("transport_mode")
     @classmethod
