@@ -738,7 +738,12 @@ export default function TripDetailPage() {
     const map = new Map<string, string[]>();
     if (!itinerary) return map;
     for (const day of itinerary.days) {
-      const dayLabel = `Day ${day.sort_order + 1}`;
+      const dayLabel = day.date
+        ? new Date(day.date + "T00:00:00").toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+          })
+        : `Day ${day.sort_order + 1}`;
       for (const option of day.options) {
         for (const ol of option.locations) {
           const existing = map.get(ol.location_id);

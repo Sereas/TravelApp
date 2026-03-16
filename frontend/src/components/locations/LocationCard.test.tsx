@@ -9,7 +9,7 @@ describe("LocationCard", () => {
     expect(screen.getByText("Eiffel Tower")).toBeInTheDocument();
   });
 
-  it("renders category badge with icon when provided", () => {
+  it("renders category text when provided", () => {
     render(<LocationCard id="1" name="Louvre" category="Museum" />);
     expect(screen.getByText("Museum")).toBeInTheDocument();
   });
@@ -198,9 +198,9 @@ describe("LocationCard", () => {
     expect(screen.getByText("Not scheduled")).toBeInTheDocument();
   });
 
-  it("shows 'In itinerary' when inItinerary is true", () => {
+  it("shows 'Scheduled' when inItinerary is true", () => {
     render(<LocationCard id="1" name="Louvre" inItinerary />);
-    expect(screen.getByText("In itinerary")).toBeInTheDocument();
+    expect(screen.getByText("Scheduled")).toBeInTheDocument();
     expect(screen.queryByText("Not scheduled")).not.toBeInTheDocument();
   });
 
@@ -210,19 +210,32 @@ describe("LocationCard", () => {
         id="1"
         name="Louvre"
         inItinerary
-        itineraryDayLabel="Day 1, Day 3"
+        itineraryDayLabel="May 15"
+      />
+    );
+    expect(screen.getByText("Scheduled \u00B7 May 15")).toBeInTheDocument();
+  });
+
+  it("shows multiple day labels", () => {
+    render(
+      <LocationCard
+        id="1"
+        name="Louvre"
+        inItinerary
+        itineraryDayLabel="May 15, May 17"
       />
     );
     expect(
-      screen.getByText("In itinerary \u00B7 Day 1, Day 3")
+      screen.getByText("Scheduled \u00B7 May 15, May 17")
     ).toBeInTheDocument();
   });
 
-  it("highlights card border when in itinerary", () => {
+  it("has accent bar at top of card", () => {
     const { container } = render(
       <LocationCard id="1" name="Louvre" inItinerary />
     );
     const card = container.firstChild as HTMLElement;
-    expect(card.className).toContain("border-primary/30");
+    expect(card.className).toContain("rounded-xl");
+    expect(card.className).toContain("border-primary/25");
   });
 });

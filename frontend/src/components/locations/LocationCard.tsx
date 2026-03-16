@@ -37,7 +37,7 @@ export interface LocationCardProps {
   added_by_email?: string | null;
   /** When true, shows a visual indicator that this location is scheduled in the itinerary. */
   inItinerary?: boolean;
-  /** Which day(s) (e.g. "Day 1", "Day 1, 3") this location appears on in the itinerary. */
+  /** Which day(s) this location appears on in the itinerary (e.g. "May 15", "Day 1, Day 3"). */
   itineraryDayLabel?: string | null;
   /** Legacy: inline Edit/Delete. Prefer onEdit + deleteTrigger for menu. */
   actions?: React.ReactNode;
@@ -48,34 +48,19 @@ export interface LocationCardProps {
   className?: string;
 }
 
-function CategoryBadge({ category }: { category: string }) {
-  const meta = CATEGORY_META[category as CategoryKey];
-  if (!meta) return null;
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
-        meta.bg,
-        meta.text
-      )}
-    >
-      <CategoryIcon category={category as CategoryKey} size={12} />
-      {category}
-    </span>
-  );
-}
-
 function BookingBadge({ status }: { status: string }) {
   if (status === "no") return null;
   const isBooked = status === "yes_done";
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
-        isBooked ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
+        isBooked
+          ? "bg-emerald-50 text-emerald-700"
+          : "bg-amber-50 text-amber-700"
       )}
     >
-      <Ticket size={12} />
+      <Ticket size={11} />
       {isBooked ? "Booked \u2713" : "Booking needed"}
     </span>
   );
@@ -137,223 +122,229 @@ export function LocationCard({
   return (
     <div
       className={cn(
-        "flex flex-col rounded-lg border bg-card px-3 py-2.5 transition-shadow hover:shadow-sm",
-        inItinerary ? "border-primary/30" : "border-border",
+        "group relative flex flex-col overflow-hidden rounded-xl border bg-card transition-all hover:shadow-md",
+        inItinerary
+          ? "border-primary/25 shadow-sm shadow-primary/5"
+          : "border-border/60",
         className
       )}
     >
-      {/* Header row: icon, name, category, badge, three-dot menu */}
-      <div className="flex shrink-0 items-start justify-between gap-2">
-        <div className="flex min-w-0 flex-1 items-start gap-2.5">
-          <div
-            className={cn(
-              "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full",
-              catMeta?.bg ?? "bg-gray-50"
-            )}
-          >
-            {category ? (
-              <CategoryIcon
-                category={category as CategoryKey}
-                size={14}
-                className={catMeta?.text}
-              />
-            ) : (
-              <MapPin size={14} className="text-gray-400" />
-            )}
-          </div>
+      {/* Colored top accent bar */}
+      <div
+        className={cn(
+          "h-1 w-full shrink-0",
+          catMeta?.bg ?? "bg-gradient-to-r from-gray-100 to-gray-50"
+        )}
+      />
+
+      <div className="flex flex-1 flex-col px-3.5 pb-3 pt-2.5">
+        {/* Header row: name + category text + badges + menu */}
+        <div className="flex shrink-0 items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-sm font-semibold leading-tight">
-                {name}
-              </span>
-              {category && <CategoryBadge category={category} />}
+            <h3 className="text-[15px] font-semibold leading-snug tracking-tight">
+              {name}
+            </h3>
+            <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+              {category && (
+                <span
+                  className={cn(
+                    "text-[11px] font-medium",
+                    catMeta?.text ?? "text-muted-foreground"
+                  )}
+                >
+                  {category}
+                </span>
+              )}
               {requires_booking && requires_booking !== "no" && (
                 <BookingBadge status={requires_booking} />
               )}
             </div>
           </div>
-        </div>
-        {useMenu && (
-          <Popover open={menuOpen} onOpenChange={setMenuOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
-                aria-label="Location actions"
-              >
-                <MoreVertical size={18} />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-40 p-1" align="end" sideOffset={6}>
-              {onEdit && (
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
-                  onClick={() => {
-                    onEdit();
-                    setMenuOpen(false);
-                  }}
+          {useMenu && (
+            <Popover open={menuOpen} onOpenChange={setMenuOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 shrink-0 rounded-full text-muted-foreground/50 opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 data-[state=open]:opacity-100"
+                  aria-label="Location actions"
                 >
-                  <Pencil size={14} />
-                  Edit
-                </button>
-              )}
-              {(onDelete || deleteTrigger) && (
-                <div className="flex w-full">
-                  {deleteTrigger ?? (
-                    <button
-                      type="button"
-                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-destructive hover:bg-destructive/10"
-                      onClick={() => {
-                        onDelete?.();
-                        setMenuOpen(false);
-                      }}
-                    >
-                      <Trash2 size={14} />
-                      Delete
-                    </button>
-                  )}
-                </div>
-              )}
-            </PopoverContent>
-          </Popover>
-        )}
-        {!useMenu && actions != null && (
-          <div className="flex shrink-0 items-center gap-1">{actions}</div>
-        )}
-      </div>
-
-      {/* Main content block: address, hours, notes, itinerary status, Maps link */}
-      <div className="mt-1.5 flex min-h-0 flex-1 flex-col gap-1">
-        {hasGeo && (
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <MapPin size={11} className="shrink-0 opacity-70" />
-            <span className="truncate">
-              {city && address ? `${city} \u00B7 ${address}` : city || address}
-            </span>
-          </div>
-        )}
-        {working_hours && (
-          <div className="flex flex-col gap-0.5">
-            {isDetailedHoursValue ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setHoursExpanded((e) => !e)}
-                  className="flex w-fit items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline"
-                  aria-expanded={hoursExpanded}
-                  aria-label={
-                    hoursExpanded
-                      ? "Collapse opening hours"
-                      : "View opening hours"
-                  }
-                >
-                  <Clock size={11} className="shrink-0 opacity-70" />
-                  {hoursExpanded ? "Hide opening hours" : "View opening hours"}
-                </button>
-                {hoursExpanded && (
-                  <div className="ml-4 border-l-2 border-border/50 pl-2 text-[11px] text-muted-foreground">
-                    {formatHoursLines(working_hours).map((line, i) => (
-                      <div key={i}>{line}</div>
-                    ))}
+                  <MoreVertical size={16} />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-36 p-1" align="end" sideOffset={4}>
+                {onEdit && (
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm hover:bg-accent"
+                    onClick={() => {
+                      onEdit();
+                      setMenuOpen(false);
+                    }}
+                  >
+                    <Pencil size={13} />
+                    Edit
+                  </button>
+                )}
+                {(onDelete || deleteTrigger) && (
+                  <div className="flex w-full">
+                    {deleteTrigger ?? (
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm text-destructive hover:bg-destructive/10"
+                        onClick={() => {
+                          onDelete?.();
+                          setMenuOpen(false);
+                        }}
+                      >
+                        <Trash2 size={13} />
+                        Delete
+                      </button>
+                    )}
                   </div>
                 )}
-              </>
-            ) : (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Clock size={11} className="shrink-0 opacity-70" />
-                {working_hours}
-              </div>
-            )}
-          </div>
-        )}
-        {note && (
-          <div
-            className={cn(
-              "rounded-r-md border-l-2 border-primary/25 bg-muted/30 py-1 pl-2 pr-2",
-              "text-xs text-foreground/90"
-            )}
-          >
-            <div className="flex items-start gap-1.5">
-              <MessageSquare
-                size={12}
-                className="mt-0.5 shrink-0 text-primary/70"
-              />
-              <div className="min-w-0 flex-1">
-                {note.length <= NOTE_LONG_THRESHOLD ? (
-                  <span className="leading-snug">{note}</span>
-                ) : (
-                  <>
-                    <span className="leading-snug">
-                      {noteExpanded ? note : notePreview(note)}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setNoteExpanded((e) => !e)}
-                      className="mt-1 inline-flex items-center gap-0.5 text-primary hover:underline"
-                      aria-expanded={noteExpanded}
-                    >
-                      {noteExpanded ? (
-                        <>
-                          Show less
-                          <ChevronUp size={12} />
-                        </>
-                      ) : (
-                        <>
-                          View note
-                          <ChevronDown size={12} />
-                        </>
-                      )}
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Footer: itinerary status, Maps link, Created by */}
-      <div className="mt-2 flex shrink-0 flex-col gap-1.5 border-t border-border/50 pt-2">
-        <div className="flex items-center justify-between gap-2">
-          {/* Itinerary status */}
-          <div className="flex items-center gap-1 text-xs">
-            {inItinerary ? (
-              <span className="inline-flex items-center gap-1 text-primary">
-                <CalendarCheck size={12} className="shrink-0" />
-                <span>
-                  {itineraryDayLabel
-                    ? `In itinerary \u00B7 ${itineraryDayLabel}`
-                    : "In itinerary"}
-                </span>
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 text-muted-foreground/60">
-                <CalendarCheck size={12} className="shrink-0" />
-                <span>Not scheduled</span>
-              </span>
-            )}
-          </div>
-          {/* Maps / Location details link */}
-          {google_link && (
-            <a
-              href={google_link}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/5 hover:underline"
-              aria-label="Open in Google Maps"
-            >
-              <ExternalLink size={11} />
-              Location details
-            </a>
+              </PopoverContent>
+            </Popover>
+          )}
+          {!useMenu && actions != null && (
+            <div className="flex shrink-0 items-center gap-1">{actions}</div>
           )}
         </div>
-        {added_by_email && (
-          <p className="text-[11px] text-muted-foreground/70">
-            Added by {added_by_email}
-          </p>
-        )}
+
+        {/* Content: address, hours, notes */}
+        <div className="mt-2 flex min-h-0 flex-1 flex-col gap-1.5">
+          {hasGeo && (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <MapPin size={12} className="shrink-0 text-muted-foreground/50" />
+              <span className="truncate">
+                {city && address
+                  ? `${city} \u00B7 ${address}`
+                  : city || address}
+              </span>
+            </div>
+          )}
+          {working_hours && (
+            <div className="flex flex-col gap-0.5">
+              {isDetailedHoursValue ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setHoursExpanded((e) => !e)}
+                    className="flex w-fit items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                    aria-expanded={hoursExpanded}
+                    aria-label={
+                      hoursExpanded
+                        ? "Collapse opening hours"
+                        : "View opening hours"
+                    }
+                  >
+                    <Clock
+                      size={12}
+                      className="shrink-0 text-muted-foreground/50"
+                    />
+                    <span className="underline decoration-dotted underline-offset-2">
+                      {hoursExpanded
+                        ? "Hide opening hours"
+                        : "View opening hours"}
+                    </span>
+                  </button>
+                  {hoursExpanded && (
+                    <div className="ml-5 rounded-md bg-muted/40 px-2.5 py-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                      {formatHoursLines(working_hours).map((line, i) => (
+                        <div key={i}>{line}</div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Clock
+                    size={12}
+                    className="shrink-0 text-muted-foreground/50"
+                  />
+                  {working_hours}
+                </div>
+              )}
+            </div>
+          )}
+          {note && (
+            <div className="rounded-lg bg-muted/40 px-2.5 py-1.5 text-xs leading-relaxed text-foreground/80">
+              <div className="flex items-start gap-1.5">
+                <MessageSquare
+                  size={12}
+                  className="mt-0.5 shrink-0 text-muted-foreground/50"
+                />
+                <div className="min-w-0 flex-1">
+                  {note.length <= NOTE_LONG_THRESHOLD ? (
+                    <span>{note}</span>
+                  ) : (
+                    <>
+                      <span>{noteExpanded ? note : notePreview(note)}</span>
+                      <button
+                        type="button"
+                        onClick={() => setNoteExpanded((e) => !e)}
+                        className="mt-0.5 inline-flex items-center gap-0.5 text-[11px] font-medium text-primary hover:underline"
+                        aria-expanded={noteExpanded}
+                      >
+                        {noteExpanded ? (
+                          <>
+                            Show less
+                            <ChevronUp size={11} />
+                          </>
+                        ) : (
+                          <>
+                            View note
+                            <ChevronDown size={11} />
+                          </>
+                        )}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer: itinerary status + Maps link + Added by */}
+        <div className="mt-3 flex shrink-0 flex-col gap-1 border-t border-border/40 pt-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1 text-[11px]">
+              {inItinerary ? (
+                <span className="inline-flex items-center gap-1 font-medium text-emerald-600">
+                  <CalendarCheck size={12} className="shrink-0" />
+                  <span>
+                    {itineraryDayLabel
+                      ? `Scheduled \u00B7 ${itineraryDayLabel}`
+                      : "Scheduled"}
+                  </span>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-muted-foreground/50">
+                  <CalendarCheck size={12} className="shrink-0" />
+                  <span>Not scheduled</span>
+                </span>
+              )}
+            </div>
+            {google_link && (
+              <a
+                href={google_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex shrink-0 items-center gap-1 rounded-md text-[11px] font-medium text-muted-foreground transition-colors hover:text-primary"
+                aria-label="Open in Google Maps"
+              >
+                <ExternalLink size={11} />
+                Location details
+              </a>
+            )}
+          </div>
+          {added_by_email && (
+            <p className="text-[11px] text-muted-foreground/50">
+              Added by {added_by_email}
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );
