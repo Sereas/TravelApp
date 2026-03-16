@@ -60,3 +60,6 @@ Thumbs.db
 # Performance reports
 perf/
 
+# Local scripts (may contain credentials)
+scripts/
+
