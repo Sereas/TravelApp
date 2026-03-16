@@ -57,3 +57,6 @@ docs/
 .DS_Store
 Thumbs.db
 
+# Performance reports
+perf/
+

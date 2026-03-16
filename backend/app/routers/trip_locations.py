@@ -24,18 +24,19 @@ _LOCATIONS_SELECT = (
 )
 
 
-def _resolve_user_email(supabase_client, user_id: str | None) -> str | None:
-    """Resolve email from auth.users for added_by_user_id. Returns None on failure."""
-    if not user_id:
-        return None
-    try:
-        resp = supabase_client.auth.admin.get_user_by_id(user_id)
-        user = getattr(resp, "user", None) if resp else None
-        if user:
-            return getattr(user, "email", None)
-        return None
-    except Exception:
-        return None
+def _resolve_user_emails(supabase_client, user_ids: list[str]) -> dict[str, str | None]:
+    """Batch-resolve emails for a list of unique user IDs. Returns id → email map."""
+    result: dict[str, str | None] = {}
+    for uid in user_ids:
+        if uid in result:
+            continue
+        try:
+            resp = supabase_client.auth.admin.get_user_by_id(uid)
+            user = getattr(resp, "user", None) if resp else None
+            result[uid] = getattr(user, "email", None) if user else None
+        except Exception:
+            result[uid] = None
+    return result
 
 
 def _extract_lat_lng_from_google_raw(raw: dict | None) -> tuple[float | None, float | None]:
@@ -54,7 +55,7 @@ def _extract_lat_lng_from_google_raw(raw: dict | None) -> tuple[float | None, fl
     return None, None
 
 
-def _loc_to_response(supabase_client, loc: dict) -> LocationResponse:
+def _loc_to_response(loc: dict, email_map: dict[str, str | None]) -> LocationResponse:
     """Build LocationResponse from a locations row dict."""
     added_by_uid = loc.get("added_by_user_id")
     uid_str = str(added_by_uid) if added_by_uid else None
@@ -68,7 +69,7 @@ def _loc_to_response(supabase_client, loc: dict) -> LocationResponse:
         google_raw=loc.get("google_raw"),
         note=loc.get("note"),
         added_by_user_id=uid_str,
-        added_by_email=_resolve_user_email(supabase_client, uid_str),
+        added_by_email=email_map.get(uid_str) if uid_str else None,
         city=loc.get("city"),
         working_hours=loc.get("working_hours"),
         requires_booking=loc.get("requires_booking"),
@@ -154,7 +155,9 @@ async def add_location(
         trip_id=str(trip_id),
         name=body.name,
     )
-    return _loc_to_response(supabase, loc)
+    uid_str = str(loc.get("added_by_user_id")) if loc.get("added_by_user_id") else None
+    email_map = _resolve_user_emails(supabase, [uid_str] if uid_str else [])
+    return _loc_to_response(loc, email_map)
 
 
 @router.get(
@@ -189,8 +192,10 @@ async def list_locations(
         supabase.table("locations").select(_LOCATIONS_SELECT).eq("trip_id", str(trip_id)).execute()
     )
     items = result.data if result.data else []
+    unique_uids = list({str(loc["added_by_user_id"]) for loc in items if loc.get("added_by_user_id")})
+    email_map = _resolve_user_emails(supabase, unique_uids)
     logger.info("locations_listed", trip_id=str(trip_id), count=len(items))
-    return [_loc_to_response(supabase, loc) for loc in items]
+    return [_loc_to_response(loc, email_map) for loc in items]
 
 
 @router.post(
@@ -276,11 +281,10 @@ async def batch_add_locations(
         fetched_by_id = {r["location_id"]: r for r in (fetch.data or [])}
     else:
         fetched_by_id = {}
-    out = []
-    for loc in result.data:
-        lid = loc.get("location_id")
-        full = fetched_by_id.get(str(lid), loc) if lid else loc
-        out.append(_loc_to_response(supabase, full))
+    final_locs = [fetched_by_id.get(str(loc.get("location_id")), loc) for loc in result.data]
+    unique_uids = list({str(l["added_by_user_id"]) for l in final_locs if l.get("added_by_user_id")})
+    email_map = _resolve_user_emails(supabase, unique_uids)
+    out = [_loc_to_response(full, email_map) for full in final_locs]
     logger.info("locations_batch_added", trip_id=str(trip_id), count=len(body))
     return out
 
@@ -383,7 +387,9 @@ async def update_location(
         trip_id=str(trip_id),
         fields=list(update_data.keys()),
     )
-    return _loc_to_response(supabase, loc)
+    uid_str = str(loc.get("added_by_user_id")) if loc.get("added_by_user_id") else None
+    email_map = _resolve_user_emails(supabase, [uid_str] if uid_str else [])
+    return _loc_to_response(loc, email_map)
 
 
 @router.delete(
