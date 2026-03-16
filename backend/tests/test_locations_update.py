@@ -95,6 +95,15 @@ class MockSupabaseLocations:
             return _LocationsTableMock(self._locations_store)
         raise AssertionError(f"Unexpected table: {name}")
 
+    def rpc(self, name, params):
+        if name == "verify_resource_chain":
+            tid = str(params.get("p_trip_id", ""))
+            uid = str(params.get("p_user_id", ""))
+            trip = self._trips_store.get(tid)
+            valid = trip is not None and str(trip.get("user_id")) == uid
+            return type("Chain", (), {"execute": lambda _: type("R", (), {"data": valid})()})()
+        return type("Chain", (), {"execute": lambda _: type("R", (), {"data": None})()})()
+
 
 def _make_trip(trip_id: str, user_id: UUID):
     return {
@@ -243,7 +252,7 @@ def test_update_location_nonexistent_trip_returns_404(
             json={"name": "New name"},
         )
         assert r.status_code == 404
-        assert r.json().get("detail") == "Trip not found"
+        assert r.json().get("detail") == "Resource not found or not owned"
     finally:
         app.dependency_overrides.clear()
 
@@ -270,7 +279,7 @@ def test_update_location_other_users_trip_returns_404(
             json={"name": "New name"},
         )
         assert r.status_code == 404
-        assert r.json().get("detail") == "Trip not owned by user"
+        assert r.json().get("detail") == "Resource not found or not owned"
     finally:
         app.dependency_overrides.clear()
 

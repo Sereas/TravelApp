@@ -101,8 +101,14 @@ async def get_current_user_id(
         raise _auth_error("Invalid subject in token") from None
 
     request.state.user_id = user_id
+    request.state.user_email = payload.get("email")
     logger.debug("auth_success", user_id=str(user_id))
     return user_id
+
+
+async def get_current_user_email(request: Request) -> str | None:
+    """Return the authenticated user's email from request state (set by get_current_user_id)."""
+    return getattr(request.state, "user_email", None)
 
 
 def _auth_error(detail: str):

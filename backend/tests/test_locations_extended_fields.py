@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 from fastapi.testclient import TestClient
 
 from backend.app.db.supabase import get_supabase_client
-from backend.app.dependencies import get_current_user_id
+from backend.app.dependencies import get_current_user_email, get_current_user_id
 from backend.app.main import app
 
 
@@ -285,6 +285,15 @@ class _MockSupabaseUpdate:
             return _LocationsTableMock(self._locations)
         raise AssertionError(f"Unexpected table: {name}")
 
+    def rpc(self, name, params):
+        if name == "verify_resource_chain":
+            tid = str(params.get("p_trip_id", ""))
+            uid = str(params.get("p_user_id", ""))
+            trip = self._trips.get(tid)
+            valid = trip is not None and str(trip.get("user_id")) == uid
+            return type("Chain", (), {"execute": lambda _: type("R", (), {"data": valid})()})()
+        return type("Chain", (), {"execute": lambda _: type("R", (), {"data": None})()})()
+
 
 def test_update_location_extended_fields(
     client: TestClient,
@@ -439,19 +448,19 @@ def test_add_location_added_by_email_resolved(
     mock_user_id: UUID,
     mock_supabase_trips_and_locations,
 ):
-    """added_by_email is resolved from auth when user_emails mapping is provided."""
+    """added_by_email is written from JWT email at INSERT time."""
     _locations_inserted, MockSupabase = mock_supabase_trips_and_locations
     trip_id = str(uuid4())
-    mock_sb = MockSupabase(
-        {trip_id: str(mock_user_id)},
-        mock_user_id,
-        user_emails={str(mock_user_id): "alice@example.com"},
-    )
+    mock_sb = MockSupabase({trip_id: str(mock_user_id)}, mock_user_id)
 
     async def override_user():
         return mock_user_id
 
+    async def override_email():
+        return "alice@example.com"
+
     app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_current_user_email] = override_email
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r = client.post(
@@ -471,19 +480,19 @@ def test_list_locations_added_by_email_resolved(
     mock_user_id: UUID,
     mock_supabase_trips_and_locations,
 ):
-    """GET list also resolves added_by_email."""
+    """GET list returns added_by_email stored at INSERT time."""
     _locations_inserted, MockSupabase = mock_supabase_trips_and_locations
     trip_id = str(uuid4())
-    mock_sb = MockSupabase(
-        {trip_id: str(mock_user_id)},
-        mock_user_id,
-        user_emails={str(mock_user_id): "bob@example.com"},
-    )
+    mock_sb = MockSupabase({trip_id: str(mock_user_id)}, mock_user_id)
 
     async def override_user():
         return mock_user_id
 
+    async def override_email():
+        return "bob@example.com"
+
     app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_current_user_email] = override_email
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         client.post(

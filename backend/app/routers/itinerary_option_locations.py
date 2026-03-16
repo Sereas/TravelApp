@@ -14,8 +14,7 @@ from backend.app.models.schemas import (
     ReorderOptionLocationsBody,
     UpdateOptionLocationBody,
 )
-from backend.app.routers.itinerary_options import _ensure_day_in_trip
-from backend.app.routers.trip_ownership import _ensure_trip_owned
+from backend.app.routers.trip_ownership import _ensure_resource_chain
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger("itinerary_option_locations")
 
@@ -107,9 +106,7 @@ async def list_option_locations(
     Requires valid JWT; trip must be owned; day and option must belong to trip; else 404.
     Returns 200 with array ordered by sort_order (asc); empty → [].
     """
-    _ensure_trip_owned(supabase, trip_id, user_id)
-    _ensure_day_in_trip(supabase, trip_id, day_id)
-    _ensure_option_in_day(supabase, day_id, option_id)
+    _ensure_resource_chain(supabase, trip_id, user_id, day_id=day_id, option_id=option_id)
     result = (
         supabase.table("option_locations")
         .select(_OPTION_LOCATIONS_SELECT)
@@ -162,9 +159,7 @@ async def add_location_to_option(
     Requires valid JWT. Trip/day/option must exist and be owned; location must belong to trip.
     409 if (option_id, location_id) already exists.
     """
-    _ensure_trip_owned(supabase, trip_id, user_id)
-    _ensure_day_in_trip(supabase, trip_id, day_id)
-    _ensure_option_in_day(supabase, day_id, option_id)
+    _ensure_resource_chain(supabase, trip_id, user_id, day_id=day_id, option_id=option_id)
     _ensure_location_in_trip(supabase, trip_id, body.location_id)
     # Uniqueness: (option_id, location_id)
     existing = (
@@ -234,9 +229,7 @@ async def reorder_option_locations(
     Backend sets sort_order to 0, 1, 2, … by position.
     422 if any id not in this option or duplicate.
     """
-    _ensure_trip_owned(supabase, trip_id, user_id)
-    _ensure_day_in_trip(supabase, trip_id, day_id)
-    _ensure_option_in_day(supabase, day_id, option_id)
+    _ensure_resource_chain(supabase, trip_id, user_id, day_id=day_id, option_id=option_id)
     option_id_str = str(option_id)
     if not body.location_ids:
         raise HTTPException(
@@ -316,9 +309,7 @@ async def update_option_location(
     Trip/day/option must exist and be owned; link must exist; else 404.
     422 if no fields provided.
     """
-    _ensure_trip_owned(supabase, trip_id, user_id)
-    _ensure_day_in_trip(supabase, trip_id, day_id)
-    _ensure_option_in_day(supabase, day_id, option_id)
+    _ensure_resource_chain(supabase, trip_id, user_id, day_id=day_id, option_id=option_id)
     existing = (
         supabase.table("option_locations")
         .select(_OPTION_LOCATIONS_SELECT)
@@ -396,68 +387,26 @@ async def remove_location_from_option(
     Remove a location from an option.
     Trip/day/option must exist and be owned; link must exist; else 404.
     """
-    _ensure_trip_owned(supabase, trip_id, user_id)
-    _ensure_day_in_trip(supabase, trip_id, day_id)
-    _ensure_option_in_day(supabase, day_id, option_id)
+    _ensure_resource_chain(supabase, trip_id, user_id, day_id=day_id, option_id=option_id)
     option_id_str = str(option_id)
     location_id_str = str(location_id)
-    existing = (
-        supabase.table("option_locations")
-        .select("option_id, location_id")
-        .eq("option_id", option_id_str)
-        .eq("location_id", location_id_str)
-        .execute()
-    )
-    if not existing.data or len(existing.data) == 0:
+    # Single atomic RPC: handles route cleanup + option_locations delete in one transaction
+    try:
+        supabase.rpc(
+            "remove_location_from_option",
+            {"p_option_id": option_id_str, "p_location_id": location_id_str},
+        ).execute()
+    except Exception as exc:
+        detail = str(exc)
+        if "OPTION_LOCATION_NOT_FOUND" in detail:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Option-location not found",
+            ) from exc
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Option-location not found",
-        )
-    # If this location participates in any routes for this option, update those routes.
-    # Behaviour:
-    # - For any route that would end up with < 2 stops after removal, delete the route.
-    # - Otherwise, delete only the stops for this location (route remains with remaining stops).
-    routes_result = (
-        supabase.table("route_stops")
-        .select("route_id, location_id, stop_order")
-        .eq("location_id", location_id_str)
-        .execute()
-    )
-    route_ids = {str(r["route_id"]) for r in (routes_result.data or [])}
-    if route_ids:
-        option_routes = (
-            supabase.table("option_routes")
-            .select("route_id")
-            .eq("option_id", option_id_str)
-            .in_("route_id", list(route_ids))
-            .execute()
-        )
-        option_route_ids = {str(r["route_id"]) for r in (option_routes.data or [])}
-        if option_route_ids:
-            # Fetch all stops for these routes to know how many remain after removal.
-            all_stops_result = (
-                supabase.table("route_stops")
-                .select("route_id, location_id, stop_order")
-                .in_("route_id", list(option_route_ids))
-                .execute()
-            )
-            stops_by_route: dict[str, list[dict]] = {}
-            for s in all_stops_result.data or []:
-                rid = str(s["route_id"])
-                stops_by_route.setdefault(rid, []).append(s)
-            for rid, stops in stops_by_route.items():
-                remaining = [s for s in stops if str(s.get("location_id")) != location_id_str]
-                if len(remaining) < 2:
-                    # Route is no longer meaningful; delete it (stops cascade).
-                    supabase.table("option_routes").delete().eq("route_id", rid).execute()
-                else:
-                    # Just remove the stop(s) for this location; keep route.
-                    supabase.table("route_stops").delete().eq("route_id", rid).eq(
-                        "location_id", location_id_str
-                    ).execute()
-    supabase.table("option_locations").delete().eq("option_id", option_id_str).eq(
-        "location_id", location_id_str
-    ).execute()
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to remove location from option; please try again",
+        ) from exc
     logger.info(
         "option_location_removed",
         trip_id=str(trip_id),
@@ -490,9 +439,7 @@ async def batch_add_locations_to_option(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="At least one option-location required",
         )
-    _ensure_trip_owned(supabase, trip_id, user_id)
-    _ensure_day_in_trip(supabase, trip_id, day_id)
-    _ensure_option_in_day(supabase, day_id, option_id)
+    _ensure_resource_chain(supabase, trip_id, user_id, day_id=day_id, option_id=option_id)
     option_id_str = str(option_id)
     trip_id_str = str(trip_id)
     # Collect and deduplicate

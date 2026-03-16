@@ -24,6 +24,12 @@ class _StubSupabase:
     def eq(self, *args):
         return self
 
+    def order(self, *args, **kwargs):
+        return self
+
+    def rpc(self, *args, **kwargs):
+        return self
+
     def execute(self):
         return type("R", (), {"data": []})()
 

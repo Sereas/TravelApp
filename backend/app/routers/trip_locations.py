@@ -6,37 +6,27 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from backend.app.db.supabase import get_supabase_client
-from backend.app.dependencies import get_current_user_id
+from backend.app.dependencies import get_current_user_email, get_current_user_id
 from backend.app.models.schemas import (
     AddLocationBody,
     LocationResponse,
     UpdateLocationBody,
 )
+from backend.app.routers.trip_ownership import _ensure_resource_chain
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger("locations")
 
 router = APIRouter(prefix="/trips", tags=["trips-locations"])
 
+# List/update selects — excludes google_raw to keep list responses small.
+# google_raw can be 5-15 KB per location; never needed in list views.
 _LOCATIONS_SELECT = (
     "location_id, trip_id, name, address, google_link, google_place_id, "
-    "google_source_type, google_raw, note, added_by_user_id, city, "
+    "google_source_type, added_by_email, note, added_by_user_id, city, "
     "working_hours, requires_booking, category, latitude, longitude"
 )
-
-
-def _resolve_user_emails(supabase_client, user_ids: list[str]) -> dict[str, str | None]:
-    """Batch-resolve emails for a list of unique user IDs. Returns id → email map."""
-    result: dict[str, str | None] = {}
-    for uid in user_ids:
-        if uid in result:
-            continue
-        try:
-            resp = supabase_client.auth.admin.get_user_by_id(uid)
-            user = getattr(resp, "user", None) if resp else None
-            result[uid] = getattr(user, "email", None) if user else None
-        except Exception:
-            result[uid] = None
-    return result
+# Used only for the single-item POST response where the client may need raw data.
+_LOCATIONS_SELECT_WITH_RAW = _LOCATIONS_SELECT + ", google_raw"
 
 
 def _extract_lat_lng_from_google_raw(raw: dict | None) -> tuple[float | None, float | None]:
@@ -55,7 +45,7 @@ def _extract_lat_lng_from_google_raw(raw: dict | None) -> tuple[float | None, fl
     return None, None
 
 
-def _loc_to_response(loc: dict, email_map: dict[str, str | None]) -> LocationResponse:
+def _loc_to_response(loc: dict) -> LocationResponse:
     """Build LocationResponse from a locations row dict."""
     added_by_uid = loc.get("added_by_user_id")
     uid_str = str(added_by_uid) if added_by_uid else None
@@ -69,7 +59,7 @@ def _loc_to_response(loc: dict, email_map: dict[str, str | None]) -> LocationRes
         google_raw=loc.get("google_raw"),
         note=loc.get("note"),
         added_by_user_id=uid_str,
-        added_by_email=email_map.get(uid_str) if uid_str else None,
+        added_by_email=loc.get("added_by_email"),
         city=loc.get("city"),
         working_hours=loc.get("working_hours"),
         requires_booking=loc.get("requires_booking"),
@@ -88,26 +78,14 @@ async def add_location(
     trip_id: UUID,
     body: AddLocationBody,
     user_id: UUID = Depends(get_current_user_id),
+    user_email: str | None = Depends(get_current_user_email),
     supabase=Depends(get_supabase_client),
 ):
     """
     Add a location to a trip. Requires valid JWT.
     Trip must exist and be owned by the authenticated user; else 404.
     """
-    trip_result = (
-        supabase.table("trips").select("trip_id, user_id").eq("trip_id", str(trip_id)).execute()
-    )
-    if not trip_result.data or len(trip_result.data) == 0:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Trip not found",
-        )
-    trip = trip_result.data[0]
-    if trip.get("user_id") != str(user_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Trip not owned by user",
-        )
+    _ensure_resource_chain(supabase, trip_id, user_id)
     row = {
         "trip_id": str(trip_id),
         "name": body.name,
@@ -118,6 +96,7 @@ async def add_location(
         "google_raw": body.google_raw,
         "note": body.note,
         "added_by_user_id": str(user_id),
+        "added_by_email": user_email,
         "city": body.city,
         "working_hours": body.working_hours,
         "requires_booking": body.requires_booking,
@@ -137,12 +116,12 @@ async def add_location(
             detail="Failed to create location; please try again",
         )
     loc = result.data[0]
-    # Fetch full row with all columns (insert().execute() returns row but may omit some columns)
+    # Fetch full row with all columns (including google_raw — single POST response only)
     loc_id = loc.get("location_id")
     if loc_id:
         fetch = (
             supabase.table("locations")
-            .select(_LOCATIONS_SELECT)
+            .select(_LOCATIONS_SELECT_WITH_RAW)
             .eq("location_id", str(loc_id))
             .eq("trip_id", str(trip_id))
             .execute()
@@ -155,9 +134,7 @@ async def add_location(
         trip_id=str(trip_id),
         name=body.name,
     )
-    uid_str = str(loc.get("added_by_user_id")) if loc.get("added_by_user_id") else None
-    email_map = _resolve_user_emails(supabase, [uid_str] if uid_str else [])
-    return _loc_to_response(loc, email_map)
+    return _loc_to_response(loc)
 
 
 @router.get(
@@ -173,31 +150,15 @@ async def list_locations(
     List all locations for a trip. Requires valid JWT.
     Trip must exist and be owned by the authenticated user; else 404.
     Returns 200 with array of locations; empty array if trip has no locations.
+    google_raw is NOT included in list responses (payload size).
     """
-    trip_result = (
-        supabase.table("trips").select("trip_id, user_id").eq("trip_id", str(trip_id)).execute()
-    )
-    if not trip_result.data or len(trip_result.data) == 0:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Trip not found",
-        )
-    trip = trip_result.data[0]
-    if trip.get("user_id") != str(user_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Trip not owned by user",
-        )
+    _ensure_resource_chain(supabase, trip_id, user_id)
     result = (
         supabase.table("locations").select(_LOCATIONS_SELECT).eq("trip_id", str(trip_id)).execute()
     )
     items = result.data if result.data else []
-    unique_uids = list(
-        {str(loc["added_by_user_id"]) for loc in items if loc.get("added_by_user_id")}
-    )
-    email_map = _resolve_user_emails(supabase, unique_uids)
     logger.info("locations_listed", trip_id=str(trip_id), count=len(items))
-    return [_loc_to_response(loc, email_map) for loc in items]
+    return [_loc_to_response(loc) for loc in items]
 
 
 @router.post(
@@ -209,6 +170,7 @@ async def batch_add_locations(
     trip_id: UUID,
     body: list[AddLocationBody],
     user_id: UUID = Depends(get_current_user_id),
+    user_email: str | None = Depends(get_current_user_email),
     supabase=Depends(get_supabase_client),
 ):
     """
@@ -221,20 +183,7 @@ async def batch_add_locations(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="At least one location required",
         )
-    trip_result = (
-        supabase.table("trips").select("trip_id, user_id").eq("trip_id", str(trip_id)).execute()
-    )
-    if not trip_result.data or len(trip_result.data) == 0:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Trip not found",
-        )
-    trip = trip_result.data[0]
-    if trip.get("user_id") != str(user_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Trip not owned by user",
-        )
+    _ensure_resource_chain(supabase, trip_id, user_id)
     rows = []
     for item in body:
         row = {
@@ -247,6 +196,7 @@ async def batch_add_locations(
             "google_raw": item.google_raw,
             "note": item.note,
             "added_by_user_id": str(user_id),
+            "added_by_email": user_email,
             "city": item.city,
             "working_hours": item.working_hours,
             "requires_booking": item.requires_booking,
@@ -270,7 +220,7 @@ async def batch_add_locations(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create one or more locations; please try again",
         )
-    # Fetch full rows with all columns in a single query
+    # Fetch full rows (without google_raw — batch responses stay lean)
     loc_ids = [str(loc["location_id"]) for loc in result.data if loc.get("location_id")]
     if loc_ids:
         fetch = (
@@ -284,11 +234,7 @@ async def batch_add_locations(
     else:
         fetched_by_id = {}
     final_locs = [fetched_by_id.get(str(loc.get("location_id")), loc) for loc in result.data]
-    unique_uids = list(
-        {str(r["added_by_user_id"]) for r in final_locs if r.get("added_by_user_id")}
-    )
-    email_map = _resolve_user_emails(supabase, unique_uids)
-    out = [_loc_to_response(full, email_map) for full in final_locs]
+    out = [_loc_to_response(full) for full in final_locs]
     logger.info("locations_batch_added", trip_id=str(trip_id), count=len(body))
     return out
 
@@ -309,21 +255,7 @@ async def update_location(
     Trip must exist and be owned by the authenticated user; location must belong
     to the trip; else 404 with descriptive message.
     """
-    # Trip ownership check
-    trip_result = (
-        supabase.table("trips").select("trip_id, user_id").eq("trip_id", str(trip_id)).execute()
-    )
-    if not trip_result.data or len(trip_result.data) == 0:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Trip not found",
-        )
-    trip = trip_result.data[0]
-    if trip.get("user_id") != str(user_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Trip not owned by user",
-        )
+    _ensure_resource_chain(supabase, trip_id, user_id)
 
     # Ensure the location exists under this trip
     loc_result = (
@@ -366,7 +298,7 @@ async def update_location(
         "trip_id", str(trip_id)
     ).execute()
 
-    # Fetch full row (update().execute() returns representation but builder has no .select())
+    # Fetch updated row (without google_raw)
     fetch = (
         supabase.table("locations")
         .select(_LOCATIONS_SELECT)
@@ -391,9 +323,7 @@ async def update_location(
         trip_id=str(trip_id),
         fields=list(update_data.keys()),
     )
-    uid_str = str(loc.get("added_by_user_id")) if loc.get("added_by_user_id") else None
-    email_map = _resolve_user_emails(supabase, [uid_str] if uid_str else [])
-    return _loc_to_response(loc, email_map)
+    return _loc_to_response(loc)
 
 
 @router.delete(
@@ -412,20 +342,7 @@ async def delete_location(
     belong to the trip; else 404 with descriptive message.
     Returns 204 No Content on success.
     """
-    trip_result = (
-        supabase.table("trips").select("trip_id, user_id").eq("trip_id", str(trip_id)).execute()
-    )
-    if not trip_result.data or len(trip_result.data) == 0:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Trip not found",
-        )
-    trip = trip_result.data[0]
-    if trip.get("user_id") != str(user_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Trip not owned by user",
-        )
+    _ensure_resource_chain(supabase, trip_id, user_id)
 
     loc_result = (
         supabase.table("locations")

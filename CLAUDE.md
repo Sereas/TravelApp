@@ -118,3 +118,62 @@ Route metrics are computed lazily: segments are only calculated when the user vi
 **Backend:** pytest with fully mocked Supabase clients in `conftest.py`. No real DB or network calls in unit tests. `mock_supabase_trips_and_days` is the most comprehensive fixture, simulating the full trips/days/options/locations/option_locations table hierarchy including RPC responses.
 
 **Frontend:** Vitest + React Testing Library (jsdom). Test files co-located with components (`*.test.tsx`).
+
+## Database Performance Rules
+
+DB requests and performance are the highest priority concern in this codebase.
+These rules are non-negotiable for every new endpoint or DB interaction.
+
+### Non-Negotiable Rules
+
+1. **No N+1 queries, ever.** A Python `for` loop calling `.execute()` inside its body is forbidden.
+   Use `IN()` for batch reads, `unnest()` RPCs for batch writes, `LEFT JOIN LATERAL` for 1:N aggregation.
+
+2. **Use `_ensure_resource_chain` for all ownership verification.**
+   Never call `_ensure_trip_owned`, `_ensure_day_in_trip`, `_ensure_option_in_day` separately.
+   Use the single helper that resolves the entire chain in one DB round-trip.
+
+3. **Multi-table writes must be atomic.**
+   Any endpoint that writes to more than one table must do so inside a PL/pgSQL RPC (transaction boundary).
+   Sequential Python DELETE+DELETE+INSERT is never acceptable.
+
+4. **Never call `supabase.auth.admin.get_user_by_id()` in any request handler.**
+   User email is stored in the `locations.added_by_email` column at INSERT time from the JWT payload.
+
+5. **Never include `google_raw` in list or batch endpoint responses.**
+   `google_raw` is returned only in the single `POST /trips/{id}/locations` response.
+
+6. **All new read RPCs must be marked `STABLE`.**
+
+7. **No `SELECT *`.** Every query must list explicit columns.
+
+### Per-Endpoint Checklist (Required Before Writing Any New Endpoint)
+
+- [ ] How many DB round-trips in the happy path? Target <= 3. If more, write an RPC.
+- [ ] Does it verify ownership? Use `_ensure_resource_chain`, not individual helpers.
+- [ ] Does it read from multiple tables? Consider a single SQL JOIN function.
+- [ ] Does it write to multiple tables? Wrap in a PL/pgSQL RPC (transaction).
+- [ ] Does it return `google_raw`? Remove it if this is a list or batch endpoint.
+- [ ] Is there a `for` loop with `.execute()` inside it? Replace with batch operation.
+- [ ] Does it look up a user's email? Read `added_by_email` from the DB row.
+
+### Anti-Patterns: Never Repeat
+
+| Anti-Pattern | Correct Alternative |
+|---|---|
+| `for id in ids: supabase.table(...).execute()` | Single `IN()` or `unnest()` RPC |
+| `_ensure_trip_owned(); _ensure_day_in_trip(); _ensure_option_in_day()` | `_ensure_resource_chain(...)` |
+| Sequential multi-table writes without a transaction | Single PL/pgSQL RPC |
+| `supabase.auth.admin.get_user_by_id(uid)` in request handlers | `loc["added_by_email"]` from DB |
+| `google_raw` in list endpoint `SELECT` | Use `_LOCATIONS_SELECT` (not WITH_RAW) |
+| `.select("*")` | Explicit column list |
+
+### Reference: Good Patterns to Copy
+
+- **Batch read:** `batch_add_locations_to_option` — single `IN()` validation, RPC insert
+- **Batch write:** `batch_insert_option_locations` SQL — `unnest()` single INSERT
+- **Batch update:** `reorder_option_locations` SQL — `UPDATE FROM unnest()`
+- **Aggregated read:** `get_itinerary_routes` SQL — `LEFT JOIN LATERAL`, `STABLE`
+- **Ownership baked into read:** `get_itinerary_tree(p_trip_id, p_user_id)` — `EXISTS` inline
+- **Lazy 404:** `itinerary_tree.py::get_itinerary` — skip ownership RT if RPC returns data
+- **Optimistic frontend update:** `handleSaveOptionDetails` in `page.tsx` — patch local state, no refetch

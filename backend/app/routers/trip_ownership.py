@@ -17,3 +17,33 @@ def _ensure_trip_owned(supabase, trip_id: UUID, user_id: UUID) -> None:
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Trip not owned by user",
         )
+
+
+def _ensure_resource_chain(
+    supabase,
+    trip_id: UUID,
+    user_id: UUID,
+    day_id: UUID | None = None,
+    option_id: UUID | None = None,
+) -> None:
+    """
+    Verify the full ownership chain in a single DB round-trip via RPC.
+
+    Replaces sequential calls to _ensure_trip_owned / _ensure_day_in_trip /
+    _ensure_option_in_day.  Raises 404 if any link in the chain is missing
+    or not owned by the caller.
+    """
+    result = supabase.rpc(
+        "verify_resource_chain",
+        {
+            "p_trip_id": str(trip_id),
+            "p_user_id": str(user_id),
+            "p_day_id": str(day_id) if day_id else None,
+            "p_option_id": str(option_id) if option_id else None,
+        },
+    ).execute()
+    if not result.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Resource not found or not owned",
+        )

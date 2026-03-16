@@ -99,7 +99,7 @@ def test_add_location_nonexistent_trip_returns_404(
             headers={"Authorization": f"Bearer {valid_jwt}"},
         )
         assert r.status_code == 404
-        assert r.json().get("detail") == "Trip not found"
+        assert r.json().get("detail") == "Resource not found or not owned"
     finally:
         app.dependency_overrides.clear()
 
@@ -129,7 +129,7 @@ def test_add_location_other_users_trip_returns_404(
             headers={"Authorization": f"Bearer {valid_jwt}"},
         )
         assert r.status_code == 404
-        assert r.json().get("detail") == "Trip not owned by user"
+        assert r.json().get("detail") == "Resource not found or not owned"
         assert len(locations_inserted) == 0
     finally:
         app.dependency_overrides.clear()
@@ -380,7 +380,7 @@ def test_batch_add_nonexistent_trip_returns_404(
             headers={"Authorization": f"Bearer {valid_jwt}"},
         )
         assert r.status_code == 404
-        assert r.json().get("detail") == "Trip not found"
+        assert r.json().get("detail") == "Resource not found or not owned"
         assert len(locations_inserted) == 0
     finally:
         app.dependency_overrides.clear()
@@ -512,7 +512,7 @@ def test_list_locations_nonexistent_trip_returns_404(
             headers={"Authorization": f"Bearer {valid_jwt}"},
         )
         assert r.status_code == 404
-        assert r.json().get("detail") == "Trip not found"
+        assert r.json().get("detail") == "Resource not found or not owned"
     finally:
         app.dependency_overrides.clear()
 
@@ -540,7 +540,7 @@ def test_list_locations_other_users_trip_returns_404(
             headers={"Authorization": f"Bearer {valid_jwt}"},
         )
         assert r.status_code == 404
-        assert r.json().get("detail") == "Trip not owned by user"
+        assert r.json().get("detail") == "Resource not found or not owned"
     finally:
         app.dependency_overrides.clear()
 

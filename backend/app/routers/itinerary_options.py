@@ -14,7 +14,7 @@ from backend.app.models.schemas import (
     ReorderOptionsBody,
     UpdateOptionBody,
 )
-from backend.app.routers.trip_ownership import _ensure_trip_owned
+from backend.app.routers.trip_ownership import _ensure_resource_chain
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger("itinerary_options")
 
@@ -69,8 +69,7 @@ async def list_options(
     Trip must be owned; day must belong to trip; else 404.
     Returns 200 with array ordered by option_index (asc); empty → [].
     """
-    _ensure_trip_owned(supabase, trip_id, user_id)
-    _ensure_day_in_trip(supabase, trip_id, day_id)
+    _ensure_resource_chain(supabase, trip_id, user_id, day_id=day_id)
     result = (
         supabase.table("day_options")
         .select(_DAY_OPTIONS_SELECT)
@@ -99,8 +98,7 @@ async def create_option(
     Create an option for a day. Backend assigns option_index (append: 1, 2, 3, …).
     Requires valid JWT. Trip/day must exist and be owned; else 404.
     """
-    _ensure_trip_owned(supabase, trip_id, user_id)
-    _ensure_day_in_trip(supabase, trip_id, day_id)
+    _ensure_resource_chain(supabase, trip_id, user_id, day_id=day_id)
     max_result = (
         supabase.table("day_options")
         .select("option_index")
@@ -152,8 +150,7 @@ async def reorder_options(
     Reorder options for a day. Body: ordered list of option_ids.
     Backend sets option_index to 1, 2, 3, … by position. 422 if any id not in this day or duplicate.
     """
-    _ensure_trip_owned(supabase, trip_id, user_id)
-    _ensure_day_in_trip(supabase, trip_id, day_id)
+    _ensure_resource_chain(supabase, trip_id, user_id, day_id=day_id)
     if not body.option_ids:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -168,23 +165,25 @@ async def reorder_options(
             )
         seen.add(oid)
     day_id_str = str(day_id)
-    for position, option_id in enumerate(body.option_ids, start=1):
-        opt_id_str = str(option_id) if isinstance(option_id, UUID) else option_id
-        check = (
-            supabase.table("day_options")
-            .select("option_id")
-            .eq("option_id", opt_id_str)
-            .eq("day_id", day_id_str)
-            .execute()
+    opt_id_strs = [str(oid) if isinstance(oid, UUID) else oid for oid in body.option_ids]
+    # Batch-validate all option_ids belong to this day (single IN query)
+    check = (
+        supabase.table("day_options")
+        .select("option_id")
+        .eq("day_id", day_id_str)
+        .in_("option_id", opt_id_strs)
+        .execute()
+    )
+    found_ids = {str(r["option_id"]) for r in (check.data or [])}
+    if any(oid not in found_ids for oid in opt_id_strs):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Option not found in this day",
         )
-        if not check.data or len(check.data) == 0:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Option not found in this day",
-            )
-        supabase.table("day_options").update({"option_index": position}).eq(
-            "option_id", opt_id_str
-        ).eq("day_id", day_id_str).execute()
+    # Batch reorder via single unnest-based RPC (replaces N UPDATE loop)
+    supabase.rpc(
+        "reorder_day_options", {"p_day_id": day_id_str, "p_option_ids": opt_id_strs}
+    ).execute()
     result = (
         supabase.table("day_options")
         .select(_DAY_OPTIONS_SELECT)
@@ -209,8 +208,7 @@ async def get_option(
     supabase=Depends(get_supabase_client),
 ):
     """Get one option by id. Day in trip and owned; option in day; else 404."""
-    _ensure_trip_owned(supabase, trip_id, user_id)
-    _ensure_day_in_trip(supabase, trip_id, day_id)
+    _ensure_resource_chain(supabase, trip_id, user_id, day_id=day_id)
     result = (
         supabase.table("day_options")
         .select(_DAY_OPTIONS_SELECT)
@@ -239,8 +237,7 @@ async def update_option(
     Update an option (e.g. option_index for single-item move). 409 if new option_index conflicts.
     At least one field required.
     """
-    _ensure_trip_owned(supabase, trip_id, user_id)
-    _ensure_day_in_trip(supabase, trip_id, day_id)
+    _ensure_resource_chain(supabase, trip_id, user_id, day_id=day_id)
     result = (
         supabase.table("day_options")
         .select(_DAY_OPTIONS_SELECT)
@@ -314,8 +311,7 @@ async def delete_option(
     supabase=Depends(get_supabase_client),
 ):
     """Delete an option. Cascade deletes option_locations. 404 if not found or not owned."""
-    _ensure_trip_owned(supabase, trip_id, user_id)
-    _ensure_day_in_trip(supabase, trip_id, day_id)
+    _ensure_resource_chain(supabase, trip_id, user_id, day_id=day_id)
     result = (
         supabase.table("day_options")
         .select("option_id")

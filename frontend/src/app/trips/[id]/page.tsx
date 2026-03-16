@@ -213,11 +213,26 @@ export default function TripDetailPage() {
     setItineraryActionError(null);
     setAddDayLoading(true);
     try {
-      await api.itinerary.createDay(tripId);
-      await fetchItinerary();
+      const newDay = await api.itinerary.createDay(tripId);
+      setItinerary((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          days: [
+            ...prev.days,
+            {
+              id: newDay.id,
+              date: newDay.date,
+              sort_order: newDay.sort_order,
+              options: [],
+            },
+          ],
+        };
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to add day";
       setItineraryActionError(message);
+      await fetchItinerary();
     } finally {
       setAddDayLoading(false);
     }
@@ -298,12 +313,37 @@ export default function TripDetailPage() {
     setItineraryActionError(null);
     setCreateOptionLoading(dayId);
     try {
-      await api.itinerary.createOption(tripId, dayId);
-      await fetchItinerary();
+      const newOption = await api.itinerary.createOption(tripId, dayId);
+      setItinerary((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          days: prev.days.map((d) =>
+            d.id === dayId
+              ? {
+                  ...d,
+                  options: [
+                    ...d.options,
+                    {
+                      id: newOption.id,
+                      option_index: newOption.option_index,
+                      starting_city: newOption.starting_city,
+                      ending_city: newOption.ending_city,
+                      created_by: newOption.created_by,
+                      locations: [],
+                      routes: [],
+                    },
+                  ],
+                }
+              : d
+          ),
+        };
+      });
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to create alternative";
       setItineraryActionError(message);
+      await fetchItinerary();
     } finally {
       setCreateOptionLoading(null);
     }

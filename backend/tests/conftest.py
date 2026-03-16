@@ -184,6 +184,9 @@ def mock_supabase_trips_and_locations():
             self._user_id_filter = None
             return self
 
+        def order(self, *args, **kwargs):
+            return self
+
         def eq(self, key, value):
             if key == "trip_id":
                 self._trip_id = str(value) if value is not None else None
@@ -233,6 +236,7 @@ def mock_supabase_trips_and_locations():
             "google_link": r.get("google_link"),
             "note": r.get("note"),
             "added_by_user_id": r.get("added_by_user_id"),
+            "added_by_email": r.get("added_by_email"),
             "city": r.get("city"),
             "working_hours": r.get("working_hours"),
             "requires_booking": r.get("requires_booking"),
@@ -402,6 +406,16 @@ def mock_supabase_trips_and_locations():
                 return _LocationsTable(locations_inserted)
             return None
 
+        def rpc(self, name, params):
+            if name == "verify_resource_chain":
+                tid = str(params.get("p_trip_id", ""))
+                uid = str(params.get("p_user_id", ""))
+                valid = tid in self._trip_owners and self._trip_owners[tid] == uid
+                return type(
+                    "RpcChain", (), {"execute": lambda _: type("R", (), {"data": valid})()}
+                )()
+            return type("RpcChain", (), {"execute": lambda _: type("R", (), {"data": None})()})()
+
     return locations_inserted, MockSupabaseTL2
 
 
@@ -427,6 +441,9 @@ def mock_supabase_trips_and_days():
         def select(self, *args):
             self._trip_id = None
             self._user_id_filter = None
+            return self
+
+        def order(self, *args, **kwargs):
             return self
 
         def eq(self, key, value):
@@ -615,6 +632,8 @@ def mock_supabase_trips_and_days():
             if key == "day_id":
                 # Store as a set of ids to filter against in execute()
                 self._day_id = {str(v) for v in values}
+            elif key == "option_id":
+                self._option_id = {str(v) for v in values}
             return self
 
         def order(self, column, desc=False):
@@ -685,12 +704,14 @@ def mock_supabase_trips_and_days():
                     return str(row.get("day_id")) in self._day_id
                 return str(row.get("day_id")) == self._day_id
 
-            filtered = [
-                o
-                for o in self._store
-                if _matches_day_id(o)
-                and (not self._option_id or str(o.get("option_id")) == self._option_id)
-            ]
+            def _matches_option_id(row):
+                if self._option_id is None:
+                    return True
+                if isinstance(self._option_id, set):
+                    return str(row.get("option_id")) in self._option_id
+                return str(row.get("option_id")) == self._option_id
+
+            filtered = [o for o in self._store if _matches_day_id(o) and _matches_option_id(o)]
             if self._order_col:
                 filtered = sorted(
                     filtered,
@@ -1030,6 +1051,36 @@ def mock_supabase_trips_and_days():
                     self._locations_store,
                 )
                 return type("RpcChain", (), {"execute": lambda _: _RpcResult(data)})()
+            if name == "verify_resource_chain":
+                trip_id_str = str(params.get("p_trip_id", ""))
+                user_id_str = str(params.get("p_user_id", ""))
+                day_id_str = params.get("p_day_id")
+                option_id_str = params.get("p_option_id")
+                # Check trip ownership
+                if (
+                    trip_id_str not in self._trip_owners
+                    or self._trip_owners[trip_id_str] != user_id_str
+                ):
+                    return type("RpcChain", (), {"execute": lambda _: _RpcResult(False)})()
+                # Check day in trip
+                if day_id_str is not None:
+                    day_found = any(
+                        str(d.get("day_id")) == str(day_id_str)
+                        and str(d.get("trip_id")) == trip_id_str
+                        for d in self._days_store
+                    )
+                    if not day_found:
+                        return type("RpcChain", (), {"execute": lambda _: _RpcResult(False)})()
+                # Check option in day
+                if option_id_str is not None and day_id_str is not None:
+                    opt_found = any(
+                        str(o.get("option_id")) == str(option_id_str)
+                        and str(o.get("day_id")) == str(day_id_str)
+                        for o in self._options_store
+                    )
+                    if not opt_found:
+                        return type("RpcChain", (), {"execute": lambda _: _RpcResult(False)})()
+                return type("RpcChain", (), {"execute": lambda _: _RpcResult(True)})()
             if name == "reorder_option_locations":
                 oid = str(params.get("p_option_id", ""))
                 lids = [str(x) for x in (params.get("p_location_ids") or [])]
@@ -1037,6 +1088,22 @@ def mock_supabase_trips_and_days():
                     for r in self._option_locations_store:
                         if str(r.get("option_id")) == oid and str(r.get("location_id")) == lid:
                             r["sort_order"] = pos
+                return type("RpcChain", (), {"execute": lambda _: _RpcResult(None)})()
+            if name == "reorder_day_options":
+                did = str(params.get("p_day_id", ""))
+                oids = [str(x) for x in (params.get("p_option_ids") or [])]
+                for pos, oid in enumerate(oids, start=1):
+                    for o in self._options_store:
+                        if str(o.get("option_id")) == oid and str(o.get("day_id")) == did:
+                            o["option_index"] = pos
+                return type("RpcChain", (), {"execute": lambda _: _RpcResult(None)})()
+            if name == "reorder_trip_days":
+                tid = str(params.get("p_trip_id", ""))
+                dids = [str(x) for x in (params.get("p_day_ids") or [])]
+                for pos, did in enumerate(dids):
+                    for d in self._days_store:
+                        if str(d.get("day_id")) == did and str(d.get("trip_id")) == tid:
+                            d["sort_order"] = pos
                 return type("RpcChain", (), {"execute": lambda _: _RpcResult(None)})()
             if name == "batch_insert_option_locations":
                 oid = str(params.get("p_option_id", ""))
@@ -1054,6 +1121,21 @@ def mock_supabase_trips_and_days():
                     self._option_locations_store.append(row)
                     inserted.append(row)
                 return type("RpcChain", (), {"execute": lambda _: _RpcResult(inserted)})()
+            if name == "remove_location_from_option":
+                oid = str(params.get("p_option_id", ""))
+                lid = str(params.get("p_location_id", ""))
+                exists = any(
+                    str(r.get("option_id")) == oid and str(r.get("location_id")) == lid
+                    for r in self._option_locations_store
+                )
+                if not exists:
+                    raise Exception("OPTION_LOCATION_NOT_FOUND")
+                self._option_locations_store[:] = [
+                    r
+                    for r in self._option_locations_store
+                    if not (str(r.get("option_id")) == oid and str(r.get("location_id")) == lid)
+                ]
+                return type("RpcChain", (), {"execute": lambda _: _RpcResult(None)})()
             return type("RpcChain", (), {"execute": lambda _: _RpcResult([])})()
 
     return trip_days_store, trips_store, MockSupabaseTripsAndDays

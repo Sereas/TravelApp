@@ -13,9 +13,7 @@ from backend.app.models.schemas import (
     RouteResponse,
     RouteWithSegmentsResponse,
 )
-from backend.app.routers.itinerary_option_locations import _ensure_option_in_day
-from backend.app.routers.itinerary_options import _ensure_day_in_trip
-from backend.app.routers.trip_ownership import _ensure_trip_owned
+from backend.app.routers.trip_ownership import _ensure_resource_chain
 from backend.app.services.route_calculation import (
     get_route_with_fresh_segments,
 )
@@ -68,9 +66,7 @@ async def list_option_routes(
     Requires valid JWT; trip must be owned; day and option must belong to trip; else 404.
     Returns 200 with array ordered by sort_order (asc); empty → [].
     """
-    _ensure_trip_owned(supabase, trip_id, user_id)
-    _ensure_day_in_trip(supabase, trip_id, day_id)
-    _ensure_option_in_day(supabase, day_id, option_id)
+    _ensure_resource_chain(supabase, trip_id, user_id, day_id=day_id, option_id=option_id)
     result = supabase.rpc(
         "get_option_routes",
         {"p_option_id": str(option_id)},
@@ -104,9 +100,7 @@ async def create_route(
     Requires valid JWT. Trip/day/option must exist and be owned; else 404.
     Uses create_route_with_stops RPC.
     """
-    _ensure_trip_owned(supabase, trip_id, user_id)
-    _ensure_day_in_trip(supabase, trip_id, day_id)
-    _ensure_option_in_day(supabase, day_id, option_id)
+    _ensure_resource_chain(supabase, trip_id, user_id, day_id=day_id, option_id=option_id)
     result = supabase.rpc(
         "create_route_with_stops",
         {
@@ -159,9 +153,7 @@ async def get_route(
     """
     Get one route by id. If include_segments=true, returns segment data and geometry for MapLibre.
     """
-    _ensure_trip_owned(supabase, trip_id, user_id)
-    _ensure_day_in_trip(supabase, trip_id, day_id)
-    _ensure_option_in_day(supabase, day_id, option_id)
+    _ensure_resource_chain(supabase, trip_id, user_id, day_id=day_id, option_id=option_id)
     existing = (
         supabase.table("option_routes")
         .select(
@@ -229,9 +221,7 @@ async def recalculate_route_endpoint(
     Refresh route segments (retry-on-view). Recomputes only segments eligible for retry
     unless force_refresh=true. No automated retries; only when user views or calls this.
     """
-    _ensure_trip_owned(supabase, trip_id, user_id)
-    _ensure_day_in_trip(supabase, trip_id, day_id)
-    _ensure_option_in_day(supabase, day_id, option_id)
+    _ensure_resource_chain(supabase, trip_id, user_id, day_id=day_id, option_id=option_id)
     existing = (
         supabase.table("option_routes")
         .select("route_id, transport_mode")
@@ -274,9 +264,7 @@ async def delete_route(
     Delete a route (cascade deletes stops).
     Trip/day/option must exist and be owned; route must exist; else 404.
     """
-    _ensure_trip_owned(supabase, trip_id, user_id)
-    _ensure_day_in_trip(supabase, trip_id, day_id)
-    _ensure_option_in_day(supabase, day_id, option_id)
+    _ensure_resource_chain(supabase, trip_id, user_id, day_id=day_id, option_id=option_id)
     existing = (
         supabase.table("option_routes")
         .select("route_id")

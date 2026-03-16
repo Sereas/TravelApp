@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from backend.app.db.supabase import get_supabase_client
 from backend.app.dependencies import get_current_user_id
 from backend.app.models.schemas import CreateDayBody, DayResponse, ReorderDaysBody, UpdateDayBody
-from backend.app.routers.trip_ownership import _ensure_trip_owned
+from backend.app.routers.trip_ownership import _ensure_resource_chain
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger("itinerary_days")
 
@@ -59,7 +59,7 @@ async def list_days(
     Trip must exist and be owned by the authenticated user; else 404.
     Returns 200 with array of days ordered by sort_order (asc); empty → [].
     """
-    _ensure_trip_owned(supabase, trip_id, user_id)
+    _ensure_resource_chain(supabase, trip_id, user_id)
     result = (
         supabase.table("trip_days")
         .select(_TRIP_DAYS_SELECT)
@@ -87,7 +87,7 @@ async def create_day(
     Create an itinerary day for a trip. Backend assigns sort_order (append).
     Requires valid JWT. Trip must exist and be owned by the user; else 404.
     """
-    _ensure_trip_owned(supabase, trip_id, user_id)
+    _ensure_resource_chain(supabase, trip_id, user_id)
     # Append: max(sort_order) + 1 for this trip
     max_result = (
         supabase.table("trip_days")
@@ -140,7 +140,7 @@ async def reorder_days(
     Body: ordered list of day_ids. Backend sets sort_order to 0, 1, 2, …
     by position. 422 for empty or invalid list; 404 if any id not in trip.
     """
-    _ensure_trip_owned(supabase, trip_id, user_id)
+    _ensure_resource_chain(supabase, trip_id, user_id)
     if not body.day_ids:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -158,11 +158,8 @@ async def reorder_days(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="One or more day_ids do not belong to this trip",
         )
-    # Apply new order
-    for position, day_id in enumerate(body_ids):
-        supabase.table("trip_days").update({"sort_order": position}).eq("day_id", day_id).eq(
-            "trip_id", str(trip_id)
-        ).execute()
+    # Apply new order via single unnest-based RPC (replaces N UPDATE loop)
+    supabase.rpc("reorder_trip_days", {"p_trip_id": str(trip_id), "p_day_ids": body_ids}).execute()
     result = (
         supabase.table("trip_days")
         .select(_TRIP_DAYS_SELECT)
@@ -185,7 +182,7 @@ async def get_day(
     """
     Get one itinerary day by id. Trip must exist and be owned; day must belong to trip; else 404.
     """
-    _ensure_trip_owned(supabase, trip_id, user_id)
+    _ensure_resource_chain(supabase, trip_id, user_id)
     result = (
         supabase.table("trip_days")
         .select(_TRIP_DAYS_SELECT)
@@ -210,7 +207,7 @@ async def update_day(
     Update an itinerary day. Trip must exist and be owned; day must belong to trip; else 404.
     At least one field required in body.
     """
-    _ensure_trip_owned(supabase, trip_id, user_id)
+    _ensure_resource_chain(supabase, trip_id, user_id)
     result = (
         supabase.table("trip_days")
         .select(_TRIP_DAYS_SELECT)
@@ -265,7 +262,7 @@ async def delete_day(
     Delete an itinerary day. Trip must exist and be owned; day must belong to trip; else 404.
     Returns 204 No Content. Cascade deletes day_options and option_locations (DB).
     """
-    _ensure_trip_owned(supabase, trip_id, user_id)
+    _ensure_resource_chain(supabase, trip_id, user_id)
     result = (
         supabase.table("trip_days")
         .select("day_id")
@@ -298,7 +295,7 @@ async def generate_days(
     - 400 when dates are missing or invalid.
     - 409 when trip already has days.
     """
-    _ensure_trip_owned(supabase, trip_id, user_id)
+    _ensure_resource_chain(supabase, trip_id, user_id)
     trip_result = (
         supabase.table("trips")
         .select("trip_id, start_date, end_date")

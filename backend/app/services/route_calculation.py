@@ -600,20 +600,20 @@ def get_route_with_fresh_segments(
                 )
             )
 
-    # Persist route_segments: replace all for this route so order and links are correct
+    # Persist route_segments: delete all then batch-insert in a single round-trip
     supabase.table("route_segments").delete().eq("route_id", route_id).execute()
-    for seg_order, cache_id in segment_order_to_cache_id.items():
-        from_loc_id = str(ordered[seg_order]["location_id"])
-        to_loc_id = str(ordered[seg_order + 1]["location_id"])
-        supabase.table("route_segments").insert(
+    if segment_order_to_cache_id:
+        segment_rows = [
             {
                 "route_id": route_id,
                 "segment_order": seg_order,
-                "from_location_id": from_loc_id,
-                "to_location_id": to_loc_id,
+                "from_location_id": str(ordered[seg_order]["location_id"]),
+                "to_location_id": str(ordered[seg_order + 1]["location_id"]),
                 "segment_cache_id": cache_id,
             }
-        ).execute()
+            for seg_order, cache_id in segment_order_to_cache_id.items()
+        ]
+        supabase.table("route_segments").insert(segment_rows).execute()
 
     supabase.table("option_routes").update(
         {

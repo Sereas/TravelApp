@@ -73,6 +73,7 @@ async def list_trips(
         supabase.table("trips")
         .select("trip_id, trip_name, start_date, end_date")
         .eq("user_id", str(user_id))
+        .order("created_at", desc=True)
         .execute()
     )
     items = result.data if result.data else []
