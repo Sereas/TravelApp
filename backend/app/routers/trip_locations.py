@@ -192,7 +192,9 @@ async def list_locations(
         supabase.table("locations").select(_LOCATIONS_SELECT).eq("trip_id", str(trip_id)).execute()
     )
     items = result.data if result.data else []
-    unique_uids = list({str(loc["added_by_user_id"]) for loc in items if loc.get("added_by_user_id")})
+    unique_uids = list(
+        {str(loc["added_by_user_id"]) for loc in items if loc.get("added_by_user_id")}
+    )
     email_map = _resolve_user_emails(supabase, unique_uids)
     logger.info("locations_listed", trip_id=str(trip_id), count=len(items))
     return [_loc_to_response(loc, email_map) for loc in items]
@@ -282,7 +284,9 @@ async def batch_add_locations(
     else:
         fetched_by_id = {}
     final_locs = [fetched_by_id.get(str(loc.get("location_id")), loc) for loc in result.data]
-    unique_uids = list({str(l["added_by_user_id"]) for l in final_locs if l.get("added_by_user_id")})
+    unique_uids = list(
+        {str(r["added_by_user_id"]) for r in final_locs if r.get("added_by_user_id")}
+    )
     email_map = _resolve_user_emails(supabase, unique_uids)
     out = [_loc_to_response(full, email_map) for full in final_locs]
     logger.info("locations_batch_added", trip_id=str(trip_id), count=len(body))
