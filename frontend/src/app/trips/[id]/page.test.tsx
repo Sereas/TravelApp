@@ -900,7 +900,7 @@ describe("TripDetailPage", () => {
     await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
 
     expect(await screen.findByText("Mon, Jun 1")).toBeInTheDocument();
-    expect(screen.getByText(/no locations yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/no locations planned yet/i)).toBeInTheDocument();
   });
 
   // --- Slice 14: Add day and generate days ---
@@ -1290,7 +1290,7 @@ describe("TripDetailPage", () => {
 
   // --- Alternative plan management ---
 
-  it("shows '+ Alternative' button in card header", async () => {
+  it("shows plan dropdown trigger in card header", async () => {
     mockGetTrip.mockResolvedValue(sampleTrip);
     mockListLocations.mockResolvedValue([]);
     mockGetItinerary.mockResolvedValue({
@@ -1318,11 +1318,11 @@ describe("TripDetailPage", () => {
     await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
 
     expect(
-      await screen.findByRole("button", { name: /\balt\b/i })
+      await screen.findByRole("button", { name: /switch day plan/i })
     ).toBeInTheDocument();
   });
 
-  it("calls createOption and updates itinerary optimistically when '+ Alternative' is clicked", async () => {
+  it("calls createOption and updates itinerary optimistically when 'Add plan' is used", async () => {
     mockGetTrip.mockResolvedValue(sampleTrip);
     mockListLocations.mockResolvedValue([]);
     mockGetItinerary.mockResolvedValueOnce({
@@ -1357,9 +1357,19 @@ describe("TripDetailPage", () => {
 
     await screen.findByText("Paris Summer");
     await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
+
+    // Open the plan dropdown
     await userEvent.click(
-      await screen.findByRole("button", { name: /\balt\b/i })
+      await screen.findByRole("button", { name: /switch day plan/i })
     );
+    // Click "Add plan" to reveal the name input
+    await userEvent.click(screen.getByRole("button", { name: /add plan/i }));
+    // Type a name and submit
+    await userEvent.type(
+      screen.getByPlaceholderText(/plan name/i),
+      "Beach route"
+    );
+    await userEvent.click(screen.getByRole("button", { name: /^add$/i }));
 
     await waitFor(() => {
       expect(mockCreateOption).toHaveBeenCalledWith("trip-1", "day-1");
@@ -1401,7 +1411,7 @@ describe("TripDetailPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows delete button when multiple options exist and calls deleteOption on confirm", async () => {
+  it("shows delete button in dropdown for non-main plans and calls deleteOption on confirm", async () => {
     mockGetTrip.mockResolvedValue(sampleTrip);
     mockListLocations.mockResolvedValue([]);
     mockGetItinerary
@@ -1440,7 +1450,7 @@ describe("TripDetailPage", () => {
             sort_order: 0,
             options: [
               {
-                id: "opt-2",
+                id: "opt-1",
                 option_index: 1,
                 starting_city: null,
                 ending_city: null,
@@ -1458,9 +1468,13 @@ describe("TripDetailPage", () => {
     await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
     await screen.findByText("Mon, Jun 1");
 
-    const deleteBtn = screen.getByRole("button", {
-      name: /delete this alternative/i,
-    });
+    // Open the plan dropdown
+    await userEvent.click(
+      screen.getByRole("button", { name: /switch day plan/i })
+    );
+
+    // Delete button appears for non-main plan (opt-2, option_index: 2)
+    const deleteBtn = screen.getByRole("button", { name: /delete plan/i });
     expect(deleteBtn).toBeInTheDocument();
 
     await userEvent.click(deleteBtn);
@@ -1470,7 +1484,7 @@ describe("TripDetailPage", () => {
     await userEvent.click(confirmBtns[confirmBtns.length - 1]);
 
     await waitFor(() => {
-      expect(mockDeleteOption).toHaveBeenCalledWith("trip-1", "day-1", "opt-1");
+      expect(mockDeleteOption).toHaveBeenCalledWith("trip-1", "day-1", "opt-2");
     });
   });
 
