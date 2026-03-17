@@ -353,10 +353,36 @@ export const api = {
         body: JSON.stringify(body),
       }),
 
-    /** Generate days from trip start_date/end_date. 409 if trip already has days. */
+    /** Move the selected option to the day that owns newDate (creating one if needed). */
+    reassignDayDate: (
+      tripId: string,
+      dayId: string,
+      newDate: string,
+      optionId: string
+    ) =>
+      request<void>(`/api/v1/trips/${tripId}/days/${dayId}/reassign-date`, {
+        method: "POST",
+        body: JSON.stringify({ new_date: newDate, option_id: optionId }),
+      }),
+
+    /** Generate days from trip start_date/end_date. Idempotent: only adds missing dates. */
     generateDays: (tripId: string) =>
       request<DayResponse[]>(`/api/v1/trips/${tripId}/days/generate`, {
         method: "POST",
+      }),
+
+    /** Reconcile days when trip dates change (shift, clear dates, or delete). */
+    reconcileDays: (
+      tripId: string,
+      body: {
+        action: "shift" | "clear_dates" | "delete";
+        offset_days?: number;
+        day_ids?: string[];
+      }
+    ) =>
+      request<void>(`/api/v1/trips/${tripId}/days/reconcile`, {
+        method: "POST",
+        body: JSON.stringify(body),
       }),
 
     /** Create a new option for a day. Backend assigns option_index. */

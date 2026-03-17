@@ -282,6 +282,13 @@ export interface ItineraryDayCardProps {
   currentOption: ItineraryOption | undefined;
   tripLocations: Location[];
   createOptionLoading: boolean;
+  tripStartDate: string | null;
+  tripEndDate: string | null;
+  onUpdateDayDate: (
+    dayId: string,
+    date: string | null,
+    optionId: string | undefined
+  ) => void;
   onSelectOption: (dayId: string, optionId: string) => void;
   onCreateAlternative: (dayId: string) => void;
   onDeleteOption: (dayId: string, optionId: string) => void;
@@ -338,6 +345,9 @@ export function ItineraryDayCard({
   currentOption,
   tripLocations,
   createOptionLoading,
+  tripStartDate,
+  tripEndDate,
+  onUpdateDayDate,
   onSelectOption,
   onCreateAlternative,
   onDeleteOption,
@@ -355,6 +365,7 @@ export function ItineraryDayCard({
   const dayLabel = day.date
     ? formatDate(day.date)
     : `Day ${day.sort_order + 1}`;
+  const [editingDate, setEditingDate] = useState(false);
   const hasMultiOpts = day.options.length > 1;
   const canDelete = day.options.length > 1;
   const alreadyAdded = useMemo(
@@ -935,7 +946,39 @@ export function ItineraryDayCard({
       <Card>
         <CardHeader className="pb-2">
           <div className="flex items-center gap-3">
-            <h3 className="text-base font-semibold">{dayLabel}</h3>
+            <div className="flex items-center gap-1.5">
+              <h3 className="text-base font-semibold">{dayLabel}</h3>
+              {editingDate ? (
+                <input
+                  type="date"
+                  autoFocus
+                  defaultValue={day.date ?? ""}
+                  min={tripStartDate ?? undefined}
+                  max={tripEndDate ?? undefined}
+                  onChange={(e) => {
+                    const v = e.target.value || null;
+                    if (v && v !== (day.date ?? null)) {
+                      setEditingDate(false);
+                      onUpdateDayDate(day.id, v, currentOption?.id);
+                    }
+                  }}
+                  onBlur={() => setEditingDate(false)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") setEditingDate(false);
+                  }}
+                  className="h-7 rounded border border-input bg-background px-1.5 text-xs"
+                />
+              ) : (
+                <button
+                  onClick={() => setEditingDate(true)}
+                  className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  aria-label="Edit day date"
+                  title={day.date ? "Change date" : "Assign a date"}
+                >
+                  <Pencil size={12} />
+                </button>
+              )}
+            </div>
             {currentOption && (
               <div className="flex items-center gap-1 text-xs text-muted-foreground">
                 <AutosaveInput
@@ -1024,9 +1067,10 @@ export function ItineraryDayCard({
                 className="h-7 gap-1 px-2 text-xs text-muted-foreground"
                 onClick={() => onCreateAlternative(day.id)}
                 disabled={createOptionLoading}
+                title="Add an alternative plan for this day"
               >
                 <Plus size={12} />
-                Alt
+                Alt plan
               </Button>
             </div>
           </div>

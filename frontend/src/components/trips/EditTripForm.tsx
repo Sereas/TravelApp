@@ -9,10 +9,22 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { ErrorBanner } from "@/components/feedback/ErrorBanner";
 import { api, type Trip } from "@/lib/api";
 
+export interface TripUpdatePayload {
+  name: string;
+  start_date: string | null;
+  end_date: string | null;
+}
+
 interface EditTripFormProps {
   trip: Trip;
   onUpdated: (trip: Trip) => void;
   onCancel: () => void;
+  /**
+   * Called before saving when dates change. If provided, the form
+   * delegates saving to the parent so reconciliation can happen first.
+   * The callback should call api.trips.update itself and return the result.
+   */
+  onBeforeSave?: (payload: TripUpdatePayload) => Promise<Trip>;
 }
 
 function toDate(s: string | null | undefined): Date | undefined {
@@ -23,7 +35,12 @@ function toISODate(d: Date | undefined): string | null {
   return d ? format(d, "yyyy-MM-dd") : null;
 }
 
-export function EditTripForm({ trip, onUpdated, onCancel }: EditTripFormProps) {
+export function EditTripForm({
+  trip,
+  onUpdated,
+  onCancel,
+  onBeforeSave,
+}: EditTripFormProps) {
   const [name, setName] = useState(trip.name);
   const [startDate, setStartDate] = useState<Date | undefined>(
     toDate(trip.start_date)
@@ -39,15 +56,29 @@ export function EditTripForm({ trip, onUpdated, onCancel }: EditTripFormProps) {
     setError(null);
     setSaving(true);
 
+    const payload: TripUpdatePayload = {
+      name,
+      start_date: toISODate(startDate),
+      end_date: toISODate(endDate),
+    };
+
     try {
-      const updated = await api.trips.update(trip.id, {
-        name,
-        start_date: toISODate(startDate),
-        end_date: toISODate(endDate),
-      });
+      const datesChanged =
+        payload.start_date !== (trip.start_date ?? null) ||
+        payload.end_date !== (trip.end_date ?? null);
+
+      let updated: Trip;
+      if (datesChanged && onBeforeSave) {
+        updated = await onBeforeSave(payload);
+      } else {
+        updated = await api.trips.update(trip.id, payload);
+      }
       onUpdated(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update trip");
+      const msg = err instanceof Error ? err.message : "Failed to update trip";
+      if (msg !== "Cancelled") {
+        setError(msg);
+      }
       setSaving(false);
     }
   }

@@ -2,6 +2,7 @@
 
 from datetime import date as date_type
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -200,6 +201,35 @@ class DayResponse(BaseModel):
     date: date_type | None = None
     sort_order: int = Field(..., ge=0)
     created_at: datetime | None = None
+
+
+class ReassignDayDateBody(BaseModel):
+    """Request body for POST reassign-day-date."""
+
+    new_date: date_type = Field(..., description="The new date to assign to this day")
+    option_id: str = Field(..., description="The currently selected option to move")
+
+
+class ReconcileDaysBody(BaseModel):
+    """Request body for POST reconcile-days when trip dates change."""
+
+    action: Literal["shift", "clear_dates", "delete"] = Field(
+        ..., description="Action to take on affected days"
+    )
+    offset_days: int | None = Field(
+        None, description="Number of days to shift (required for 'shift' action)"
+    )
+    day_ids: list[str] | None = Field(
+        None, description="Day IDs to affect (required for 'clear_dates' and 'delete')"
+    )
+
+    @model_validator(mode="after")
+    def validate_action_params(self):
+        if self.action == "shift" and self.offset_days is None:
+            raise ValueError("offset_days is required for 'shift' action")
+        if self.action in ("clear_dates", "delete") and not self.day_ids:
+            raise ValueError("day_ids is required for 'clear_dates' and 'delete' actions")
+        return self
 
 
 class ReorderDaysBody(BaseModel):

@@ -504,6 +504,7 @@ def mock_supabase_trips_and_days():
             self._store = store
             self._trip_id = None
             self._day_id = None
+            self._neq_filters: list[tuple[str, str]] = []
             self._order_col = None
             self._order_desc = False
             self._limit_n = None
@@ -514,6 +515,7 @@ def mock_supabase_trips_and_days():
         def select(self, *args):
             self._trip_id = None
             self._day_id = None
+            self._neq_filters = []
             self._order_col = None
             self._order_desc = False
             self._limit_n = None
@@ -528,6 +530,15 @@ def mock_supabase_trips_and_days():
                 self._trip_id = val
             elif key == "day_id":
                 self._day_id = val
+            elif key == "date":
+                # Store date filter for execute
+                if not hasattr(self, "_date_eq"):
+                    self._date_eq = None
+                self._date_eq = val
+            return self
+
+        def neq(self, key, value):
+            self._neq_filters.append((key, str(value) if value is not None else None))
             return self
 
         def order(self, column, desc=False):
@@ -605,6 +616,12 @@ def mock_supabase_trips_and_days():
                 for d in self._store
                 if (not self._trip_id or str(d.get("trip_id")) == self._trip_id)
                 and (not self._day_id or str(d.get("day_id")) == self._day_id)
+                and (
+                    not hasattr(self, "_date_eq")
+                    or self._date_eq is None
+                    or str(d.get("date", "")) == self._date_eq
+                )
+                and all(str(d.get(k, "")) != v for k, v in self._neq_filters)
             ]
             if self._order_col:
                 filtered = sorted(
@@ -1196,6 +1213,163 @@ def mock_supabase_trips_and_days():
                     "sort_order": route.get("sort_order", 0),
                 }
                 return type("RpcChain", (), {"execute": lambda _: _RpcResult([row])})()
+            if name == "move_option_to_day":
+                opt_id = str(params.get("p_option_id", ""))
+                src_id = str(params.get("p_source_day_id", ""))
+                tgt_id = str(params.get("p_target_day_id", ""))
+                moved = next(
+                    (o for o in self._options_store if str(o.get("option_id")) == opt_id),
+                    None,
+                )
+                if moved:
+                    # Bump target options
+                    for o in self._options_store:
+                        if str(o.get("day_id")) == tgt_id:
+                            o["option_index"] += 1
+                    # Move option to target
+                    moved["day_id"] = tgt_id
+                    moved["option_index"] = 1
+                    # Renumber remaining source options
+                    remaining = sorted(
+                        [
+                            o
+                            for o in self._options_store
+                            if str(o.get("day_id")) == src_id and str(o.get("option_id")) != opt_id
+                        ],
+                        key=lambda x: x.get("option_index", 0),
+                    )
+                    if remaining:
+                        for i, o in enumerate(remaining, start=1):
+                            o["option_index"] = i
+                    else:
+                        from uuid import uuid4 as _uuid4
+
+                        self._options_store.append(
+                            {
+                                "option_id": str(_uuid4()),
+                                "day_id": src_id,
+                                "option_index": 1,
+                                "starting_city": None,
+                                "ending_city": None,
+                                "created_by": None,
+                                "created_at": "2025-01-01T12:00:00Z",
+                            }
+                        )
+                return type("RpcChain", (), {"execute": lambda _: _RpcResult(None)})()
+            if name == "reorder_days_by_date":
+                tid = str(params.get("p_trip_id", ""))
+                trip_days = [d for d in self._days_store if str(d.get("trip_id")) == tid]
+                trip_days.sort(
+                    key=lambda x: (
+                        x.get("date") is None,
+                        x.get("date") or "",
+                        x.get("sort_order", 0),
+                    )
+                )
+                for i, d in enumerate(trip_days):
+                    d["sort_order"] = i
+                return type("RpcChain", (), {"execute": lambda _: _RpcResult(None)})()
+            if name == "shift_day_dates":
+                tid = str(params.get("p_trip_id", ""))
+                offset = int(params.get("p_offset_days", 0))
+                from datetime import date as _date
+                from datetime import timedelta as _td
+
+                for d in self._days_store:
+                    if str(d.get("trip_id")) == tid and d.get("date"):
+                        old = _date.fromisoformat(d["date"])
+                        d["date"] = (old + _td(days=offset)).isoformat()
+                # reorder
+                trip_days = [d for d in self._days_store if str(d.get("trip_id")) == tid]
+                trip_days.sort(
+                    key=lambda x: (
+                        x.get("date") is None,
+                        x.get("date") or "",
+                        x.get("sort_order", 0),
+                    )
+                )
+                for i, d in enumerate(trip_days):
+                    d["sort_order"] = i
+                return type("RpcChain", (), {"execute": lambda _: _RpcResult(None)})()
+            if name == "reconcile_clear_dates":
+                tid = str(params.get("p_trip_id", ""))
+                day_ids = {str(x) for x in (params.get("p_day_ids") or [])}
+                # Delete empty days (no option_locations)
+                to_delete = set()
+                for d in self._days_store:
+                    if str(d.get("trip_id")) == tid and str(d.get("day_id")) in day_ids:
+                        did = str(d["day_id"])
+                        has_content = any(
+                            str(ol.get("option_id"))
+                            in {
+                                str(o.get("option_id"))
+                                for o in self._options_store
+                                if str(o.get("day_id")) == did
+                            }
+                            for ol in self._option_locations_store
+                        )
+                        if not has_content:
+                            to_delete.add(did)
+                self._days_store[:] = [
+                    d for d in self._days_store if str(d.get("day_id")) not in to_delete
+                ]
+                # Clear dates on remaining days from p_day_ids
+                for d in self._days_store:
+                    if str(d.get("trip_id")) == tid and str(d.get("day_id")) in day_ids:
+                        d["date"] = None
+                # reorder
+                trip_days = [d for d in self._days_store if str(d.get("trip_id")) == tid]
+                trip_days.sort(
+                    key=lambda x: (
+                        x.get("date") is None,
+                        x.get("date") or "",
+                        x.get("sort_order", 0),
+                    )
+                )
+                for i, d in enumerate(trip_days):
+                    d["sort_order"] = i
+                return type("RpcChain", (), {"execute": lambda _: _RpcResult(None)})()
+            if name == "delete_empty_dateless_days":
+                tid = str(params.get("p_trip_id", ""))
+                to_delete = set()
+                for d in self._days_store:
+                    if str(d.get("trip_id")) == tid and d.get("date") is None:
+                        did = str(d["day_id"])
+                        has_content = any(
+                            str(ol.get("option_id"))
+                            in {
+                                str(o.get("option_id"))
+                                for o in self._options_store
+                                if str(o.get("day_id")) == did
+                            }
+                            for ol in self._option_locations_store
+                        )
+                        if not has_content:
+                            to_delete.add(did)
+                self._days_store[:] = [
+                    d for d in self._days_store if str(d.get("day_id")) not in to_delete
+                ]
+                return type("RpcChain", (), {"execute": lambda _: _RpcResult(None)})()
+            if name == "delete_days_batch":
+                tid = str(params.get("p_trip_id", ""))
+                day_ids = {str(x) for x in (params.get("p_day_ids") or [])}
+                self._days_store[:] = [
+                    d
+                    for d in self._days_store
+                    if not (str(d.get("trip_id")) == tid and str(d.get("day_id")) in day_ids)
+                ]
+                # reorder
+                trip_days = [d for d in self._days_store if str(d.get("trip_id")) == tid]
+                trip_days.sort(
+                    key=lambda x: (
+                        x.get("date") is None,
+                        x.get("date") or "",
+                        x.get("sort_order", 0),
+                    )
+                )
+                for i, d in enumerate(trip_days):
+                    d["sort_order"] = i
+                return type("RpcChain", (), {"execute": lambda _: _RpcResult(None)})()
             return type("RpcChain", (), {"execute": lambda _: _RpcResult([])})()
 
     return trip_days_store, trips_store, MockSupabaseTripsAndDays

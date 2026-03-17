@@ -721,9 +721,7 @@ describe("TripDetailPage", () => {
     await screen.findByText("Paris Summer");
     await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
 
-    expect(
-      await screen.findByText(/no days yet. add a day or generate days/i)
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/no days yet/i)).toBeInTheDocument();
   });
 
   it("renders days and locations in itinerary tab", async () => {
@@ -907,7 +905,7 @@ describe("TripDetailPage", () => {
 
   // --- Slice 14: Add day and generate days ---
 
-  it("shows Add day and Generate days from dates when itinerary is empty and trip has dates", async () => {
+  it("shows only Generate days from dates when itinerary is empty and trip has dates", async () => {
     mockGetTrip.mockResolvedValue(sampleTrip);
     mockListLocations.mockResolvedValue([]);
     mockGetItinerary.mockResolvedValue({ days: [] });
@@ -917,11 +915,11 @@ describe("TripDetailPage", () => {
     await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
 
     expect(
-      await screen.findByRole("button", { name: /add day/i })
+      await screen.findByRole("button", { name: /generate days from dates/i })
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /generate days from dates/i })
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: /add day/i })
+    ).not.toBeInTheDocument();
   });
 
   it("does not show Generate days from dates when trip has no dates", async () => {
@@ -945,10 +943,32 @@ describe("TripDetailPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("calls createDay and updates itinerary optimistically when Add day is clicked", async () => {
-    mockGetTrip.mockResolvedValue(sampleTrip);
+  it("calls createDay and refetches itinerary when Add day is clicked", async () => {
+    mockGetTrip.mockResolvedValue({
+      ...sampleTrip,
+      start_date: null,
+      end_date: null,
+    });
     mockListLocations.mockResolvedValue([]);
-    mockGetItinerary.mockResolvedValueOnce({ days: [] });
+    mockGetItinerary.mockResolvedValueOnce({ days: [] }).mockResolvedValueOnce({
+      days: [
+        {
+          id: "day-new",
+          date: null,
+          sort_order: 0,
+          options: [
+            {
+              id: "opt-new",
+              option_index: 1,
+              starting_city: null,
+              ending_city: null,
+              created_by: null,
+              locations: [],
+            },
+          ],
+        },
+      ],
+    });
     mockCreateDay.mockResolvedValue({
       id: "day-new",
       trip_id: "trip-1",
@@ -966,8 +986,10 @@ describe("TripDetailPage", () => {
     await waitFor(() => {
       expect(mockCreateDay).toHaveBeenCalledWith("trip-1");
     });
-    // Optimistic update — no second fetchItinerary call on success.
-    expect(mockGetItinerary).toHaveBeenCalledTimes(1);
+    // Refetches itinerary to get full day with main option
+    await waitFor(() => {
+      expect(mockGetItinerary).toHaveBeenCalledTimes(2);
+    });
     expect(await screen.findByText("Day 1")).toBeInTheDocument();
   });
 
@@ -1063,7 +1085,11 @@ describe("TripDetailPage", () => {
   });
 
   it("shows error message when add day fails", async () => {
-    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockGetTrip.mockResolvedValue({
+      ...sampleTrip,
+      start_date: null,
+      end_date: null,
+    });
     mockListLocations.mockResolvedValue([]);
     mockGetItinerary.mockResolvedValue({ days: [] });
     mockCreateDay.mockRejectedValue(new Error("Network error"));
@@ -1076,7 +1102,7 @@ describe("TripDetailPage", () => {
     expect(await screen.findByText("Network error")).toBeInTheDocument();
   });
 
-  it("shows Add day button when itinerary already has days", async () => {
+  it("shows Generate missing days button when trip has dates and not all dates covered", async () => {
     mockGetTrip.mockResolvedValue(sampleTrip);
     mockListLocations.mockResolvedValue([]);
     mockGetItinerary.mockResolvedValue({
@@ -1104,6 +1130,99 @@ describe("TripDetailPage", () => {
     await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
 
     expect(await screen.findByText("Mon, Jun 1")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /add day/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /generate missing days/i })
+    ).toBeInTheDocument();
+  });
+
+  it("hides Generate missing days button when all dates are covered", async () => {
+    // Trip has Jun 1–Jun 2, itinerary has days for both dates
+    mockGetTrip.mockResolvedValue({
+      ...sampleTrip,
+      start_date: "2026-06-01",
+      end_date: "2026-06-02",
+    });
+    mockListLocations.mockResolvedValue([]);
+    mockGetItinerary.mockResolvedValue({
+      days: [
+        {
+          id: "day-1",
+          date: "2026-06-01",
+          sort_order: 0,
+          options: [
+            {
+              id: "opt-1",
+              option_index: 1,
+              starting_city: null,
+              ending_city: null,
+              created_by: null,
+              locations: [],
+            },
+          ],
+        },
+        {
+          id: "day-2",
+          date: "2026-06-02",
+          sort_order: 1,
+          options: [
+            {
+              id: "opt-2",
+              option_index: 1,
+              starting_city: null,
+              ending_city: null,
+              created_by: null,
+              locations: [],
+            },
+          ],
+        },
+      ],
+    });
+    render(<TripDetailPage />);
+
+    await screen.findByText("Paris Summer");
+    await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
+
+    await screen.findByText("Mon, Jun 1");
+    expect(
+      screen.queryByRole("button", { name: /generate missing days/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows Add day button when itinerary has days and trip has no dates", async () => {
+    mockGetTrip.mockResolvedValue({
+      ...sampleTrip,
+      start_date: null,
+      end_date: null,
+    });
+    mockListLocations.mockResolvedValue([]);
+    mockGetItinerary.mockResolvedValue({
+      days: [
+        {
+          id: "day-1",
+          date: null,
+          sort_order: 0,
+          options: [
+            {
+              id: "opt-1",
+              option_index: 1,
+              starting_city: null,
+              ending_city: null,
+              created_by: null,
+              locations: [],
+            },
+          ],
+        },
+      ],
+    });
+    render(<TripDetailPage />);
+
+    await screen.findByText("Paris Summer");
+    await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
+
+    expect(await screen.findByText("Day 1")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /add day/i })
     ).toBeInTheDocument();

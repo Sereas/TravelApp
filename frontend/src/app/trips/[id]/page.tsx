@@ -15,12 +15,20 @@ import {
 import { LocationCard } from "@/components/locations/LocationCard";
 import { AddLocationForm } from "@/components/locations/AddLocationForm";
 import { EditLocationRow } from "@/components/locations/EditLocationRow";
-import { EditTripForm } from "@/components/trips/EditTripForm";
+import {
+  EditTripForm,
+  type TripUpdatePayload,
+} from "@/components/trips/EditTripForm";
+import {
+  DateChangeDialog,
+  type DateChangeResult,
+} from "@/components/trips/DateChangeDialog";
 import { ItineraryDayCard } from "@/components/itinerary/ItineraryDayCard";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { LoadingSpinner } from "@/components/feedback/LoadingSpinner";
 import { ErrorBanner } from "@/components/feedback/ErrorBanner";
-import { Trash2 } from "lucide-react";
+import { format } from "date-fns";
+import { Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -108,6 +116,11 @@ export default function TripDetailPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [editingTrip, setEditingTrip] = useState(false);
+  const [dateChangeDialog, setDateChangeDialog] = useState<{
+    payload: TripUpdatePayload;
+    resolve: (trip: Trip) => void;
+    reject: (err: Error) => void;
+  } | null>(null);
   const [addingLocation, setAddingLocation] = useState(false);
   const [editingLocationId, setEditingLocationId] = useState<string | null>(
     null
@@ -213,26 +226,11 @@ export default function TripDetailPage() {
     setItineraryActionError(null);
     setAddDayLoading(true);
     try {
-      const newDay = await api.itinerary.createDay(tripId);
-      setItinerary((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          days: [
-            ...prev.days,
-            {
-              id: newDay.id,
-              date: newDay.date,
-              sort_order: newDay.sort_order,
-              options: [],
-            },
-          ],
-        };
-      });
+      await api.itinerary.createDay(tripId);
+      await fetchItinerary();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to add day";
       setItineraryActionError(message);
-      await fetchItinerary();
     } finally {
       setAddDayLoading(false);
     }
@@ -306,6 +304,27 @@ export default function TripDetailPage() {
       setItineraryActionError(message);
     } finally {
       setUpdatingDayId(null);
+    }
+  }
+
+  async function handleUpdateDayDate(
+    dayId: string,
+    date: string | null,
+    optionId: string | undefined
+  ) {
+    setItineraryActionError(null);
+    try {
+      if (date && optionId) {
+        await api.itinerary.reassignDayDate(tripId, dayId, date, optionId);
+      } else {
+        await api.itinerary.updateDay(tripId, dayId, { date });
+      }
+      // Full refetch to get correct option state after potential swap
+      await fetchItinerary();
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to update day date";
+      setItineraryActionError(message);
     }
   }
 
@@ -784,6 +803,71 @@ export default function TripDetailPage() {
   function handleTripUpdated(updated: Trip) {
     setTrip(updated);
     setEditingTrip(false);
+    fetchItinerary();
+  }
+
+  /**
+   * Compute which existing dated days fall outside a new date range.
+   */
+  function getOrphanedDays(newStart: string, newEnd: string): ItineraryDay[] {
+    if (!itinerary) return [];
+    return itinerary.days.filter(
+      (d) => d.date && (d.date < newStart || d.date > newEnd)
+    );
+  }
+
+  /**
+   * Called by EditTripForm before saving when dates change.
+   * If reconciliation is needed, shows the dialog and returns a promise
+   * that resolves when the user picks an action and the save completes.
+   */
+  async function handleBeforeTripSave(
+    payload: TripUpdatePayload
+  ): Promise<Trip> {
+    const hasNewDates = payload.start_date && payload.end_date;
+    const hadOldDates = trip!.start_date && trip!.end_date;
+
+    // If no new dates or no itinerary, just save directly
+    if (!hasNewDates || !itinerary || itinerary.days.length === 0) {
+      return api.trips.update(tripId, payload);
+    }
+
+    const orphaned = getOrphanedDays(payload.start_date!, payload.end_date!);
+
+    // No days affected — save directly
+    if (orphaned.length === 0) {
+      return api.trips.update(tripId, payload);
+    }
+
+    // Show reconciliation dialog and wait for user choice
+    return new Promise<Trip>((resolve, reject) => {
+      setDateChangeDialog({ payload, resolve, reject });
+    });
+  }
+
+  async function handleDateChangeConfirm(result: DateChangeResult) {
+    if (!dateChangeDialog) return;
+    const { payload, resolve, reject } = dateChangeDialog;
+
+    try {
+      // 1. Execute the reconciliation action
+      await api.itinerary.reconcileDays(tripId, {
+        action: result.action,
+        offset_days: result.offsetDays,
+        day_ids: result.dayIds,
+      });
+
+      // 2. Now save the trip dates
+      const updated = await api.trips.update(tripId, payload);
+
+      setDateChangeDialog(null);
+      resolve(updated);
+    } catch (err) {
+      reject(
+        err instanceof Error ? err : new Error("Failed to reconcile days")
+      );
+      throw err; // re-throw so the dialog stays open
+    }
   }
 
   function handleLocationAdded(location: Location) {
@@ -891,6 +975,7 @@ export default function TripDetailPage() {
             trip={trip}
             onUpdated={handleTripUpdated}
             onCancel={() => setEditingTrip(false)}
+            onBeforeSave={handleBeforeTripSave}
           />
         ) : (
           <div className="flex items-start justify-between gap-4">
@@ -902,22 +987,27 @@ export default function TripDetailPage() {
                 </p>
               )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               <Button
-                variant="outline"
-                size="sm"
+                variant="ghost"
+                size="icon"
                 onClick={() => setEditingTrip(true)}
+                aria-label="Edit trip"
+                title="Edit trip"
               >
-                Edit trip
+                <Pencil className="h-4 w-4" />
               </Button>
               <ConfirmDialog
                 trigger={
                   <Button
-                    variant="destructive"
-                    size="sm"
+                    variant="ghost"
+                    size="icon"
                     disabled={deletingTrip}
+                    aria-label="Delete trip"
+                    title="Delete trip"
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
                   >
-                    Delete trip
+                    <Trash2 className="h-4 w-4" />
                   </Button>
                 }
                 title="Delete trip?"
@@ -1126,23 +1216,29 @@ export default function TripDetailPage() {
           {!itineraryLoading &&
             !itineraryError &&
             itinerary?.days.length === 0 && (
-              <EmptyState message="No days yet. Add a day or generate days from your trip dates.">
+              <EmptyState
+                message={
+                  trip.start_date && trip.end_date
+                    ? "No days yet. Generate days from your trip dates."
+                    : "No days yet. Add a day to get started."
+                }
+              >
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Button
-                    onClick={handleAddDay}
-                    disabled={addDayLoading || generateDaysLoading}
-                  >
-                    {addDayLoading ? "Adding…" : "Add day"}
-                  </Button>
-                  {trip.start_date && trip.end_date && (
+                  {trip.start_date && trip.end_date ? (
                     <Button
-                      variant="outline"
                       onClick={handleGenerateDays}
                       disabled={addDayLoading || generateDaysLoading}
                     >
                       {generateDaysLoading
                         ? "Generating…"
                         : "Generate days from dates"}
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={handleAddDay}
+                      disabled={addDayLoading || generateDaysLoading}
+                    >
+                      {addDayLoading ? "Adding…" : "Add day"}
                     </Button>
                   )}
                 </div>
@@ -1155,13 +1251,45 @@ export default function TripDetailPage() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg font-semibold">Days</h2>
-                  <Button
-                    size="sm"
-                    onClick={handleAddDay}
-                    disabled={addDayLoading || generateDaysLoading}
-                  >
-                    {addDayLoading ? "Adding…" : "Add day"}
-                  </Button>
+                  {trip.start_date && trip.end_date ? (
+                    (() => {
+                      const coveredDates = new Set(
+                        itinerary.days.map((d) => d.date).filter(Boolean)
+                      );
+                      const start = new Date(trip.start_date + "T00:00:00");
+                      const end = new Date(trip.end_date + "T00:00:00");
+                      let hasMissing = false;
+                      for (
+                        let d = new Date(start);
+                        d <= end;
+                        d.setDate(d.getDate() + 1)
+                      ) {
+                        if (!coveredDates.has(format(d, "yyyy-MM-dd"))) {
+                          hasMissing = true;
+                          break;
+                        }
+                      }
+                      return hasMissing ? (
+                        <Button
+                          size="sm"
+                          onClick={handleGenerateDays}
+                          disabled={addDayLoading || generateDaysLoading}
+                        >
+                          {generateDaysLoading
+                            ? "Generating…"
+                            : "Generate missing days"}
+                        </Button>
+                      ) : null;
+                    })()
+                  ) : (
+                    <Button
+                      size="sm"
+                      onClick={handleAddDay}
+                      disabled={addDayLoading || generateDaysLoading}
+                    >
+                      {addDayLoading ? "Adding…" : "Add day"}
+                    </Button>
+                  )}
                 </div>
                 {itinerary.days.map((day) => {
                   const currentOption = getSelectedOption(day);
@@ -1173,6 +1301,8 @@ export default function TripDetailPage() {
                       currentOption={currentOption}
                       tripLocations={locations}
                       createOptionLoading={createOptionLoading === day.id}
+                      tripStartDate={trip.start_date}
+                      tripEndDate={trip.end_date}
                       calculatingRouteId={calculatingRouteId}
                       routeMetricsError={routeMetricsError}
                       onSelectOption={(dayId, optId) =>
@@ -1181,6 +1311,7 @@ export default function TripDetailPage() {
                           [dayId]: optId,
                         }))
                       }
+                      onUpdateDayDate={handleUpdateDayDate}
                       onCreateAlternative={handleCreateAlternative}
                       onDeleteOption={handleDeleteOption}
                       onSaveOptionDetails={handleSaveOptionDetails}
@@ -1198,6 +1329,57 @@ export default function TripDetailPage() {
             )}
         </section>
       )}
+
+      {dateChangeDialog &&
+        (() => {
+          const { payload } = dateChangeDialog;
+          const newStart = payload.start_date!;
+          const newEnd = payload.end_date!;
+          const orphaned = getOrphanedDays(newStart, newEnd);
+          const oldStart = trip?.start_date ?? newStart;
+          const oldEnd = trip?.end_date ?? newEnd;
+
+          // Compute offset and whether shift is viable
+          const hasOldDates = !!(trip?.start_date && trip?.end_date);
+          const offsetMs = hasOldDates
+            ? new Date(newStart + "T00:00:00").getTime() -
+              new Date(oldStart + "T00:00:00").getTime()
+            : 0;
+          const offsetDays = Math.round(offsetMs / 86400000);
+
+          // Shift is viable when old dates existed and every dated day,
+          // after shifting, falls in the new range
+          const canShift =
+            hasOldDates &&
+            offsetDays !== 0 &&
+            itinerary != null &&
+            itinerary.days
+              .filter((d) => d.date)
+              .every((d) => {
+                const shifted = new Date(d.date! + "T00:00:00");
+                shifted.setDate(shifted.getDate() + offsetDays);
+                const iso = format(shifted, "yyyy-MM-dd");
+                return iso >= newStart && iso <= newEnd;
+              });
+
+          return (
+            <DateChangeDialog
+              open
+              onClose={() => {
+                dateChangeDialog.reject(new Error("Cancelled"));
+                setDateChangeDialog(null);
+              }}
+              onConfirm={handleDateChangeConfirm}
+              orphanedDays={orphaned}
+              oldStart={oldStart}
+              oldEnd={oldEnd}
+              newStart={newStart}
+              newEnd={newEnd}
+              canShift={canShift}
+              offsetDays={offsetDays}
+            />
+          );
+        })()}
     </div>
   );
 }

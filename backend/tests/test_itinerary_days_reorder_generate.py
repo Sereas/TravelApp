@@ -162,11 +162,12 @@ def test_generate_days_happy_path_creates_range_and_sort_order(
         app.dependency_overrides.clear()
 
 
-def test_generate_days_when_days_already_exist_returns_409(
+def test_generate_days_when_some_days_exist_fills_missing(
     client: TestClient,
     mock_user_id,
     mock_supabase_trips_and_days,
 ):
+    """Generate is idempotent: with 1 existing day for Jun 1, it creates Jun 2 & Jun 3."""
     trip_id, days_store, _trips_store, mock_sb = _setup_trip_for_generate(
         mock_supabase_trips_and_days, mock_user_id
     )
@@ -187,7 +188,11 @@ def test_generate_days_when_days_already_exist_returns_409(
     app.dependency_overrides[get_supabase_client] = lambda: mock_sb
     try:
         r = client.post(f"/api/v1/trips/{trip_id}/days/generate")
-        assert r.status_code == 409
+        assert r.status_code == 201
+        data = r.json()
+        assert len(data) == 3
+        dates = sorted(d["date"] for d in data)
+        assert dates == ["2025-06-01", "2025-06-02", "2025-06-03"]
     finally:
         app.dependency_overrides.clear()
 
