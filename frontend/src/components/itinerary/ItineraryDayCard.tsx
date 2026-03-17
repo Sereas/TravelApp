@@ -22,6 +22,8 @@ import {
   type MapRoutePolyline,
 } from "@/components/itinerary/ItineraryDayMap";
 import { AddLocationsToOptionDialog } from "@/components/itinerary/AddLocationsToOptionDialog";
+import { CATEGORY_META, type CategoryKey } from "@/lib/location-constants";
+import { CategoryIcon } from "@/components/locations/CategoryIcon";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -45,6 +47,8 @@ import {
   Trash2,
   AlertCircle,
   Pencil,
+  ChevronDown,
+  Check,
 } from "lucide-react";
 
 const TIME_META: Record<
@@ -269,13 +273,6 @@ function formatSegmentMetrics(
   return `${dur} · ${dist}`;
 }
 
-// Grid column template shared by header + rows.
-// Layout priorities:
-// - Time + location get most space.
-// - Remaining columns are compact action/info columns.
-const GRID_COLS =
-  "grid-cols-[1.5rem_5.5rem_minmax(7rem,1.5fr)_auto_1.5rem_auto_1.5rem]";
-
 export interface ItineraryDayCardProps {
   day: ItineraryDay;
   tripId: string;
@@ -366,8 +363,6 @@ export function ItineraryDayCard({
     ? formatDate(day.date)
     : `Day ${day.sort_order + 1}`;
   const [editingDate, setEditingDate] = useState(false);
-  const hasMultiOpts = day.options.length > 1;
-  const canDelete = day.options.length > 1;
   const alreadyAdded = useMemo(
     () => new Set(currentOption?.locations.map((l) => l.location_id) ?? []),
     [currentOption]
@@ -529,6 +524,65 @@ export function ItineraryDayCard({
     return () => document.removeEventListener("mousedown", h, true);
   }, [tpOpen]);
 
+  // Option dropdown state
+  const [optOpen, setOptOpen] = useState(false);
+  const [addingPlan, setAddingPlan] = useState(false);
+  const [newPlanName, setNewPlanName] = useState("");
+  const [renamingOptionId, setRenamingOptionId] = useState<string | null>(null);
+  const [pendingAltName, setPendingAltName] = useState<string | null>(null);
+  const optTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const optDropRef = useRef<HTMLDivElement | null>(null);
+  const prevOptionsLengthRef = useRef(day.options.length);
+
+  // Close option dropdown on outside click
+  useEffect(() => {
+    if (!optOpen) return;
+    const h = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (optTriggerRef.current?.contains(t) || optDropRef.current?.contains(t))
+        return;
+      // Don't close while a modal dialog is open (e.g. ConfirmDialog) —
+      // mousedown on dialog buttons would otherwise unmount ConfirmDialog
+      // before its click handler fires, swallowing the confirmation.
+      if ((t as Element).closest?.('[role="dialog"]')) return;
+      setOptOpen(false);
+      setAddingPlan(false);
+      setRenamingOptionId(null);
+    };
+    document.addEventListener("mousedown", h, true);
+    return () => document.removeEventListener("mousedown", h, true);
+  }, [optOpen]);
+
+  // Auto-save plan name and switch to new option once it appears
+  useEffect(() => {
+    if (pendingAltName === null) return;
+    if (day.options.length <= prevOptionsLengthRef.current) return;
+    prevOptionsLengthRef.current = day.options.length;
+    const newest = [...day.options].sort(
+      (a, b) => b.option_index - a.option_index
+    )[0];
+    if (newest) {
+      onSaveOptionDetails(day.id, newest.id, { created_by: pendingAltName });
+      onSelectOption(day.id, newest.id);
+    }
+    setPendingAltName(null);
+  }, [day.options]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function optionLabel(o: ItineraryOption): string {
+    if (o.option_index === 1) return o.created_by || "Main plan";
+    return o.created_by || `Plan ${o.option_index - 1}`;
+  }
+
+  function handleAddPlan() {
+    const name = newPlanName.trim();
+    if (!name) return;
+    setPendingAltName(name);
+    setNewPlanName("");
+    setAddingPlan(false);
+    setOptOpen(false);
+    onCreateAlternative(day.id);
+  }
+
   const [showMap, setShowMap] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -623,7 +677,30 @@ export function ItineraryDayCard({
     );
   }
 
-  function renderRow(ol: ItineraryOptionLocation) {
+  function onDropAtEnd(e: React.DragEvent) {
+    e.preventDefault();
+    setDropId(null);
+    if (!dragId || !currentOption) {
+      setDragId(null);
+      return;
+    }
+    const fi = sorted.findIndex((l) => l.location_id === dragId);
+    if (fi < 0 || fi === sorted.length - 1) {
+      setDragId(null);
+      return;
+    }
+    const arr = [...sorted];
+    const [rm] = arr.splice(fi, 1);
+    arr.push(rm);
+    setDragId(null);
+    onReorderLocations(
+      day.id,
+      currentOption.id,
+      arr.map((l) => l.location_id)
+    );
+  }
+
+  function renderRow(ol: ItineraryOptionLocation, index: number) {
     const tk = ol.time_period || "morning";
     const tm = TIME_META[tk] ?? TIME_META.morning;
     const TIcon = tm.icon;
@@ -636,22 +713,46 @@ export function ItineraryDayCard({
     const picking = isPickMode && pickIds.includes(ol.location_id);
     const pickSeq = pickIds.indexOf(ol.location_id) + 1;
 
+    const prevOl = sorted[index - 1];
+    const nextOl = sorted[index + 1];
+
+    // Top connector: is prevOl the preceding stop in the same route?
+    let topConnectorHex: string | null = null;
+    if (prevOl) {
+      for (const info of routeInfos) {
+        if (
+          info.idx > 0 &&
+          info.route.location_ids[info.idx - 1] === prevOl.location_id
+        ) {
+          topConnectorHex = info.color.hex;
+          break;
+        }
+      }
+    }
+
+    // Bottom connector: is nextOl the following stop in the same route?
+    let bottomConnectorHex: string | null = null;
+    if (nextOl) {
+      for (const info of routeInfos) {
+        const nextIdx = info.idx + 1;
+        if (
+          nextIdx < info.route.location_ids.length &&
+          info.route.location_ids[nextIdx] === nextOl.location_id
+        ) {
+          bottomConnectorHex = info.color.hex;
+          break;
+        }
+      }
+    }
+
+    const catMeta = ol.location.category
+      ? CATEGORY_META[ol.location.category as CategoryKey]
+      : null;
+
     return (
-      <div key={ol.location_id}>
-        {/* Between rows: only forward segment connector (current → next). No incoming/reverse chip. */}
-        <div
-          className={cn(
-            "group grid gap-x-3 items-center rounded-md px-1 py-1.5 text-sm transition-colors",
-            GRID_COLS,
-            isDrag && "opacity-40",
-            isDrop && "ring-1 ring-primary ring-inset bg-accent/60",
-            expanded ? "bg-accent/30" : "hover:bg-accent/20"
-          )}
-          onDragOver={(e) => onDragOver(ol.location_id, e)}
-          onDragLeave={() => setDropId(null)}
-          onDrop={(e) => onDrop(ol.location_id, e)}
-        >
-          {/* Col 1: drag or pick */}
+      <div key={ol.location_id} className="flex gap-2">
+        {/* Col A: drag handle or pick button */}
+        <div className="pt-2 w-5 shrink-0 flex justify-center">
           {isPickMode ? (
             <button
               type="button"
@@ -663,7 +764,7 @@ export function ItineraryDayCard({
                 )
               }
               className={cn(
-                "flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold mx-auto",
+                "flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold",
                 picking
                   ? "bg-primary text-primary-foreground"
                   : "border-2 border-dashed border-muted-foreground/30 text-muted-foreground hover:border-primary"
@@ -682,175 +783,216 @@ export function ItineraryDayCard({
               <GripVertical size={14} />
             </div>
           )}
+        </div>
 
-          {/* Col 2: time */}
-          <div ref={tpOpen === ol.location_id ? tpTrigger : undefined}>
+        {/* Col B: timeline gutter (line + dot) */}
+        <div className="flex flex-col items-center w-4 shrink-0">
+          <div
+            className="w-0.5 h-3"
+            style={{ backgroundColor: topConnectorHex ?? "transparent" }}
+          />
+          <div
+            className={cn(
+              "w-3 h-3 rounded-full border-2 border-white shadow-sm shrink-0",
+              catMeta?.bg ?? "bg-muted"
+            )}
+          />
+          <div
+            className="w-0.5 flex-1 min-h-3"
+            style={{ backgroundColor: bottomConnectorHex ?? "transparent" }}
+          />
+        </div>
+
+        {/* Col C: content area */}
+        <div
+          className={cn(
+            "flex-1 min-w-0 pb-1",
+            isDrop && "ring-1 ring-primary ring-inset rounded-md bg-accent/60"
+          )}
+          onDragOver={(e) => onDragOver(ol.location_id, e)}
+          onDragLeave={() => setDropId(null)}
+          onDrop={(e) => onDrop(ol.location_id, e)}
+        >
+          {/* Main row */}
+          <div
+            className={cn(
+              "group flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+              isDrag && "opacity-40",
+              expanded ? "bg-accent/30" : "hover:bg-accent/20"
+            )}
+          >
+            {/* Left: category icon + route badges + name + city — flex-1 */}
             <button
               type="button"
-              className={cn(
-                "inline-flex h-6 items-center gap-1 rounded-full px-2 text-[11px] font-medium border border-transparent hover:border-border",
-                tm.bg,
-                tm.text
-              )}
+              className="min-w-0 text-left flex items-center gap-1.5 flex-1"
               onClick={() =>
-                setTpOpen((p) => (p === ol.location_id ? null : ol.location_id))
+                setExpandedId((p) =>
+                  p === ol.location_id ? null : ol.location_id
+                )
               }
-              aria-label={`Time: ${tm.label}`}
+              aria-expanded={expanded}
             >
-              <TIcon className="h-3 w-3" size={12} />
-              <span>{tm.label}</span>
+              {/* Category icon */}
+              {ol.location.category && (
+                <CategoryIcon
+                  category={ol.location.category as CategoryKey}
+                  size={13}
+                  className="shrink-0 text-muted-foreground/50"
+                />
+              )}
+              {/* Route badges */}
+              {routeInfos.length > 0 && (
+                <span className="inline-flex items-center gap-0.5 shrink-0">
+                  {routeInfos.map((info) => (
+                    <span
+                      key={info.route.route_id}
+                      className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border text-[8px] font-bold"
+                      style={{
+                        borderColor: info.color.hex,
+                        color: info.color.hex,
+                      }}
+                      title={`${info.route.transport_mode} route, stop ${info.idx + 1}`}
+                    >
+                      {info.idx + 1}
+                    </span>
+                  ))}
+                </span>
+              )}
+              {/* Name */}
+              <span className="font-medium truncate">{ol.location.name}</span>
+              {/* City */}
+              {ol.location.city && (
+                <span className="text-muted-foreground/60 text-xs shrink-0">
+                  {ol.location.city}
+                </span>
+              )}
             </button>
-          </div>
 
-          {/* Col 3: name + city */}
-          <button
-            type="button"
-            className="min-w-0 text-left truncate flex items-center"
-            onClick={() =>
-              setExpandedId((p) =>
-                p === ol.location_id ? null : ol.location_id
-              )
-            }
-            aria-expanded={expanded}
-          >
-            {routeInfos.length > 0 && (
-              <span className="inline-flex items-center gap-1 mr-1.5 shrink-0">
-                {routeInfos.map((info) => (
-                  <span
-                    key={info.route.route_id}
-                    className={cn(
-                      "inline-flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold text-white",
-                      info.color.dot
-                    )}
-                    title={`${info.route.transport_mode} route, stop ${info.idx + 1}`}
-                  >
-                    {info.idx + 1}
-                  </span>
-                ))}
-              </span>
-            )}
-            <span className="font-medium truncate">{ol.location.name}</span>
-            {ol.location.city && (
-              <span className="ml-1.5 text-muted-foreground text-xs shrink-0">
-                {ol.location.city}
-              </span>
-            )}
-          </button>
-
-          {/* Col 4: booking */}
-          <div className="flex justify-start">
+            {/* Booked badge — always visible when present */}
             {showBk && (
               <span
                 className={cn(
-                  "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                  "shrink-0 inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium",
                   bk === "yes_done"
-                    ? "bg-green-50 text-green-700"
-                    : "bg-amber-50 text-amber-700"
+                    ? "border-green-200 text-green-700"
+                    : "border-amber-200 text-amber-700"
                 )}
               >
-                <Ticket size={10} />
+                <Ticket size={9} />
                 {bk === "yes_done" ? "Booked" : "Book"}
               </span>
             )}
-          </div>
 
-          {/* Col 5: spacer */}
-          <div />
-
-          {/* Col 6: map */}
-          <div className="flex justify-center">
+            {/* Map link — always visible, subtle */}
             {ol.location.google_link ? (
               <a
                 href={ol.location.google_link}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-primary"
+                className="shrink-0 text-muted-foreground/30 hover:text-primary transition-colors"
                 aria-label={`Map: ${ol.location.name}`}
                 onClick={(e) => e.stopPropagation()}
               >
-                <ExternalLink size={13} />
+                <ExternalLink size={12} />
               </a>
-            ) : (
-              <span className="text-muted-foreground/30">—</span>
-            )}
-          </div>
+            ) : null}
 
-          {/* Col 7: remove */}
-          {!isPickMode && currentOption && (
-            <button
-              type="button"
-              className="text-muted-foreground/30 opacity-0 transition hover:text-destructive group-hover:opacity-100"
-              aria-label={`Remove ${ol.location.name}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onRemoveLocation(day.id, currentOption.id, ol.location_id);
-              }}
-            >
-              <X size={14} />
-            </button>
-          )}
-        </div>
-
-        {/* Expanded details */}
-        {expanded && (
-          <div className="ml-8 mr-6 mb-1 rounded-b-lg bg-accent/15 px-3 py-2 text-xs space-y-1">
-            {ol.location.address && (
-              <div>
-                <span className="text-muted-foreground">Address:</span>{" "}
-                {ol.location.address}
-              </div>
-            )}
-            {ol.location.category && (
-              <div>
-                <span className="text-muted-foreground">Category:</span>{" "}
-                {ol.location.category}
-              </div>
-            )}
-            {ol.location.note && (
-              <div>
-                <span className="text-muted-foreground">Note:</span>{" "}
-                <span className="whitespace-pre-wrap">{ol.location.note}</span>
-              </div>
-            )}
-            {ol.location.working_hours && (
-              <div>
-                <span className="text-muted-foreground">Hours:</span>{" "}
-                <span className="whitespace-pre-wrap">
-                  {formatHoursLines(ol.location.working_hours).map(
-                    (line, idx) => (
-                      <span key={idx} className="block">
-                        {line}
-                      </span>
-                    )
-                  )}
-                </span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Route connector between consecutive stops */}
-        {routeInfos.map((info) => {
-          const isLastLeg = info.idx === info.route.location_ids.length - 1;
-          const Icon =
-            TRANSPORT.find((t) => t.key === info.route.transport_mode)?.icon ??
-            null;
-          if (isLastLeg || !Icon) return null;
-          const isCalculatingLeg = calculatingRouteId === info.route.route_id;
-          return (
-            <div
-              key={info.route.route_id}
-              className="flex items-center gap-2 py-0.5 pl-[1.5rem] ml-[6rem]"
-            >
-              <div
-                className={cn(
-                  "flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-medium",
-                  info.color.bg,
-                  info.color.text
-                )}
+            {/* Time period badge — RIGHT, always visible, bg-muted + chevron = obviously clickable */}
+            <div ref={tpOpen === ol.location_id ? tpTrigger : undefined}>
+              <button
+                type="button"
+                className="shrink-0 inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                onClick={() =>
+                  setTpOpen((p) =>
+                    p === ol.location_id ? null : ol.location_id
+                  )
+                }
+                aria-label={`Time: ${tm.label}`}
               >
-                <span className="text-muted-foreground/60">↓</span>
-                <Icon size={10} />
+                <TIcon size={10} className="shrink-0" />
+                <span className="w-[52px]">{tm.label}</span>
+                <ChevronDown size={9} className="opacity-40" />
+              </button>
+            </div>
+
+            {/* Remove button — hover only */}
+            {!isPickMode && currentOption && (
+              <button
+                type="button"
+                className="shrink-0 text-muted-foreground/30 opacity-0 transition hover:text-destructive group-hover:opacity-100"
+                aria-label={`Remove ${ol.location.name}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemoveLocation(day.id, currentOption.id, ol.location_id);
+                }}
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
+
+          {/* Expanded details */}
+          {expanded && (
+            <div className="ml-1 mr-4 mb-1 rounded-b-lg bg-accent/15 px-3 py-2 text-xs space-y-1">
+              {ol.location.address && (
+                <div>
+                  <span className="text-muted-foreground">Address:</span>{" "}
+                  {ol.location.address}
+                </div>
+              )}
+              {ol.location.category && (
+                <div>
+                  <span className="text-muted-foreground">Category:</span>{" "}
+                  {ol.location.category}
+                </div>
+              )}
+              {ol.location.note && (
+                <div>
+                  <span className="text-muted-foreground">Note:</span>{" "}
+                  <span className="whitespace-pre-wrap">
+                    {ol.location.note}
+                  </span>
+                </div>
+              )}
+              {ol.location.working_hours && (
+                <div>
+                  <span className="text-muted-foreground">Hours:</span>{" "}
+                  <span className="whitespace-pre-wrap">
+                    {formatHoursLines(ol.location.working_hours).map(
+                      (line, idx) => (
+                        <span key={idx} className="block">
+                          {line}
+                        </span>
+                      )
+                    )}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Segment connector — muted, left-aligned with route color bar */}
+          {routeInfos.map((info) => {
+            const isLastLeg = info.idx === info.route.location_ids.length - 1;
+            const Icon =
+              TRANSPORT.find((t) => t.key === info.route.transport_mode)
+                ?.icon ?? null;
+            if (isLastLeg || !Icon) return null;
+            const isCalculatingLeg = calculatingRouteId === info.route.route_id;
+            return (
+              <div
+                key={info.route.route_id}
+                className="flex items-center gap-1.5 py-0.5 pl-2 text-xs text-muted-foreground/70"
+              >
+                <div
+                  className="w-0.5 h-3 rounded-full shrink-0"
+                  style={{ backgroundColor: info.color.hex }}
+                />
+                <Icon
+                  size={10}
+                  className="shrink-0"
+                  style={{ color: info.color.hex }}
+                />
                 <span>
                   {isCalculatingLeg ? (
                     <>
@@ -861,13 +1003,13 @@ export function ItineraryDayCard({
                       Calculating…
                     </>
                   ) : (
-                    <>{formatSegmentMetrics(info.route.segments?.[info.idx])}</>
+                    formatSegmentMetrics(info.route.segments?.[info.idx])
                   )}
                 </span>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     );
   }
@@ -951,7 +1093,17 @@ export function ItineraryDayCard({
               {editingDate ? (
                 <input
                   type="date"
-                  autoFocus
+                  ref={(el) => {
+                    if (!el) return;
+                    el.focus();
+                    try {
+                      (
+                        el as HTMLInputElement & { showPicker?: () => void }
+                      ).showPicker?.();
+                    } catch {
+                      /* showPicker not supported */
+                    }
+                  }}
                   defaultValue={day.date ?? ""}
                   min={tripStartDate ?? undefined}
                   max={tripEndDate ?? undefined}
@@ -980,10 +1132,11 @@ export function ItineraryDayCard({
               )}
             </div>
             {currentOption && (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              <div className="flex items-center gap-1 rounded-md border border-border/60 bg-muted/40 px-2 py-1 text-xs text-muted-foreground shrink-0">
+                <span className="opacity-50 text-[10px] shrink-0">from</span>
                 <AutosaveInput
                   id={`sc-${currentOption.id}`}
-                  placeholder="From"
+                  placeholder="start city"
                   initialValue={currentOption.starting_city ?? ""}
                   onSave={async (v) => {
                     const n = v || null;
@@ -992,12 +1145,12 @@ export function ItineraryDayCard({
                       starting_city: n,
                     });
                   }}
-                  className="w-20 text-xs"
+                  className="w-24 text-xs"
                 />
-                <ArrowRight size={11} className="shrink-0 opacity-40" />
+                <ArrowRight size={10} className="shrink-0 opacity-30" />
                 <AutosaveInput
                   id={`ec-${currentOption.id}`}
-                  placeholder="To"
+                  placeholder="end city"
                   initialValue={currentOption.ending_city ?? ""}
                   onSave={async (v) => {
                     const n = v || null;
@@ -1006,72 +1159,166 @@ export function ItineraryDayCard({
                       ending_city: n,
                     });
                   }}
-                  className="w-20 text-xs"
-                />
-                <AutosaveInput
-                  id={`cb-${currentOption.id}`}
-                  placeholder="by…"
-                  initialValue={currentOption.created_by ?? ""}
-                  onSave={async (v) => {
-                    const n = v || null;
-                    if (n === (currentOption.created_by ?? null)) return;
-                    onSaveOptionDetails(day.id, currentOption.id, {
-                      created_by: n,
-                    });
-                  }}
-                  className="w-16 text-xs italic"
+                  className="w-24 text-xs"
                 />
               </div>
             )}
             <div className="flex-1" />
-            <div className="flex items-center gap-1">
-              {hasMultiOpts && (
-                <select
-                  aria-label={`Select option for ${dayLabel}`}
-                  className="h-7 rounded-md border border-input bg-background px-2 text-xs"
-                  value={currentOption?.id ?? ""}
-                  onChange={(e) => onSelectOption(day.id, e.target.value)}
-                >
-                  {day.options.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.option_index === 1
-                        ? "Main plan"
-                        : `Alt ${o.option_index - 1}`}
-                      {o.created_by ? ` (${o.created_by})` : ""}
-                    </option>
-                  ))}
-                </select>
-              )}
-              {canDelete && currentOption && (
-                <ConfirmDialog
-                  trigger={
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                      aria-label="Delete this alternative"
-                    >
-                      <X size={14} />
-                    </Button>
-                  }
-                  title="Delete this plan?"
-                  description={`"${currentOption.option_index === 1 ? "Main plan" : `Alt ${currentOption.option_index - 1}`}" will be removed.`}
-                  confirmLabel="Delete"
-                  variant="destructive"
-                  onConfirm={() => onDeleteOption(day.id, currentOption.id)}
-                />
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 gap-1 px-2 text-xs text-muted-foreground"
-                onClick={() => onCreateAlternative(day.id)}
-                disabled={createOptionLoading}
-                title="Add an alternative plan for this day"
+
+            {/* Option dropdown */}
+            <div className="relative shrink-0">
+              <button
+                ref={optTriggerRef}
+                type="button"
+                onClick={() => {
+                  setOptOpen((v) => !v);
+                  setAddingPlan(false);
+                  setRenamingOptionId(null);
+                }}
+                className="flex items-center gap-1 rounded-md border border-input bg-background px-2 py-1 text-xs hover:bg-accent transition-colors"
+                aria-label="Switch day plan"
               >
-                <Plus size={12} />
-                Alt plan
-              </Button>
+                <span className="max-w-[120px] truncate">
+                  {currentOption ? optionLabel(currentOption) : "No plan"}
+                </span>
+                <ChevronDown size={11} className="shrink-0 opacity-50" />
+              </button>
+
+              {optOpen && (
+                <div
+                  ref={optDropRef}
+                  className="absolute right-0 top-full mt-1 z-50 min-w-[200px] rounded-md border border-border bg-popover shadow-md p-1"
+                >
+                  {day.options.map((o) => {
+                    const label = optionLabel(o);
+                    const isActive = o.id === currentOption?.id;
+                    const canDel =
+                      day.options.length > 1 && o.option_index !== 1;
+                    return (
+                      <div
+                        key={o.id}
+                        className="group flex items-center gap-1 rounded-sm px-2 py-1.5 hover:bg-accent"
+                      >
+                        {renamingOptionId === o.id ? (
+                          <input
+                            autoFocus
+                            defaultValue={o.created_by ?? ""}
+                            placeholder="Plan name…"
+                            className="flex-1 text-xs bg-transparent border-b border-primary outline-none py-0.5"
+                            onBlur={(e) => {
+                              const val = e.target.value.trim() || null;
+                              onSaveOptionDetails(day.id, o.id, {
+                                created_by: val,
+                              });
+                              setRenamingOptionId(null);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") e.currentTarget.blur();
+                              if (e.key === "Escape") setRenamingOptionId(null);
+                            }}
+                          />
+                        ) : (
+                          <>
+                            {isActive ? (
+                              <Check
+                                size={12}
+                                className="shrink-0 text-primary"
+                              />
+                            ) : (
+                              <div className="w-3 shrink-0" />
+                            )}
+                            <button
+                              type="button"
+                              className={cn(
+                                "flex-1 text-left text-xs truncate",
+                                isActive
+                                  ? "font-medium text-foreground"
+                                  : "text-muted-foreground"
+                              )}
+                              onClick={() => {
+                                if (!isActive) onSelectOption(day.id, o.id);
+                                setOptOpen(false);
+                              }}
+                            >
+                              {label}
+                            </button>
+                            <button
+                              type="button"
+                              title="Rename"
+                              className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-muted-foreground hover:text-foreground transition-opacity"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setRenamingOptionId(o.id);
+                              }}
+                            >
+                              <Pencil size={10} />
+                            </button>
+                            {canDel && (
+                              <ConfirmDialog
+                                trigger={
+                                  <button
+                                    type="button"
+                                    title="Delete plan"
+                                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-muted-foreground hover:text-destructive transition-opacity"
+                                  >
+                                    <X size={10} />
+                                  </button>
+                                }
+                                title="Delete this plan?"
+                                description={`"${label}" and all its locations will be removed.`}
+                                confirmLabel="Delete"
+                                variant="destructive"
+                                onConfirm={() => {
+                                  onDeleteOption(day.id, o.id);
+                                  setOptOpen(false);
+                                }}
+                              />
+                            )}
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  <div className="border-t border-border mt-1 pt-1">
+                    {addingPlan ? (
+                      <div className="flex items-center gap-1.5 px-2 py-1">
+                        <input
+                          autoFocus
+                          value={newPlanName}
+                          onChange={(e) => setNewPlanName(e.target.value)}
+                          placeholder="Plan name…"
+                          className="flex-1 text-xs bg-transparent border-b border-primary outline-none py-0.5"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleAddPlan();
+                            if (e.key === "Escape") setAddingPlan(false);
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="text-xs text-primary font-medium hover:text-primary/80 disabled:opacity-40"
+                          onClick={handleAddPlan}
+                          disabled={createOptionLoading || !newPlanName.trim()}
+                        >
+                          Add
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-1.5 rounded-sm px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                        onClick={() => {
+                          setAddingPlan(true);
+                          setNewPlanName("");
+                        }}
+                      >
+                        <Plus size={11} />
+                        Add plan
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -1079,31 +1326,44 @@ export function ItineraryDayCard({
         <CardContent className="pt-0">
           {currentOption && (
             <>
-              {/* Column headers */}
-              {sorted.length > 0 && (
-                <div
-                  className={cn(
-                    "grid gap-x-3 px-1 pb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60 border-b border-border/50 mb-1",
-                    GRID_COLS
-                  )}
-                >
-                  <div />
-                  <div>Time</div>
-                  <div>Location</div>
-                  <div className="text-left">Booking</div>
-                  <div />
-                  <div className="text-center">Map</div>
-                  <div />
-                </div>
-              )}
-
               {/* Location rows */}
               {sorted.length === 0 ? (
-                <p className="py-4 text-center text-sm text-muted-foreground">
-                  No locations yet
-                </p>
+                <div className="py-6 flex flex-col items-center gap-3 text-muted-foreground/50">
+                  <div className="flex gap-2 items-center">
+                    <div className="flex flex-col items-center gap-1.5">
+                      <div className="w-2 h-2 rounded-full bg-muted-foreground/20" />
+                      <div className="w-0.5 h-4 bg-muted-foreground/10" />
+                      <div className="w-2 h-2 rounded-full bg-muted-foreground/20" />
+                      <div className="w-0.5 h-4 bg-muted-foreground/10" />
+                      <div className="w-2 h-2 rounded-full bg-muted-foreground/20" />
+                    </div>
+                    <p className="text-sm text-muted-foreground/60 ml-2">
+                      No locations planned yet
+                    </p>
+                  </div>
+                </div>
               ) : (
-                <div className="space-y-0">{sorted.map(renderRow)}</div>
+                <div className="space-y-0">
+                  {sorted.map((ol, idx) => renderRow(ol, idx))}
+                  {/* End drop zone — allows dragging to last position */}
+                  {dragId && (
+                    <div
+                      className={cn(
+                        "mx-9 mt-0.5 h-7 rounded-md border-2 border-dashed transition-colors",
+                        dropId === "__end__"
+                          ? "border-primary bg-accent/30"
+                          : "border-muted-foreground/20"
+                      )}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = "move";
+                        setDropId("__end__");
+                      }}
+                      onDragLeave={() => setDropId(null)}
+                      onDrop={onDropAtEnd}
+                    />
+                  )}
+                </div>
               )}
 
               {/* Route creation / edit bar */}
@@ -1174,7 +1434,7 @@ export function ItineraryDayCard({
                       <div
                         key={r.route_id}
                         className={cn(
-                          "flex items-center gap-2 rounded border-l-[3px] px-2 py-1 text-xs",
+                          "flex items-center gap-2 rounded border-l-[3px] px-2 py-1.5 text-xs",
                           color.bar,
                           color.bg
                         )}
@@ -1185,6 +1445,7 @@ export function ItineraryDayCard({
                             "min-w-0 flex-1 truncate font-medium",
                             color.text
                           )}
+                          title={names}
                         >
                           {names}
                         </span>
