@@ -72,8 +72,20 @@ class GooglePlacesClient:
         host = parsed.netloc.lower()
         if "maps.app.goo.gl" not in host and "goo.gl" not in host:
             return url
-        resp = self._http.get(url, follow_redirects=True)
-        return str(resp.url)
+        # Follow redirects manually and stop as soon as we land on a Google Maps
+        # URL.  Using follow_redirects=True would blindly chase all hops including
+        # Google's bot-detection redirect to /sorry/index (HTTP 429), which leaves
+        # us with a CAPTCHA URL we cannot parse or search against.
+        current_url = url
+        for _ in range(5):
+            resp = self._http.get(current_url, follow_redirects=False)
+            location = resp.headers.get("location") or ""
+            if not location or resp.status_code not in (301, 302, 303, 307, 308):
+                break
+            current_url = location
+            if "google.com/maps" in current_url:
+                return current_url
+        return current_url
 
     def _extract_name_and_location_from_url(
         self, url: str

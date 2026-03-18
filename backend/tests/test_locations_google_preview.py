@@ -1,10 +1,11 @@
 """Tests for POST /api/v1/locations/google/preview."""
 
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from backend.app.clients.google_places import PlaceResolution
+from backend.app.clients.google_places import GooglePlacesClient, PlaceResolution
 from backend.app.db.supabase import get_supabase_client
 from backend.app.dependencies import get_current_user_id
 from backend.app.main import app
@@ -66,6 +67,43 @@ def test_preview_location_from_google_link_returns_200(client: TestClient, monke
         assert data["suggested_category"] == "Museum"
     finally:
         app.dependency_overrides.clear()
+
+
+def test_follow_redirects_stops_at_google_maps_url():
+    """_follow_redirects_if_needed must stop at google.com/maps and NOT follow the
+    next redirect (e.g. /sorry/index 429), so the parsed URL stays parseable."""
+    maps_long_url = (
+        "https://www.google.com/maps/place/Jingui+Tea+Market/"
+        "@23.1035561,113.2143243,14z/data=!4m6!3m5"
+        "!1s0x340257d8216a59a9:0x1df111d583326185"
+        "!8m2!3d23.1035643!4d113.2271038"
+    )
+    sorry_url = "https://www.google.com/sorry/index?continue=..."
+
+    def _make_response(url):
+        resp = MagicMock()
+        if "maps.app.goo.gl" in url:
+            resp.status_code = 302
+            resp.headers = {"location": maps_long_url}
+        elif "google.com/maps" in url:
+            # Simulate Google redirecting to the CAPTCHA page
+            resp.status_code = 302
+            resp.headers = {"location": sorry_url}
+        else:
+            resp.status_code = 200
+            resp.headers = {}
+        return resp
+
+    with patch("backend.app.clients.google_places.GooglePlacesClient.__init__", return_value=None):
+        client = GooglePlacesClient.__new__(GooglePlacesClient)
+        client._http = MagicMock()
+        client._http.get.side_effect = lambda url, **_kw: _make_response(url)
+
+        result = client._follow_redirects_if_needed("https://maps.app.goo.gl/mWqZjbYLsLiZFfFK9")
+
+    # Must stop at the Maps URL, never reaching /sorry/
+    assert "google.com/maps" in result
+    assert "sorry" not in result
 
 
 def test_preview_location_missing_google_link_returns_422(client: TestClient, monkeypatch):
