@@ -98,9 +98,7 @@ export function CreateTripDialog({
 
         <div className="space-y-4 px-6 pb-6 pt-4">
           <DialogHeader>
-            <DialogTitle className="text-center">
-              Create a new trip
-            </DialogTitle>
+            <DialogTitle className="text-center">Create a new trip</DialogTitle>
             <DialogDescription className="text-center">
               Give your trip a name and optional dates.
             </DialogDescription>
@@ -109,71 +107,71 @@ export function CreateTripDialog({
           {error && <ErrorBanner message={error} />}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="trip-name" className="text-content-primary">
-              Trip name
-            </Label>
-            <Input
-              id="trip-name"
-              placeholder="e.g. Paris Summer 2026"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              autoFocus
-              className="rounded-lg border-[#E8E5DD] bg-surface-card focus-visible:ring-brand-green"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label className="text-content-primary">Start date</Label>
-              <DatePicker
-                value={startDate}
-                onChange={(date) => {
-                  setStartDate(date);
-                  if (endDate && date && endDate < date) {
-                    setEndDate(undefined);
-                  }
-                }}
-                placeholder="Start date"
+              <Label htmlFor="trip-name" className="text-content-primary">
+                Trip name
+              </Label>
+              <Input
+                id="trip-name"
+                placeholder="e.g. Paris Summer 2026"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                autoFocus
+                className="rounded-lg border-[#E8E5DD] bg-surface-card focus-visible:ring-brand-green"
               />
             </div>
-            <div className="space-y-2">
-              <Label className="text-content-primary">End date</Label>
-              <DatePicker
-                value={endDate}
-                onChange={setEndDate}
-                placeholder="End date"
-                fromDate={startDate}
-              />
-            </div>
-          </div>
 
-          {tripDuration && (
-            <div className="flex items-center gap-2">
-              <span className="rounded-full bg-brand-green-light px-3 py-1 text-xs font-medium text-brand-green">
-                {tripDuration}
-              </span>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-content-primary">Start date</Label>
+                <DatePicker
+                  value={startDate}
+                  onChange={(date) => {
+                    setStartDate(date);
+                    if (endDate && date && endDate < date) {
+                      setEndDate(undefined);
+                    }
+                  }}
+                  placeholder="Start date"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-content-primary">End date</Label>
+                <DatePicker
+                  value={endDate}
+                  onChange={setEndDate}
+                  placeholder="End date"
+                  fromDate={startDate}
+                />
+              </div>
             </div>
-          )}
 
-          <div className="flex justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              className="cursor-pointer rounded-full px-5 py-2 text-sm font-medium text-content-muted transition-colors duration-150 hover:bg-brand-green-light hover:text-content-primary"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="cursor-pointer rounded-full bg-brand-terracotta px-6 py-2 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-brand-terracotta-dark hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-terracotta focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {loading ? "Creating…" : "Create trip"}
-            </button>
-          </div>
-        </form>
+            {tripDuration && (
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-brand-green-light px-3 py-1 text-xs font-medium text-brand-green">
+                  {tripDuration}
+                </span>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="cursor-pointer rounded-full px-5 py-2 text-sm font-medium text-content-muted transition-colors duration-150 hover:bg-brand-green-light hover:text-content-primary"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="cursor-pointer rounded-full bg-brand-terracotta px-6 py-2 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-brand-terracotta-dark hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-terracotta focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {loading ? "Creating…" : "Create trip"}
+              </button>
+            </div>
+          </form>
         </div>
       </DialogContent>
     </Dialog>

@@ -16,9 +16,7 @@ const mockSignInWithOAuth = vi.fn();
 const mockResetPasswordForEmail = vi.fn();
 const mockSignUp = vi.fn();
 
-const mockGetUser = vi.fn(() =>
-  Promise.resolve({ data: { user: null } })
-);
+const mockGetUser = vi.fn(() => Promise.resolve({ data: { user: null } }));
 
 vi.mock("@/lib/supabase", () => ({
   createBrowserClient: () => ({

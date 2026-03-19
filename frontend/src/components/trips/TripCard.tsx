@@ -31,10 +31,7 @@ function formatDate(dateStr: string): string {
   });
 }
 
-function formatDateDisplay(
-  start?: string | null,
-  end?: string | null
-): string {
+function formatDateDisplay(start?: string | null, end?: string | null): string {
   if (!start && !end) return "Dates still open";
   if (start && end) return `${formatDate(start)} \u2014 ${formatDate(end)}`;
   if (start) return `Starts ${formatDate(start)}`;
@@ -56,9 +53,7 @@ export function TripCard({
   return (
     <div
       className={`group overflow-hidden rounded-xl border border-[#E8E5DD] bg-surface-card shadow-sm transition-all duration-200${
-        onClick
-          ? " cursor-pointer hover:-translate-y-0.5 hover:shadow-md"
-          : ""
+        onClick ? " cursor-pointer hover:-translate-y-0.5 hover:shadow-md" : ""
       }`}
       onClick={() => onClick?.(id)}
       role={onClick ? "button" : undefined}

@@ -7,8 +7,7 @@ export default function HomePage() {
       {/* Hero section */}
       <section className="flex w-full flex-col items-center px-4 pb-12 pt-10 sm:pb-16 sm:pt-14">
         <h1 className="max-w-2xl text-center font-serif text-5xl font-bold leading-tight tracking-tight text-content-primary sm:text-6xl md:text-7xl">
-          Plan your next{" "}
-          <span className="text-brand-green">adventure</span>
+          Plan your next <span className="text-brand-green">adventure</span>
         </h1>
         <p className="mt-6 max-w-lg text-center text-lg text-content-muted">
           Collect places, build day-by-day itineraries, and explore your
@@ -27,8 +26,10 @@ export default function HomePage() {
       {/* Feature cards */}
       <section className="w-full max-w-4xl px-4 pb-10">
         <div className="grid gap-6 sm:grid-cols-3">
-          <div className="rounded-xl border border-[#E8E5DD] border-l-brand-green bg-surface-card p-6 shadow-sm transition-shadow duration-200 hover:shadow-md"
-               style={{ borderLeftWidth: "3px" }}>
+          <div
+            className="rounded-xl border border-[#E8E5DD] border-l-brand-green bg-surface-card p-6 shadow-sm transition-shadow duration-200 hover:shadow-md"
+            style={{ borderLeftWidth: "3px" }}
+          >
             <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-brand-green-light text-brand-green">
               <MapPin size={18} />
             </div>
@@ -40,8 +41,10 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="rounded-xl border border-[#E8E5DD] border-l-brand-green bg-surface-card p-6 shadow-sm transition-shadow duration-200 hover:shadow-md"
-               style={{ borderLeftWidth: "3px" }}>
+          <div
+            className="rounded-xl border border-[#E8E5DD] border-l-brand-green bg-surface-card p-6 shadow-sm transition-shadow duration-200 hover:shadow-md"
+            style={{ borderLeftWidth: "3px" }}
+          >
             <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-brand-green-light text-brand-green">
               <Calendar size={18} />
             </div>
@@ -53,8 +56,10 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="rounded-xl border border-[#E8E5DD] border-l-brand-green bg-surface-card p-6 shadow-sm transition-shadow duration-200 hover:shadow-md"
-               style={{ borderLeftWidth: "3px" }}>
+          <div
+            className="rounded-xl border border-[#E8E5DD] border-l-brand-green bg-surface-card p-6 shadow-sm transition-shadow duration-200 hover:shadow-md"
+            style={{ borderLeftWidth: "3px" }}
+          >
             <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-brand-green-light text-brand-green">
               <Route size={18} />
             </div>
