@@ -27,7 +27,7 @@ vi.mock("@/lib/supabase", () => ({
       signInWithOAuth: mockSignInWithOAuth,
       resetPasswordForEmail: mockResetPasswordForEmail,
       signUp: mockSignUp,
-      getUser: (...args: unknown[]) => mockGetUser(...args),
+      getUser: () => mockGetUser(),
     },
   }),
 }));
