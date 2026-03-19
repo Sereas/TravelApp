@@ -4,6 +4,20 @@
 
 @layer base {
   :root {
+    /* ShtabTravel brand tokens */
+    --color-bg: #F2EFE7;
+    --color-surface: #FFFFFF;
+    --color-text-primary: #1C1F1A;
+    --color-text-muted: #6B7062;
+    --color-brand-green: #2D6A4F;
+    --color-brand-green-light: #E8F0EC;
+    --color-brand-green-dark: #1E4A36;
+    --color-brand-terracotta: #C17858;
+    --color-brand-terracotta-light: #F0DDD5;
+    --color-brand-terracotta-dark: #8B5A3E;
+    --color-border-accent: #2D6A4F;
+
+    /* shadcn/ui base tokens */
     --background: 30 25% 98%;
     --foreground: 20 20% 10%;
 

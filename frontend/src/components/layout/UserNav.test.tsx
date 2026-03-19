@@ -37,11 +37,25 @@ describe("UserNav", () => {
     });
   });
 
-  it("renders email and sign-out button when user is logged in", async () => {
+  it("renders profile button when user is logged in", async () => {
     mockGetUser.mockResolvedValue({
       data: { user: { email: "user@test.com" } },
     });
     render(<UserNav />);
+    expect(
+      await screen.findByRole("button", { name: /profile menu/i })
+    ).toBeInTheDocument();
+  });
+
+  it("shows email and sign-out in popover when profile is clicked", async () => {
+    mockGetUser.mockResolvedValue({
+      data: { user: { email: "user@test.com" } },
+    });
+    render(<UserNav />);
+    await userEvent.click(
+      await screen.findByRole("button", { name: /profile menu/i })
+    );
+
     expect(await screen.findByText("user@test.com")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /sign out/i })
@@ -53,9 +67,12 @@ describe("UserNav", () => {
       data: { user: { email: "user@test.com" } },
     });
     render(<UserNav />);
-    await screen.findByText("user@test.com");
-
-    await userEvent.click(screen.getByRole("button", { name: /sign out/i }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /profile menu/i })
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: /sign out/i })
+    );
 
     expect(mockSignOut).toHaveBeenCalledOnce();
     expect(window.location.href).toBe("/login");

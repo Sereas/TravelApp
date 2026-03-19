@@ -7,7 +7,7 @@ const mockPush = vi.fn();
 const mockRefresh = vi.fn();
 const mockGet = vi.fn(() => null);
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockPush, refresh: mockRefresh }),
+  useRouter: () => ({ push: mockPush, refresh: mockRefresh, replace: vi.fn() }),
   useSearchParams: () => ({ get: mockGet }),
 }));
 
@@ -16,6 +16,10 @@ const mockSignInWithOAuth = vi.fn();
 const mockResetPasswordForEmail = vi.fn();
 const mockSignUp = vi.fn();
 
+const mockGetUser = vi.fn(() =>
+  Promise.resolve({ data: { user: null } })
+);
+
 vi.mock("@/lib/supabase", () => ({
   createBrowserClient: () => ({
     auth: {
@@ -23,6 +27,7 @@ vi.mock("@/lib/supabase", () => ({
       signInWithOAuth: mockSignInWithOAuth,
       resetPasswordForEmail: mockResetPasswordForEmail,
       signUp: mockSignUp,
+      getUser: (...args: unknown[]) => mockGetUser(...args),
     },
   }),
 }));

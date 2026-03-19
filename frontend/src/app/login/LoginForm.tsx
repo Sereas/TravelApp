@@ -1,13 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ErrorBanner } from "@/components/feedback/ErrorBanner";
 import { createBrowserClient } from "@/lib/supabase";
-import { MapPin } from "lucide-react";
 
 type AuthMode = "login" | "signup";
 
@@ -15,6 +13,15 @@ export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const passwordUpdated = searchParams.get("message") === "password_updated";
+
+  useEffect(() => {
+    const supabase = createBrowserClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user && !passwordUpdated) {
+        router.replace("/trips");
+      }
+    });
+  }, [router, passwordUpdated]);
   const [mode, setMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -120,42 +127,39 @@ export function LoginForm() {
   const isLogin = mode === "login";
 
   return (
-    <div className="flex min-h-[60vh] items-center justify-center">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="flex flex-col items-center space-y-3 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary shadow-md shadow-primary/20">
-            <MapPin size={24} className="text-primary-foreground" />
-          </div>
-          <div className="space-y-1">
-            <h1 className="text-2xl font-bold tracking-tight">
-              {isLogin ? "Welcome back" : "Create an account"}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {isLogin
-                ? "Sign in to plan your next trip"
-                : "Sign up to start planning trips"}
-            </p>
-          </div>
+    <div className="flex min-h-[60vh] items-center justify-center px-4">
+      <div className="w-full max-w-sm">
+        {/* Header */}
+        <div className="mb-8 text-center">
+          <h1 className="font-serif text-3xl font-bold text-content-primary">
+            {isLogin ? "Welcome back" : "Create an account"}
+          </h1>
+          <p className="mt-2 text-sm text-content-muted">
+            {isLogin
+              ? "Sign in to plan your next trip"
+              : "Sign up to start planning trips"}
+          </p>
         </div>
 
+        {/* Banners */}
         {error && <ErrorBanner message={error} />}
 
         {passwordUpdated && (
-          <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+          <div className="mb-4 rounded-lg border border-brand-green/20 bg-brand-green-light px-4 py-3 text-sm text-brand-green-dark">
             Your password has been updated successfully. You can sign in with
             your new password.
           </div>
         )}
 
         {resetSent && (
-          <div className="rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
+          <div className="mb-4 rounded-lg border border-brand-green/20 bg-brand-green-light px-4 py-3 text-sm text-content-muted">
             Password reset link sent to <strong>{email}</strong>. Check your
             inbox.
           </div>
         )}
 
         {confirmationSent && (
-          <div className="rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
+          <div className="mb-4 rounded-lg border border-brand-green/20 bg-brand-green-light px-4 py-3 text-sm text-content-muted">
             Confirmation email sent to <strong>{email}</strong>. Check your
             inbox and click the link to activate your account.
           </div>
@@ -165,7 +169,9 @@ export function LoginForm() {
           <>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email" className="text-content-primary">
+                  Email
+                </Label>
                 <Input
                   id="email"
                   type="email"
@@ -174,11 +180,14 @@ export function LoginForm() {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   autoComplete="email"
+                  className="rounded-lg border-[#E8E5DD] bg-surface-card focus-visible:ring-brand-green"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password" className="text-content-primary">
+                  Password
+                </Label>
                 <Input
                   id="password"
                   type="password"
@@ -188,12 +197,18 @@ export function LoginForm() {
                   required
                   minLength={6}
                   autoComplete={isLogin ? "current-password" : "new-password"}
+                  className="rounded-lg border-[#E8E5DD] bg-surface-card focus-visible:ring-brand-green"
                 />
               </div>
 
               {!isLogin && (
                 <div className="space-y-2">
-                  <Label htmlFor="confirm-password">Confirm password</Label>
+                  <Label
+                    htmlFor="confirm-password"
+                    className="text-content-primary"
+                  >
+                    Confirm password
+                  </Label>
                   <Input
                     id="confirm-password"
                     type="password"
@@ -203,13 +218,14 @@ export function LoginForm() {
                     required
                     minLength={6}
                     autoComplete="new-password"
+                    className="rounded-lg border-[#E8E5DD] bg-surface-card focus-visible:ring-brand-green"
                   />
                 </div>
               )}
 
-              <Button
+              <button
                 type="submit"
-                className="w-full rounded-xl shadow-md"
+                className="w-full cursor-pointer rounded-full bg-brand-terracotta px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-brand-terracotta-dark hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-terracotta focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={loading}
               >
                 {loading
@@ -219,39 +235,38 @@ export function LoginForm() {
                   : isLogin
                     ? "Sign in"
                     : "Create account"}
-              </Button>
+              </button>
             </form>
 
             {isLogin && (
-              <div className="text-center">
+              <div className="mt-4 text-center">
                 <button
                   type="button"
                   onClick={handleForgotPassword}
-                  className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
+                  className="cursor-pointer text-sm text-content-muted underline underline-offset-4 transition-colors duration-150 hover:text-brand-green"
                 >
                   Forgot your password?
                 </button>
               </div>
             )}
 
-            <div className="relative">
+            <div className="relative my-6">
               <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-border" />
+                <span className="w-full border-t border-[#E8E5DD]" />
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground">
+                <span className="bg-surface-page px-2 text-content-muted">
                   Or continue with
                 </span>
               </div>
             </div>
 
-            <Button
+            <button
               type="button"
-              variant="outline"
-              className="w-full rounded-xl"
               onClick={handleGoogleLogin}
+              className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-[#E8E5DD] bg-surface-card px-4 py-2.5 text-sm font-medium text-content-primary shadow-sm transition-all duration-200 hover:bg-brand-green-light hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green focus-visible:ring-offset-2"
             >
-              <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
+              <svg className="h-4 w-4" viewBox="0 0 24 24">
                 <path
                   d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
                   fill="#4285F4"
@@ -270,18 +285,18 @@ export function LoginForm() {
                 />
               </svg>
               Continue with Google
-            </Button>
+            </button>
           </>
         )}
 
-        <div className="text-center text-sm text-muted-foreground">
+        <div className="mt-6 text-center text-sm text-content-muted">
           {isLogin ? (
             <>
               Don&apos;t have an account?{" "}
               <button
                 type="button"
                 onClick={() => switchMode("signup")}
-                className="font-medium text-foreground underline underline-offset-4 hover:text-primary"
+                className="cursor-pointer font-medium text-brand-green underline underline-offset-4 transition-colors duration-150 hover:text-brand-green-dark"
               >
                 Create one
               </button>
@@ -292,7 +307,7 @@ export function LoginForm() {
               <button
                 type="button"
                 onClick={() => switchMode("login")}
-                className="font-medium text-foreground underline underline-offset-4 hover:text-primary"
+                className="cursor-pointer font-medium text-brand-green underline underline-offset-4 transition-colors duration-150 hover:text-brand-green-dark"
               >
                 Sign in
               </button>

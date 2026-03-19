@@ -27,7 +27,8 @@ vi.mock("@/lib/supabase", () => ({
 describe("PageShell", () => {
   it("renders the header with site name", () => {
     render(<PageShell>content</PageShell>);
-    expect(screen.getByText("Shtab Travel")).toBeInTheDocument();
+    expect(screen.getByText("Shtab")).toBeInTheDocument();
+    expect(screen.getByText("Travel")).toBeInTheDocument();
   });
 
   it("renders children inside main", () => {

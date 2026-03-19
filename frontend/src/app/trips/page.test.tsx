@@ -63,7 +63,7 @@ describe("TripsPage", () => {
     render(<TripsPage />);
 
     expect(
-      await screen.findByText(/haven't created any trips/i)
+      await screen.findByText(/plan your first/i)
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /create your first trip/i })
@@ -106,7 +106,7 @@ describe("TripsPage", () => {
     });
     render(<TripsPage />);
 
-    await screen.findByText(/haven't created any trips/i);
+    await screen.findByText(/plan your first/i);
     await userEvent.click(
       screen.getByRole("button", { name: /create your first trip/i })
     );

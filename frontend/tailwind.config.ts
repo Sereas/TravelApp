@@ -43,6 +43,29 @@ const config: Config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        brand: {
+          green: {
+            DEFAULT: "#2D6A4F",
+            light: "#E8F0EC",
+            dark: "#1E4A36",
+          },
+          terracotta: {
+            DEFAULT: "#C17858",
+            light: "#F0DDD5",
+            dark: "#8B5A3E",
+          },
+        },
+        surface: {
+          page: "#F2EFE7",
+          card: "#FFFFFF",
+        },
+        content: {
+          primary: "#1C1F1A",
+          muted: "#6B7062",
+        },
+      },
+      fontFamily: {
+        serif: ["var(--font-serif)", "serif"],
       },
       borderRadius: {
         lg: "var(--radius)",

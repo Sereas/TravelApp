@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Flag pole -->
+  <line x1="32" y1="6" x2="32" y2="24" stroke="#2D6A4F" stroke-width="2.2" stroke-linecap="round"/>
+  <!-- Flag -->
+  <path d="M32 6 L44 10 L32 14 Z" fill="#C17858"/>
+  <!-- Star on flag -->
+  <path d="M37 10 L35.8 9.2 L36.2 10.6 L35 11.4 L36.4 11.4 L37 12.8 L37.6 11.4 L39 11.4 L37.8 10.6 L38.2 9.2 Z" fill="#FFFFFF" transform="scale(0.7) translate(16.5 4.5)"/>
+  <!-- Tent body -->
+  <path d="M10 52 L32 20 L54 52" stroke="#2D6A4F" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Tent opening -->
+  <path d="M26 52 L32 36 L38 52" stroke="#2D6A4F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Tent base -->
+  <line x1="8" y1="52" x2="56" y2="52" stroke="#2D6A4F" stroke-width="3" stroke-linecap="round"/>
+  <!-- Tent flaps -->
+  <path d="M22 36 Q26 32 32 20" stroke="#2D6A4F" stroke-width="2" stroke-linecap="round" fill="none"/>
+  <path d="M42 36 Q38 32 32 20" stroke="#2D6A4F" stroke-width="2" stroke-linecap="round" fill="none"/>
+</svg>

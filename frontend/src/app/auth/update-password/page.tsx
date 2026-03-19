@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ErrorBanner } from "@/components/feedback/ErrorBanner";
@@ -99,40 +98,44 @@ export default function UpdatePasswordPage() {
     }, 1500);
   }
 
+  // Loading state
   if (sessionReady === null) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="text-sm text-muted-foreground">Loading…</div>
+        <p className="text-sm text-content-muted">Loading…</p>
       </div>
     );
   }
 
+  // Invalid / expired link
   if (sessionReady === false) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="w-full max-w-sm space-y-6 text-center">
-          <div className="space-y-2">
-            <h1 className="text-2xl font-bold tracking-tight">
-              Invalid or expired link
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              This password reset link is invalid or has expired. Request a new
-              one from the login page.
-            </p>
-          </div>
-          <Button asChild className="w-full">
-            <Link href="/login">Back to login</Link>
-          </Button>
+      <div className="flex min-h-[60vh] items-center justify-center px-4">
+        <div className="w-full max-w-sm text-center">
+          <h1 className="font-serif text-3xl font-bold text-content-primary">
+            Invalid or expired link
+          </h1>
+          <p className="mt-3 text-sm text-content-muted">
+            This password reset link is invalid or has expired. Request a new
+            one from the login page.
+          </p>
+          <Link
+            href="/login"
+            className="mt-6 inline-block cursor-pointer rounded-full bg-brand-terracotta px-8 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-brand-terracotta-dark hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-terracotta focus-visible:ring-offset-2"
+          >
+            Back to login
+          </Link>
         </div>
       </div>
     );
   }
 
+  // Success state
   if (success) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="w-full max-w-sm space-y-4 text-center">
-          <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+      <div className="flex min-h-[60vh] items-center justify-center px-4">
+        <div className="w-full max-w-sm text-center">
+          <div className="rounded-lg border border-brand-green/20 bg-brand-green-light px-4 py-3 text-sm text-brand-green-dark">
             Your password has been updated successfully. Redirecting to login…
           </div>
         </div>
@@ -140,14 +143,15 @@ export default function UpdatePasswordPage() {
     );
   }
 
+  // Form
   return (
-    <div className="flex min-h-[60vh] items-center justify-center">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="space-y-2 text-center">
-          <h1 className="text-2xl font-bold tracking-tight">
+    <div className="flex min-h-[60vh] items-center justify-center px-4">
+      <div className="w-full max-w-sm">
+        <div className="mb-8 text-center">
+          <h1 className="font-serif text-3xl font-bold text-content-primary">
             Set new password
           </h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="mt-2 text-sm text-content-muted">
             Enter your new password below.
           </p>
         </div>
@@ -156,7 +160,9 @@ export default function UpdatePasswordPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="password">New password</Label>
+            <Label htmlFor="password" className="text-content-primary">
+              New password
+            </Label>
             <Input
               id="password"
               type="password"
@@ -166,10 +172,13 @@ export default function UpdatePasswordPage() {
               required
               minLength={MIN_PASSWORD_LENGTH}
               autoComplete="new-password"
+              className="rounded-lg border-[#E8E5DD] bg-surface-card focus-visible:ring-brand-green"
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="confirm-password">Confirm password</Label>
+            <Label htmlFor="confirm-password" className="text-content-primary">
+              Confirm password
+            </Label>
             <Input
               id="confirm-password"
               type="password"
@@ -179,17 +188,22 @@ export default function UpdatePasswordPage() {
               required
               minLength={MIN_PASSWORD_LENGTH}
               autoComplete="new-password"
+              className="rounded-lg border-[#E8E5DD] bg-surface-card focus-visible:ring-brand-green"
             />
           </div>
-          <Button type="submit" className="w-full" disabled={loading}>
+          <button
+            type="submit"
+            className="w-full cursor-pointer rounded-full bg-brand-terracotta px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-brand-terracotta-dark hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-terracotta focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={loading}
+          >
             {loading ? "Updating…" : "Update password"}
-          </Button>
+          </button>
         </form>
 
-        <p className="text-center text-sm text-muted-foreground">
+        <p className="mt-6 text-center text-sm text-content-muted">
           <Link
             href="/login"
-            className="underline underline-offset-4 hover:text-foreground"
+            className="cursor-pointer text-brand-green underline underline-offset-4 transition-colors duration-150 hover:text-brand-green-dark"
           >
             Back to login
           </Link>
