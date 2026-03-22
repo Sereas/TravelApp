@@ -3,10 +3,10 @@
 import { useState } from "react";
 import {
   CalendarCheck,
+  CalendarPlus,
   ChevronDown,
   ChevronUp,
   Clock,
-  ExternalLink,
   MapPin,
   MessageSquare,
   MoreVertical,
@@ -15,7 +15,11 @@ import {
   Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { CATEGORY_META, type CategoryKey } from "@/lib/location-constants";
+import {
+  CATEGORY_META,
+  type CategoryKey,
+  type DayChoice,
+} from "@/lib/location-constants";
 import { CategoryIcon } from "./CategoryIcon";
 import {
   Popover,
@@ -39,6 +43,10 @@ export interface LocationCardProps {
   inItinerary?: boolean;
   /** Which day(s) this location appears on in the itinerary (e.g. "May 15", "Day 1, Day 3"). */
   itineraryDayLabel?: string | null;
+  /** Available days for scheduling. When provided, shows a "Schedule" action. */
+  availableDays?: DayChoice[];
+  /** Called when user picks a day to schedule this location to. */
+  onScheduleToDay?: (dayId: string) => void;
   /** Legacy: inline Edit/Delete. Prefer onEdit + deleteTrigger for menu. */
   actions?: React.ReactNode;
   onEdit?: () => void;
@@ -54,13 +62,13 @@ function BookingBadge({ status }: { status: string }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
+        "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
         isBooked
-          ? "bg-emerald-50 text-emerald-700"
-          : "bg-amber-50 text-amber-700"
+          ? "bg-emerald-50/90 text-emerald-700 backdrop-blur-sm"
+          : "bg-amber-50/90 text-amber-700 backdrop-blur-sm"
       )}
     >
-      <Ticket size={11} />
+      <Ticket size={10} />
       {isBooked ? "Booked \u2713" : "Booking needed"}
     </span>
   );
@@ -102,6 +110,8 @@ export function LocationCard({
   added_by_email,
   inItinerary,
   itineraryDayLabel,
+  availableDays,
+  onScheduleToDay,
   actions,
   onEdit,
   onDelete,
@@ -112,6 +122,11 @@ export function LocationCard({
   const hasGeo = city || address;
   const useMenu = onEdit != null || onDelete != null || deleteTrigger != null;
   const [menuOpen, setMenuOpen] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const canSchedule =
+    availableDays != null &&
+    availableDays.length > 0 &&
+    onScheduleToDay != null;
   const [hoursExpanded, setHoursExpanded] = useState(false);
   const [noteExpanded, setNoteExpanded] = useState(false);
   const isDetailedHoursValue =
@@ -122,51 +137,54 @@ export function LocationCard({
   return (
     <div
       className={cn(
-        "group relative flex flex-col overflow-hidden rounded-xl border bg-card transition-all hover:shadow-md",
+        "group relative flex flex-col overflow-hidden rounded-xl border bg-surface-card transition-all hover:shadow-md",
         inItinerary
-          ? "border-primary/25 shadow-sm shadow-primary/5"
-          : "border-border/60",
+          ? "border-brand-green/25 shadow-sm shadow-brand-green/5"
+          : "border-warm-border",
         className
       )}
     >
-      {/* Colored top accent bar */}
-      <div
-        className={cn(
-          "h-1 w-full shrink-0",
-          catMeta?.bg ?? "bg-gradient-to-r from-gray-100 to-gray-50"
-        )}
-      />
+      {/* Image placeholder area */}
+      <div className="relative aspect-[16/10] w-full overflow-hidden rounded-t-xl">
+        <div
+          className={cn(
+            "flex h-full w-full items-center justify-center bg-gradient-to-br",
+            catMeta?.gradient ?? "from-gray-100 to-gray-50"
+          )}
+          data-testid="image-placeholder"
+        >
+          {category ? (
+            <CategoryIcon
+              category={category as CategoryKey}
+              size={40}
+              className="opacity-20"
+            />
+          ) : (
+            <MapPin size={40} className="text-gray-400 opacity-20" />
+          )}
+        </div>
 
-      <div className="flex flex-1 flex-col px-3.5 pb-3 pt-2.5">
-        {/* Header row: name + category text + badges + menu */}
-        <div className="flex shrink-0 items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <h3 className="text-[15px] font-semibold leading-snug tracking-tight">
-              {name}
-            </h3>
-            <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-              {category && (
-                <span
-                  className={cn(
-                    "text-[11px] font-medium",
-                    catMeta?.text ?? "text-muted-foreground"
-                  )}
-                >
-                  {category}
-                </span>
-              )}
-              {requires_booking && requires_booking !== "no" && (
-                <BookingBadge status={requires_booking} />
-              )}
-            </div>
-          </div>
-          {useMenu && (
+        {/* Overlaid badges */}
+        <div className="absolute bottom-3 left-3 flex items-center gap-1.5">
+          {category && (
+            <span className="rounded-full bg-white/90 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-content-primary backdrop-blur-sm">
+              {category}
+            </span>
+          )}
+          {requires_booking && requires_booking !== "no" && (
+            <BookingBadge status={requires_booking} />
+          )}
+        </div>
+
+        {/* Three-dot menu overlay */}
+        {useMenu && (
+          <div className="absolute right-2 top-2">
             <Popover open={menuOpen} onOpenChange={setMenuOpen}>
               <PopoverTrigger asChild>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7 shrink-0 rounded-full text-muted-foreground/50 opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 data-[state=open]:opacity-100"
+                  className="h-7 w-7 shrink-0 rounded-full bg-black/20 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/40 hover:text-white group-hover:opacity-100 data-[state=open]:opacity-100"
                   aria-label="Location actions"
                 >
                   <MoreVertical size={16} />
@@ -205,22 +223,35 @@ export function LocationCard({
                 )}
               </PopoverContent>
             </Popover>
-          )}
-          {!useMenu && actions != null && (
-            <div className="flex shrink-0 items-center gap-1">{actions}</div>
-          )}
-        </div>
+          </div>
+        )}
+        {!useMenu && actions != null && (
+          <div className="absolute right-2 top-2 flex items-center gap-1">
+            {actions}
+          </div>
+        )}
+      </div>
 
-        {/* Content: address, hours, notes */}
+      {/* Content area */}
+      <div className="flex flex-1 flex-col px-3.5 pb-3 pt-3">
+        {/* Location name */}
+        <h3 className="text-[15px] font-semibold leading-snug tracking-tight text-content-primary">
+          {name}
+        </h3>
+
+        {/* City — prominent but subordinate to name */}
+        {city && (
+          <p className="mt-0.5 text-xs font-medium text-content-muted">
+            {city}
+          </p>
+        )}
+
+        {/* Details: address, hours, notes */}
         <div className="mt-2 flex min-h-0 flex-1 flex-col gap-1.5">
-          {hasGeo && (
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <MapPin size={12} className="shrink-0 text-muted-foreground/50" />
-              <span className="truncate">
-                {city && address
-                  ? `${city} \u00B7 ${address}`
-                  : city || address}
-              </span>
+          {address && (
+            <div className="flex items-center gap-1.5 text-[11px] text-content-muted/70">
+              <MapPin size={11} className="shrink-0" />
+              <span className="truncate">{address}</span>
             </div>
           )}
           {working_hours && (
@@ -230,7 +261,7 @@ export function LocationCard({
                   <button
                     type="button"
                     onClick={() => setHoursExpanded((e) => !e)}
-                    className="flex w-fit items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                    className="flex w-fit items-center gap-1.5 text-xs text-content-muted hover:text-content-primary"
                     aria-expanded={hoursExpanded}
                     aria-label={
                       hoursExpanded
@@ -238,10 +269,7 @@ export function LocationCard({
                         : "View opening hours"
                     }
                   >
-                    <Clock
-                      size={12}
-                      className="shrink-0 text-muted-foreground/50"
-                    />
+                    <Clock size={12} className="shrink-0 opacity-50" />
                     <span className="underline decoration-dotted underline-offset-2">
                       {hoursExpanded
                         ? "Hide opening hours"
@@ -249,69 +277,83 @@ export function LocationCard({
                     </span>
                   </button>
                   {hoursExpanded && (
-                    <div className="ml-5 rounded-md bg-muted/40 px-2.5 py-1.5 text-[11px] leading-relaxed text-muted-foreground">
-                      {formatHoursLines(working_hours).map((line, i) => (
-                        <div key={i}>{line}</div>
-                      ))}
+                    <div className="ml-0.5 mt-1 rounded-lg border border-warm-border bg-surface-card">
+                      {formatHoursLines(working_hours).map((line, i) => {
+                        const parts = line.split(/:\s*(.+)/);
+                        const dayName = parts[0];
+                        const time = parts[1] || "";
+                        const isClosed = /closed/i.test(time);
+                        return (
+                          <div
+                            key={i}
+                            className={cn(
+                              "flex items-center justify-between px-2.5 py-1 text-[11px]",
+                              i > 0 && "border-t border-warm-border/60"
+                            )}
+                          >
+                            <span className="font-medium text-content-primary">
+                              {dayName}
+                            </span>
+                            <span
+                              className={
+                                isClosed
+                                  ? "text-content-muted/50"
+                                  : "text-content-muted"
+                              }
+                            >
+                              {time || line}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </>
               ) : (
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Clock
-                    size={12}
-                    className="shrink-0 text-muted-foreground/50"
-                  />
+                <div className="flex items-center gap-1.5 text-xs text-content-muted">
+                  <Clock size={12} className="shrink-0 opacity-50" />
                   {working_hours}
                 </div>
               )}
             </div>
           )}
           {note && (
-            <div className="rounded-lg bg-muted/40 px-2.5 py-1.5 text-xs leading-relaxed text-foreground/80">
-              <div className="flex items-start gap-1.5">
-                <MessageSquare
-                  size={12}
-                  className="mt-0.5 shrink-0 text-muted-foreground/50"
-                />
-                <div className="min-w-0 flex-1">
-                  {note.length <= NOTE_LONG_THRESHOLD ? (
-                    <span>{note}</span>
-                  ) : (
-                    <>
-                      <span>{noteExpanded ? note : notePreview(note)}</span>
-                      <button
-                        type="button"
-                        onClick={() => setNoteExpanded((e) => !e)}
-                        className="mt-0.5 inline-flex items-center gap-0.5 text-[11px] font-medium text-primary hover:underline"
-                        aria-expanded={noteExpanded}
-                      >
-                        {noteExpanded ? (
-                          <>
-                            Show less
-                            <ChevronUp size={11} />
-                          </>
-                        ) : (
-                          <>
-                            View note
-                            <ChevronDown size={11} />
-                          </>
-                        )}
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
+            <div className="rounded-lg border-l-2 border-brand-terracotta/30 bg-brand-terracotta/[0.04] py-1.5 pl-2.5 pr-2 text-xs leading-relaxed text-content-primary/80">
+              {note.length <= NOTE_LONG_THRESHOLD ? (
+                <span>{note}</span>
+              ) : (
+                <>
+                  <span>{noteExpanded ? note : notePreview(note)}</span>
+                  <button
+                    type="button"
+                    onClick={() => setNoteExpanded((e) => !e)}
+                    className="ml-1 inline-flex items-center gap-0.5 text-[11px] font-medium text-brand-terracotta hover:underline"
+                    aria-expanded={noteExpanded}
+                  >
+                    {noteExpanded ? (
+                      <>
+                        less
+                        <ChevronUp size={11} />
+                      </>
+                    ) : (
+                      <>
+                        more
+                        <ChevronDown size={11} />
+                      </>
+                    )}
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>
 
-        {/* Footer: itinerary status + Maps link + Added by */}
-        <div className="mt-3 flex shrink-0 flex-col gap-1 border-t border-border/40 pt-2">
+        {/* Footer: itinerary status + schedule + Maps link + Added by */}
+        <div className="mt-3 flex shrink-0 flex-col gap-1 border-t border-warm-border pt-2">
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1 text-[11px]">
+            <div className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide">
               {inItinerary ? (
-                <span className="inline-flex items-center gap-1 font-medium text-emerald-600">
+                <span className="inline-flex items-center gap-1 text-emerald-600">
                   <CalendarCheck size={12} className="shrink-0" />
                   <span>
                     {itineraryDayLabel
@@ -319,8 +361,49 @@ export function LocationCard({
                       : "Scheduled"}
                   </span>
                 </span>
+              ) : canSchedule ? (
+                <Popover open={scheduleOpen} onOpenChange={setScheduleOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-brand-terracotta transition-colors hover:text-brand-terracotta-dark"
+                      aria-label="Schedule to a day"
+                    >
+                      <CalendarPlus size={12} className="shrink-0" />
+                      <span>Schedule to day</span>
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    className="w-48 p-1"
+                    align="start"
+                    sideOffset={4}
+                  >
+                    <p className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-content-muted">
+                      Schedule to
+                    </p>
+                    <div className="flex max-h-52 flex-col overflow-y-auto">
+                      {availableDays!.map((day) => (
+                        <button
+                          key={day.id}
+                          type="button"
+                          className="flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm font-medium text-content-primary transition-colors hover:bg-brand-green-light"
+                          onClick={() => {
+                            onScheduleToDay!(day.id);
+                            setScheduleOpen(false);
+                          }}
+                        >
+                          <CalendarPlus
+                            size={13}
+                            className="shrink-0 text-brand-green"
+                          />
+                          {day.label}
+                        </button>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
               ) : (
-                <span className="inline-flex items-center gap-1 text-muted-foreground/50">
+                <span className="inline-flex items-center gap-1 text-content-muted/50">
                   <CalendarCheck size={12} className="shrink-0" />
                   <span>Not scheduled</span>
                 </span>
@@ -331,16 +414,15 @@ export function LocationCard({
                 href={google_link}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex shrink-0 items-center gap-1 rounded-md text-[11px] font-medium text-muted-foreground transition-colors hover:text-primary"
+                className="inline-flex shrink-0 items-center gap-1 rounded-md text-[11px] font-medium text-brand-terracotta transition-colors hover:text-brand-terracotta-dark"
                 aria-label="Open in Google Maps"
               >
-                <ExternalLink size={11} />
-                Location details
+                Details &rarr;
               </a>
             )}
           </div>
           {added_by_email && (
-            <p className="text-[11px] text-muted-foreground/50">
+            <p className="text-[11px] text-content-muted/50">
               Added by {added_by_email}
             </p>
           )}

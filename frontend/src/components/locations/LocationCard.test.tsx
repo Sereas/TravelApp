@@ -19,11 +19,12 @@ describe("LocationCard", () => {
     expect(screen.getByText("Paris")).toBeInTheDocument();
   });
 
-  it("renders city and address combined", () => {
+  it("renders city and address separately", () => {
     render(
       <LocationCard id="1" name="Louvre" city="Paris" address="Rue de Rivoli" />
     );
-    expect(screen.getByText("Paris \u00B7 Rue de Rivoli")).toBeInTheDocument();
+    expect(screen.getByText("Paris")).toBeInTheDocument();
+    expect(screen.getByText("Rue de Rivoli")).toBeInTheDocument();
   });
 
   it("renders address alone when no city", () => {
@@ -31,7 +32,7 @@ describe("LocationCard", () => {
     expect(screen.getByText("Rue de Rivoli")).toBeInTheDocument();
   });
 
-  it("renders Location details link when google_link provided", () => {
+  it("renders Details link when google_link provided", () => {
     render(
       <LocationCard
         id="1"
@@ -43,7 +44,7 @@ describe("LocationCard", () => {
     const link = screen.getByRole("link", { name: /open in google maps/i });
     expect(link).toBeInTheDocument();
     expect(link).toHaveAttribute("href", "https://maps.google.com/?q=louvre");
-    expect(screen.getByText("Location details")).toBeInTheDocument();
+    expect(screen.getByText(/Details/)).toBeInTheDocument();
   });
 
   it("renders standalone Location details link when no city/address", () => {
@@ -88,12 +89,14 @@ describe("LocationCard", () => {
     await user.click(
       screen.getByRole("button", { name: /view opening hours/i })
     );
-    expect(screen.getByText("Mon: Closed")).toBeInTheDocument();
-    expect(screen.getByText("Tue: 9:30 AM–6:00 PM")).toBeInTheDocument();
+    expect(screen.getByText("Mon")).toBeInTheDocument();
+    expect(screen.getByText("Closed")).toBeInTheDocument();
+    expect(screen.getByText("Tue")).toBeInTheDocument();
+    expect(screen.getByText("9:30 AM–6:00 PM")).toBeInTheDocument();
     await user.click(
       screen.getByRole("button", { name: /collapse opening hours/i })
     );
-    expect(screen.queryByText("Mon: Closed")).not.toBeInTheDocument();
+    expect(screen.queryByText("Closed")).not.toBeInTheDocument();
   });
 
   it("renders booking needed badge for requires_booking=yes", () => {
@@ -120,19 +123,19 @@ describe("LocationCard", () => {
     expect(noteEl).toBeInTheDocument();
   });
 
-  it("collapses long notes with View note and expands with Show less", async () => {
+  it("collapses long notes and expands with more/less toggle", async () => {
     const user = userEvent.setup();
     const longNote =
       "This is a very long note that exceeds the character threshold so it gets collapsed by default and the user can expand it to read the full content.";
     render(<LocationCard id="1" name="Louvre" note={longNote} />);
-    expect(screen.getByText(/View note/)).toBeInTheDocument();
+    expect(screen.getByText(/more/)).toBeInTheDocument();
     expect(screen.queryByText(longNote)).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /view note/i }));
+    await user.click(screen.getByRole("button", { name: /more/ }));
     expect(screen.getByText(longNote)).toBeInTheDocument();
-    expect(screen.getByText(/Show less/)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /show less/i }));
+    expect(screen.getByText(/less/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /less/ }));
     expect(screen.queryByText(longNote)).not.toBeInTheDocument();
-    expect(screen.getByText(/View note/)).toBeInTheDocument();
+    expect(screen.getByText(/more/)).toBeInTheDocument();
   });
 
   it("renders Added by footer when added_by_email is provided", () => {
@@ -180,7 +183,8 @@ describe("LocationCard", () => {
     );
     expect(screen.getByText("Eiffel Tower")).toBeInTheDocument();
     expect(screen.getByText("Viewpoint")).toBeInTheDocument();
-    expect(screen.getByText("Paris \u00B7 Champ de Mars")).toBeInTheDocument();
+    expect(screen.getByText("Paris")).toBeInTheDocument();
+    expect(screen.getByText("Champ de Mars")).toBeInTheDocument();
     expect(screen.getByText("9:30-23:00")).toBeInTheDocument();
     expect(screen.getByText("Booking needed")).toBeInTheDocument();
     expect(screen.getByText("Must visit at sunset")).toBeInTheDocument();
@@ -230,12 +234,75 @@ describe("LocationCard", () => {
     ).toBeInTheDocument();
   });
 
-  it("has accent bar at top of card", () => {
+  // --- Schedule to day tests ---
+
+  it("shows 'Schedule to day' button when availableDays provided and not in itinerary", () => {
+    render(
+      <LocationCard
+        id="1"
+        name="Louvre"
+        availableDays={[
+          { id: "d1", label: "May 15" },
+          { id: "d2", label: "May 16" },
+        ]}
+        onScheduleToDay={() => {}}
+      />
+    );
+    expect(
+      screen.getByRole("button", { name: /schedule to a day/i })
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Not scheduled")).not.toBeInTheDocument();
+  });
+
+  it("calls onScheduleToDay when a day is picked", async () => {
+    const user = userEvent.setup();
+    const onSchedule = vi.fn();
+    render(
+      <LocationCard
+        id="1"
+        name="Louvre"
+        availableDays={[
+          { id: "d1", label: "May 15" },
+          { id: "d2", label: "May 16" },
+        ]}
+        onScheduleToDay={onSchedule}
+      />
+    );
+    await user.click(
+      screen.getByRole("button", { name: /schedule to a day/i })
+    );
+    await user.click(screen.getByText("May 16"));
+    expect(onSchedule).toHaveBeenCalledWith("d2");
+  });
+
+  it("shows 'Not scheduled' when no availableDays and not in itinerary", () => {
+    render(<LocationCard id="1" name="Louvre" />);
+    expect(screen.getByText("Not scheduled")).toBeInTheDocument();
+  });
+
+  it("shows 'Scheduled' (not schedule button) when inItinerary even if days available", () => {
+    render(
+      <LocationCard
+        id="1"
+        name="Louvre"
+        inItinerary
+        itineraryDayLabel="May 15"
+        availableDays={[{ id: "d1", label: "May 15" }]}
+        onScheduleToDay={() => {}}
+      />
+    );
+    expect(screen.getByText("Scheduled · May 15")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /schedule to a day/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it("has image placeholder area at top of card", () => {
     const { container } = render(
-      <LocationCard id="1" name="Louvre" inItinerary />
+      <LocationCard id="1" name="Louvre" inItinerary category="Museum" />
     );
     const card = container.firstChild as HTMLElement;
     expect(card.className).toContain("rounded-xl");
-    expect(card.className).toContain("border-primary/25");
+    expect(screen.getByTestId("image-placeholder")).toBeInTheDocument();
   });
 });

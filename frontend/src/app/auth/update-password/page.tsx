@@ -172,7 +172,7 @@ export default function UpdatePasswordPage() {
               required
               minLength={MIN_PASSWORD_LENGTH}
               autoComplete="new-password"
-              className="rounded-lg border-[#E8E5DD] bg-surface-card focus-visible:ring-brand-green"
+              className="rounded-lg border-warm-border bg-surface-card focus-visible:ring-brand-green"
             />
           </div>
           <div className="space-y-2">
@@ -188,7 +188,7 @@ export default function UpdatePasswordPage() {
               required
               minLength={MIN_PASSWORD_LENGTH}
               autoComplete="new-password"
-              className="rounded-lg border-[#E8E5DD] bg-surface-card focus-visible:ring-brand-green"
+              className="rounded-lg border-warm-border bg-surface-card focus-visible:ring-brand-green"
             />
           </div>
           <button

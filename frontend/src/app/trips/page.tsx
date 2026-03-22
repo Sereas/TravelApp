@@ -96,7 +96,7 @@ export default function TripsPage() {
       {/* Empty state */}
       {!loading && !error && trips.length === 0 && (
         <div className="flex justify-center py-8">
-          <div className="w-full max-w-md rounded-xl border border-[#E8E5DD] bg-surface-card px-8 py-12 text-center shadow-sm">
+          <div className="w-full max-w-md rounded-xl border border-warm-border bg-surface-card px-8 py-12 text-center shadow-sm">
             <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-brand-green-light">
               <Compass size={32} className="text-brand-green opacity-40" />
             </div>

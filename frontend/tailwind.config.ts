@@ -63,6 +63,9 @@ const config: Config = {
           primary: "#1C1F1A",
           muted: "#6B7062",
         },
+        warm: {
+          border: "#E8E5DD",
+        },
       },
       fontFamily: {
         serif: ["var(--font-serif)", "serif"],

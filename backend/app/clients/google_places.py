@@ -58,13 +58,15 @@ class GooglePlacesClient:
         1. Follow short maps.app.goo.gl redirects to get the long Maps URL.
         2. Parse a human-readable name and precise lat/lng from the URL.
         3. Call places:searchText with that name and a circular locationBias.
-        4. Fallback: if parsing fails, call places:searchText with the full URL
-           as textQuery (best-effort).
+        4. If we have a name but no coordinates, search by name alone.
+        5. Fallback: call places:searchText with the full URL as textQuery.
         """
         long_url = self._follow_redirects_if_needed(google_link)
         name, lat, lng = self._extract_name_and_location_from_url(long_url)
         if name and lat is not None and lng is not None:
             return self._search_place_by_text(name, latitude=lat, longitude=lng, radius_m=500.0)
+        if name:
+            return self._search_place_by_text(name)
         return self._search_place_by_text(long_url)
 
     def _follow_redirects_if_needed(self, url: str) -> str:

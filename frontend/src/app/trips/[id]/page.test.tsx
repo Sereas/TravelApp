@@ -145,15 +145,16 @@ describe("TripDetailPage", () => {
     render(<TripDetailPage />);
 
     await screen.findByText("Eiffel Tower");
-    expect(screen.getByText("Viewpoint")).toBeInTheDocument();
-    expect(
-      screen.getByText("Paris · Champ de Mars, Paris")
-    ).toBeInTheDocument();
+    // "Viewpoint" appears both as badge on card and in filter toolbar
+    expect(screen.getAllByText("Viewpoint").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Champ de Mars, Paris")).toBeInTheDocument();
     expect(screen.getByText("9:00-23:00")).toBeInTheDocument();
     expect(screen.getByText("Booking needed")).toBeInTheDocument();
-    expect(screen.getByText(/Added by/)).toBeInTheDocument();
-    expect(screen.getByText(/alice@example\.com/)).toBeInTheDocument();
-    expect(screen.getByText("Museum")).toBeInTheDocument();
+    expect(screen.getAllByText(/Added by/).length).toBeGreaterThanOrEqual(1);
+    expect(
+      screen.getAllByText(/alice@example\.com/).length
+    ).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Museum").length).toBeGreaterThanOrEqual(1);
     expect(
       screen.getByRole("link", { name: /open in google maps/i })
     ).toBeInTheDocument();
@@ -209,9 +210,7 @@ describe("TripDetailPage", () => {
     render(<TripDetailPage />);
 
     await screen.findByText("Fail");
-    await userEvent.click(
-      screen.getByRole("button", { name: /back to trips/i })
-    );
+    await userEvent.click(screen.getByRole("button", { name: /all trips/i }));
     expect(mockPush).toHaveBeenCalledWith("/trips");
   });
 
@@ -221,9 +220,7 @@ describe("TripDetailPage", () => {
     render(<TripDetailPage />);
 
     await screen.findByText("Paris Summer");
-    await userEvent.click(
-      screen.getByRole("button", { name: /back to trips/i })
-    );
+    await userEvent.click(screen.getByRole("button", { name: /all trips/i }));
     expect(mockPush).toHaveBeenCalledWith("/trips");
   });
 
@@ -339,7 +336,7 @@ describe("TripDetailPage", () => {
     );
   });
 
-  it("shows 'Add location' button when locations exist", async () => {
+  it("shows 'Add Location' button when locations exist", async () => {
     mockGetTrip.mockResolvedValue(sampleTrip);
     mockListLocations.mockResolvedValue(sampleLocations);
     render(<TripDetailPage />);
@@ -385,7 +382,9 @@ describe("TripDetailPage", () => {
     const nameInput = screen.getByDisplayValue("Eiffel Tower");
     await userEvent.clear(nameInput);
     await userEvent.type(nameInput, "Eiffel Tower (top floor)");
-    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /^save changes$/i })
+    );
 
     expect(
       await screen.findByText("Eiffel Tower (top floor)")
@@ -417,16 +416,14 @@ describe("TripDetailPage", () => {
 
   // --- Location pool features ---
 
-  it("shows location count in section header", async () => {
+  it("shows location count in tab", async () => {
     mockGetTrip.mockResolvedValue(sampleTrip);
     mockListLocations.mockResolvedValue(sampleLocations);
     render(<TripDetailPage />);
 
     await screen.findByText("Eiffel Tower");
-    const tabpanel = screen.getByRole("tabpanel", {
-      name: /locations/i,
-    });
-    expect(tabpanel).toHaveTextContent("(2)");
+    const locationsTab = screen.getByRole("tab", { name: /locations/i });
+    expect(locationsTab).toHaveTextContent("(2)");
   });
 
   it("shows category filter chips when 2+ categories exist", async () => {
@@ -435,9 +432,13 @@ describe("TripDetailPage", () => {
     render(<TripDetailPage />);
 
     await screen.findByText("Eiffel Tower");
-    expect(screen.getByText("All (2)")).toBeInTheDocument();
-    expect(screen.getByText("Museum (1)")).toBeInTheDocument();
-    expect(screen.getByText("Viewpoint (1)")).toBeInTheDocument();
+    expect(screen.getByText("All Locations")).toBeInTheDocument();
+    // Category pills no longer show counts — just category names
+    const toolbar = screen.getByRole("toolbar", {
+      name: /filter locations by category/i,
+    });
+    expect(within(toolbar).getByText("Museum")).toBeInTheDocument();
+    expect(within(toolbar).getByText("Viewpoint")).toBeInTheDocument();
   });
 
   it("filters locations by category when chip is clicked", async () => {
@@ -446,12 +447,15 @@ describe("TripDetailPage", () => {
     render(<TripDetailPage />);
 
     await screen.findByText("Eiffel Tower");
-    await userEvent.click(screen.getByText("Museum (1)"));
+    const toolbar = screen.getByRole("toolbar", {
+      name: /filter locations by category/i,
+    });
+    await userEvent.click(within(toolbar).getByText("Museum"));
 
     expect(screen.getByText("Louvre Museum")).toBeInTheDocument();
     expect(screen.queryByText("Eiffel Tower")).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByText("All (2)"));
+    await userEvent.click(screen.getByText("All Locations"));
     expect(screen.getByText("Eiffel Tower")).toBeInTheDocument();
     expect(screen.getByText("Louvre Museum")).toBeInTheDocument();
   });
@@ -462,7 +466,7 @@ describe("TripDetailPage", () => {
     render(<TripDetailPage />);
 
     await screen.findByText("Eiffel Tower");
-    expect(screen.queryByText("All (1)")).not.toBeInTheDocument();
+    expect(screen.queryByText("All Locations")).not.toBeInTheDocument();
   });
 
   it("does not show group-by-city when all locations share a city", async () => {
@@ -472,7 +476,7 @@ describe("TripDetailPage", () => {
 
     await screen.findByText("Eiffel Tower");
     expect(
-      screen.queryByRole("button", { name: /group by city/i })
+      screen.queryByRole("button", { name: /group by/i })
     ).not.toBeInTheDocument();
   });
 
@@ -498,7 +502,7 @@ describe("TripDetailPage", () => {
     render(<TripDetailPage />);
 
     await screen.findByText("Eiffel Tower");
-    const groupBtn = screen.getByRole("button", { name: /group by city/i });
+    const groupBtn = screen.getByRole("button", { name: /group by/i });
     expect(groupBtn).toBeInTheDocument();
 
     await userEvent.click(groupBtn);
@@ -511,23 +515,29 @@ describe("TripDetailPage", () => {
 
   // --- Delete trip ---
 
-  it("shows Delete trip button on trip detail page", async () => {
+  it("shows Delete trip inside Edit Trip dialog", async () => {
     mockGetTrip.mockResolvedValue(sampleTrip);
     mockListLocations.mockResolvedValue([]);
     render(<TripDetailPage />);
 
     await screen.findByText("Paris Summer");
+    // Delete trip is only visible inside the edit dialog
+    expect(
+      screen.queryByRole("button", { name: /delete trip/i })
+    ).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /edit trip/i }));
     expect(
       screen.getByRole("button", { name: /delete trip/i })
     ).toBeInTheDocument();
   });
 
-  it("opens confirmation dialog when Delete trip is clicked", async () => {
+  it("opens confirmation dialog when Delete trip is clicked inside edit", async () => {
     mockGetTrip.mockResolvedValue(sampleTrip);
     mockListLocations.mockResolvedValue([]);
     render(<TripDetailPage />);
 
     await screen.findByText("Paris Summer");
+    await userEvent.click(screen.getByRole("button", { name: /edit trip/i }));
     await userEvent.click(screen.getByRole("button", { name: /delete trip/i }));
 
     expect(screen.getByText("Delete trip?")).toBeInTheDocument();
@@ -541,6 +551,7 @@ describe("TripDetailPage", () => {
     render(<TripDetailPage />);
 
     await screen.findByText("Paris Summer");
+    await userEvent.click(screen.getByRole("button", { name: /edit trip/i }));
     await userEvent.click(screen.getByRole("button", { name: /delete trip/i }));
     // Confirm in the dialog — the confirm button also says "Delete trip"
     const dialogButtons = screen.getAllByRole("button", {
@@ -560,11 +571,11 @@ describe("TripDetailPage", () => {
     render(<TripDetailPage />);
 
     await screen.findByText("Paris Summer");
+    await userEvent.click(screen.getByRole("button", { name: /edit trip/i }));
     await userEvent.click(screen.getByRole("button", { name: /delete trip/i }));
-    await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
 
     expect(mockDeleteTrip).not.toHaveBeenCalled();
-    expect(mockPush).not.toHaveBeenCalled();
   });
 
   it("shows error when trip deletion fails", async () => {
@@ -574,6 +585,7 @@ describe("TripDetailPage", () => {
     render(<TripDetailPage />);
 
     await screen.findByText("Paris Summer");
+    await userEvent.click(screen.getByRole("button", { name: /edit trip/i }));
     await userEvent.click(screen.getByRole("button", { name: /delete trip/i }));
     const dialogButtons = screen.getAllByRole("button", {
       name: /delete trip/i,

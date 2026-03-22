@@ -28,63 +28,30 @@ import { EmptyState } from "@/components/feedback/EmptyState";
 import { LoadingSpinner } from "@/components/feedback/LoadingSpinner";
 import { ErrorBanner } from "@/components/feedback/ErrorBanner";
 import { format } from "date-fns";
-import { Pencil, Trash2 } from "lucide-react";
+import {
+  Building2,
+  Calendar,
+  ChevronDown,
+  ChevronLeft,
+  MapPin,
+  Pencil,
+  Plus,
+  Search,
+  Share2,
+  Trash2,
+  Upload,
+  User,
+  Users,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-
-function AutosaveInput({
-  id,
-  label,
-  placeholder,
-  initialValue,
-  onSave,
-}: {
-  id: string;
-  label: string;
-  placeholder: string;
-  initialValue: string;
-  onSave: (value: string) => Promise<void>;
-}) {
-  const [value, setValue] = useState(initialValue);
-  const savedRef = useRef(initialValue);
-
-  useEffect(() => {
-    setValue(initialValue);
-    savedRef.current = initialValue;
-  }, [initialValue]);
-
-  const commitValue = useCallback(async () => {
-    const trimmed = value.trim();
-    if (trimmed === savedRef.current) return;
-    savedRef.current = trimmed;
-    await onSave(trimmed);
-  }, [value, onSave]);
-
-  return (
-    <div className="flex w-full flex-col gap-1 sm:w-48">
-      <label htmlFor={id} className="text-xs font-medium text-muted-foreground">
-        {label}
-      </label>
-      <input
-        id={id}
-        autoComplete="off"
-        className="h-8 rounded-md border border-input bg-background px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={() => void commitValue()}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            (e.currentTarget as HTMLInputElement).blur();
-          }
-        }}
-      />
-    </div>
-  );
-}
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr + "T00:00:00");
@@ -128,6 +95,7 @@ export default function TripDetailPage() {
   const [deletingTrip, setDeletingTrip] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [groupByCity, setGroupByCity] = useState(false);
+  const [groupByPerson, setGroupByPerson] = useState(false);
   const [locationNameSearch, setLocationNameSearch] = useState("");
 
   const [activeTab, setActiveTab] = useState<"locations" | "itinerary">(
@@ -195,8 +163,8 @@ export default function TripDetailPage() {
 
   async function fetchItinerary() {
     setItineraryError(null);
-    setItinerary(null);
-    setItineraryLoading(true);
+    // Only show loading spinner if we have no data yet (first load).
+    if (!itinerary) setItineraryLoading(true);
     try {
       const data = await api.itinerary.get(tripId);
       setItinerary(data);
@@ -728,6 +696,14 @@ export default function TripDetailPage() {
     return set;
   }, [locations]);
 
+  const addedByEmails = useMemo(() => {
+    const set = new Set<string>();
+    for (const loc of locations) {
+      if (loc.added_by_email) set.add(loc.added_by_email);
+    }
+    return set;
+  }, [locations]);
+
   const filteredLocations = useMemo(() => {
     let list = locations;
     if (categoryFilter) {
@@ -743,14 +719,16 @@ export default function TripDetailPage() {
   }, [locations, categoryFilter, locationNameSearch]);
 
   const groupedLocations = useMemo(() => {
-    if (!groupByCity) return null;
+    if (!groupByCity && !groupByPerson) return null;
     const groups: Record<string, Location[]> = {};
     for (const loc of filteredLocations) {
-      const key = loc.city || "No city";
+      const key = groupByCity
+        ? loc.city || "No city"
+        : loc.added_by_email || "Unknown";
       (groups[key] ??= []).push(loc);
     }
     return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
-  }, [filteredLocations, groupByCity]);
+  }, [filteredLocations, groupByCity, groupByPerson]);
 
   // Map location IDs → day labels for "in itinerary" indicator on location cards.
   const itineraryLocationMap = useMemo(() => {
@@ -777,6 +755,20 @@ export default function TripDetailPage() {
     return map;
   }, [itinerary]);
 
+  // Build day choices for "Schedule to day" selectors.
+  const availableDays = useMemo(() => {
+    if (!itinerary) return [];
+    return itinerary.days.map((day, idx) => ({
+      id: day.id,
+      label: day.date
+        ? new Date(day.date + "T00:00:00").toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+          })
+        : `Day ${idx + 1}`,
+    }));
+  }, [itinerary]);
+
   if (loading) {
     return (
       <div className="flex justify-center py-12">
@@ -789,9 +781,14 @@ export default function TripDetailPage() {
     return (
       <div className="space-y-4">
         <ErrorBanner message={error} onRetry={fetchData} />
-        <Button variant="ghost" onClick={() => router.push("/trips")}>
-          &larr; Back to trips
-        </Button>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 text-xs font-medium text-content-muted transition-colors hover:text-content-primary"
+          onClick={() => router.push("/trips")}
+        >
+          <ChevronLeft size={14} className="shrink-0" />
+          All trips
+        </button>
       </div>
     );
   }
@@ -870,9 +867,100 @@ export default function TripDetailPage() {
     }
   }
 
-  function handleLocationAdded(location: Location) {
+  async function handleScheduleLocationToDay(
+    locationId: string,
+    dayId: string
+  ) {
+    if (!itinerary) return;
+    const day = itinerary.days.find((d) => d.id === dayId);
+    if (!day) return;
+
+    // Optimistic update: immediately show the location as scheduled.
+    const loc = locations.find((l) => l.id === locationId);
+    if (loc) {
+      setItinerary((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          days: prev.days.map((d) => {
+            if (d.id !== dayId) return d;
+            const mainOpt = d.options.find((o) => o.option_index === 1);
+            if (!mainOpt) return d;
+            return {
+              ...d,
+              options: d.options.map((o) =>
+                o.id === mainOpt.id
+                  ? {
+                      ...o,
+                      locations: [
+                        ...o.locations,
+                        {
+                          location_id: locationId,
+                          sort_order: o.locations.length,
+                          time_period: "morning",
+                          location: {
+                            id: loc.id,
+                            name: loc.name,
+                            city: loc.city,
+                            address: loc.address,
+                            google_link: loc.google_link,
+                            category: loc.category,
+                            note: loc.note,
+                            working_hours: loc.working_hours,
+                            requires_booking: loc.requires_booking,
+                          },
+                        },
+                      ],
+                    }
+                  : o
+              ),
+            };
+          }),
+        };
+      });
+    }
+
+    try {
+      // Use the main option (option_index 1), or create one if none exists.
+      let optionId: string;
+      const mainOption = day.options.find((o) => o.option_index === 1);
+      if (mainOption) {
+        optionId = mainOption.id;
+      } else {
+        const created = await api.itinerary.createOption(tripId, dayId);
+        optionId = created.id;
+      }
+
+      // Append at end of the option's locations.
+      const existingCount =
+        day.options.find((o) => o.id === optionId)?.locations.length ?? 0;
+
+      await api.itinerary.addLocationToOption(tripId, dayId, optionId, {
+        location_id: locationId,
+        sort_order: existingCount,
+        time_period: "morning",
+      });
+
+      // Background refetch to reconcile with server state (no UI flicker).
+      fetchItinerary();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to schedule location"
+      );
+      // Revert optimistic update on error.
+      fetchItinerary();
+    }
+  }
+
+  function handleLocationAdded(
+    location: Location,
+    scheduleDayId?: string | null
+  ) {
     setLocations((prev) => [...prev, location]);
     setAddingLocation(false);
+    if (scheduleDayId) {
+      handleScheduleLocationToDay(location.id, scheduleDayId);
+    }
   }
 
   function handleLocationUpdated(updated: Location) {
@@ -907,18 +995,11 @@ export default function TripDetailPage() {
     }
   }
 
+  const editingLocation = editingLocationId
+    ? (locations.find((l) => l.id === editingLocationId) ?? null)
+    : null;
+
   function renderLocationCard(loc: Location) {
-    if (editingLocationId === loc.id) {
-      return (
-        <EditLocationRow
-          key={loc.id}
-          tripId={tripId}
-          location={loc}
-          onUpdated={handleLocationUpdated}
-          onCancel={() => setEditingLocationId(null)}
-        />
-      );
-    }
     const dayLabels = itineraryLocationMap.get(loc.id);
     return (
       <LocationCard
@@ -935,6 +1016,12 @@ export default function TripDetailPage() {
         added_by_email={loc.added_by_email}
         inItinerary={dayLabels != null}
         itineraryDayLabel={dayLabels?.join(", ") ?? null}
+        availableDays={dayLabels == null ? availableDays : undefined}
+        onScheduleToDay={
+          dayLabels == null
+            ? (dayId) => handleScheduleLocationToDay(loc.id, dayId)
+            : undefined
+        }
         onEdit={() => setEditingLocationId(loc.id)}
         deleteTrigger={
           <ConfirmDialog
@@ -961,69 +1048,63 @@ export default function TripDetailPage() {
   return (
     <div className="space-y-6">
       <div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="mb-2 -ml-2 text-muted-foreground"
+        <button
+          type="button"
+          className="mb-3 -ml-1 inline-flex items-center gap-1 text-xs font-medium text-content-muted transition-colors hover:text-content-primary"
           onClick={() => router.push("/trips")}
         >
-          &larr; Back to trips
-        </Button>
+          <ChevronLeft size={14} className="shrink-0" />
+          All trips
+        </button>
 
         {editingTrip ? (
           <EditTripForm
             trip={trip}
             onUpdated={handleTripUpdated}
             onCancel={() => setEditingTrip(false)}
+            onDelete={handleDeleteTrip}
             onBeforeSave={handleBeforeTripSave}
           />
         ) : (
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">{trip.name}</h1>
+          <div>
+            <h1 className="font-serif text-3xl font-bold tracking-tight text-content-primary">
+              {trip.name}
+            </h1>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               {dateDisplay && (
-                <p className="mt-1 text-sm text-muted-foreground">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-green-light px-3 py-1 text-xs font-medium text-brand-green-dark">
+                  <Calendar size={12} />
                   {dateDisplay}
-                </p>
+                </span>
               )}
-            </div>
-            <div className="flex items-center gap-1">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-warm-border px-3 py-1 text-xs font-medium text-content-muted">
+                <Users size={12} />1 Traveler
+              </span>
+              <div className="flex-1" />
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-full border border-warm-border px-4 py-1.5 text-sm font-medium text-content-primary transition-colors hover:bg-brand-green-light"
+                aria-label="Share trip"
+              >
+                <Share2 size={14} />
+                Share
+              </button>
               <Button
-                variant="ghost"
-                size="icon"
+                className="rounded-full bg-brand-terracotta px-5 py-1.5 text-sm font-semibold text-white hover:bg-brand-terracotta-dark"
                 onClick={() => setEditingTrip(true)}
                 aria-label="Edit trip"
-                title="Edit trip"
               >
-                <Pencil className="h-4 w-4" />
+                <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                Edit Trip
               </Button>
-              <ConfirmDialog
-                trigger={
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    disabled={deletingTrip}
-                    aria-label="Delete trip"
-                    title="Delete trip"
-                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                }
-                title="Delete trip?"
-                description="This will permanently delete this trip and all its locations. This action cannot be undone."
-                confirmLabel="Delete trip"
-                variant="destructive"
-                onConfirm={handleDeleteTrip}
-              />
             </div>
           </div>
         )}
       </div>
 
       {/* Tabs: Locations | Itinerary */}
-      <div className="border-b border-border">
-        <nav className="flex gap-4" role="tablist" aria-label="Trip sections">
+      <div className="border-b border-warm-border">
+        <nav className="flex gap-6" role="tablist" aria-label="Trip sections">
           <button
             type="button"
             role="tab"
@@ -1031,18 +1112,16 @@ export default function TripDetailPage() {
             aria-controls="tab-panel-locations"
             id="tab-locations"
             className={cn(
-              "border-b-2 pb-2 text-sm font-medium transition-colors",
+              "border-b-[3px] pb-3 text-xs font-semibold uppercase tracking-wider transition-colors",
               activeTab === "locations"
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
+                ? "border-brand-green text-brand-green"
+                : "border-transparent text-content-muted hover:text-content-primary"
             )}
             onClick={() => setActiveTab("locations")}
           >
             Locations
             {locations.length > 0 && (
-              <span className="ml-1.5 font-normal text-muted-foreground">
-                ({locations.length})
-              </span>
+              <span className="ml-1.5">({locations.length})</span>
             )}
           </button>
           <button
@@ -1052,10 +1131,10 @@ export default function TripDetailPage() {
             aria-controls="tab-panel-itinerary"
             id="tab-itinerary"
             className={cn(
-              "border-b-2 pb-2 text-sm font-medium transition-colors",
+              "border-b-[3px] pb-3 text-xs font-semibold uppercase tracking-wider transition-colors",
               activeTab === "itinerary"
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
+                ? "border-brand-green text-brand-green"
+                : "border-transparent text-content-muted hover:text-content-primary"
             )}
             onClick={() => setActiveTab("itinerary")}
           >
@@ -1070,94 +1149,157 @@ export default function TripDetailPage() {
           role="tabpanel"
           aria-labelledby="tab-locations"
         >
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">
-              Locations
-              {locations.length > 0 && (
-                <span className="ml-1.5 text-sm font-normal text-muted-foreground">
-                  ({locations.length})
-                </span>
-              )}
-            </h2>
-            <div className="flex items-center gap-2">
-              {cities.size >= 2 && (
-                <Button
-                  variant={groupByCity ? "secondary" : "outline"}
-                  size="sm"
-                  onClick={() => setGroupByCity((v) => !v)}
-                >
-                  {groupByCity ? "Ungroup" : "Group by city"}
-                </Button>
-              )}
-              {!addingLocation && locations.length > 0 && (
-                <Button size="sm" onClick={() => setAddingLocation(true)}>
-                  Add location
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {/* Search by location name */}
+          {/* Toolbar row */}
           {locations.length > 0 && (
-            <div className="mb-3">
-              <input
-                type="search"
-                autoComplete="off"
-                placeholder="Search by location name…"
-                value={locationNameSearch}
-                onChange={(e) => setLocationNameSearch(e.target.value)}
-                className="h-9 w-full max-w-sm rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                aria-label="Search by location name"
-              />
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <div className="relative flex-1 sm:max-w-xs">
+                <Search
+                  size={14}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-content-muted"
+                />
+                <input
+                  type="search"
+                  autoComplete="off"
+                  placeholder="Search locations…"
+                  value={locationNameSearch}
+                  onChange={(e) => setLocationNameSearch(e.target.value)}
+                  className="h-9 w-full rounded-full border border-warm-border bg-surface-card pl-9 pr-4 text-sm placeholder:text-content-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-green"
+                  aria-label="Search by location name"
+                />
+              </div>
+              {cities.size >= 2 && (
+                <button
+                  type="button"
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border border-warm-border px-3 py-1.5 text-sm font-medium transition-colors",
+                    groupByCity
+                      ? "bg-brand-green-light text-brand-green-dark"
+                      : "text-content-primary hover:bg-brand-green-light"
+                  )}
+                  onClick={() => {
+                    setGroupByCity((v) => !v);
+                    if (!groupByCity) setGroupByPerson(false);
+                  }}
+                >
+                  <Building2 size={14} />
+                  {groupByCity ? "Ungrouped" : "Group by City"}
+                </button>
+              )}
+              {addedByEmails.size >= 2 && (
+                <button
+                  type="button"
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border border-warm-border px-3 py-1.5 text-sm font-medium transition-colors",
+                    groupByPerson
+                      ? "bg-brand-green-light text-brand-green-dark"
+                      : "text-content-primary hover:bg-brand-green-light"
+                  )}
+                  onClick={() => {
+                    setGroupByPerson((v) => !v);
+                    if (!groupByPerson) setGroupByCity(false);
+                  }}
+                >
+                  <User size={14} />
+                  {groupByPerson ? "Ungrouped" : "Group by Person"}
+                </button>
+              )}
+              {/* Add Location dropdown — pushed to far right */}
+              {!addingLocation && (
+                <>
+                  <div className="flex-1" />
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1.5 rounded-full bg-brand-terracotta px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-terracotta-dark"
+                      >
+                        <Plus size={16} strokeWidth={2.5} />
+                        Add Location
+                        <ChevronDown size={14} />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      className="w-52 p-1.5"
+                      align="end"
+                      sideOffset={6}
+                    >
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-brand-green-light"
+                        onClick={() => setAddingLocation(true)}
+                      >
+                        <MapPin size={16} className="text-brand-terracotta" />
+                        Paste Link
+                      </button>
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-content-muted"
+                        disabled
+                      >
+                        <Upload size={16} className="opacity-40" />
+                        <span className="opacity-60">Upload Locations</span>
+                      </button>
+                    </PopoverContent>
+                  </Popover>
+                </>
+              )}
             </div>
           )}
 
-          {/* Category filter chips */}
+          {/* Category filter pills */}
           {categoryOptions.length >= 2 && (
             <div
-              className="mb-3 flex flex-wrap gap-1.5"
+              className="mb-4 flex flex-wrap gap-1.5"
               role="toolbar"
               aria-label="Filter locations by category"
             >
               <button
                 className={cn(
-                  "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                  "rounded-full px-3 py-1 text-xs font-medium transition-colors",
                   categoryFilter === null
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border bg-background text-muted-foreground hover:bg-accent"
+                    ? "bg-brand-green text-white"
+                    : "border border-warm-border bg-surface-card text-content-muted hover:bg-brand-green-light"
                 )}
                 onClick={() => setCategoryFilter(null)}
               >
-                All ({locations.length})
+                All Locations
               </button>
-              {categoryOptions.map(([cat, count]) => (
+              {categoryOptions.map(([cat]) => (
                 <button
                   key={cat}
                   className={cn(
-                    "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                    "rounded-full px-3 py-1 text-xs font-medium transition-colors",
                     categoryFilter === cat
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-background text-muted-foreground hover:bg-accent"
+                      ? "bg-brand-green text-white"
+                      : "border border-warm-border bg-surface-card text-content-muted hover:bg-brand-green-light"
                   )}
                   onClick={() =>
                     setCategoryFilter(categoryFilter === cat ? null : cat)
                   }
                 >
-                  {cat} ({count})
+                  {cat}
                 </button>
               ))}
             </div>
           )}
 
           {addingLocation && (
-            <div className="mb-4">
-              <AddLocationForm
-                tripId={tripId}
-                existingLocations={locations}
-                onAdded={handleLocationAdded}
-                onCancel={() => setAddingLocation(false)}
-              />
-            </div>
+            <AddLocationForm
+              tripId={tripId}
+              existingLocations={locations}
+              availableDays={availableDays}
+              onAdded={handleLocationAdded}
+              onCancel={() => setAddingLocation(false)}
+            />
+          )}
+
+          {editingLocation && (
+            <EditLocationRow
+              tripId={tripId}
+              location={editingLocation}
+              onUpdated={handleLocationUpdated}
+              onCancel={() => setEditingLocationId(null)}
+            />
           )}
 
           {locations.length === 0 && !addingLocation ? (
@@ -1167,26 +1309,26 @@ export default function TripDetailPage() {
               </Button>
             </EmptyState>
           ) : filteredLocations.length === 0 && locationNameSearch.trim() ? (
-            <p className="py-4 text-sm text-muted-foreground">
+            <p className="py-4 text-sm text-content-muted">
               No locations match &quot;{locationNameSearch.trim()}&quot;. Try a
               different search or clear the search box.
             </p>
           ) : groupedLocations ? (
-            <div className="space-y-4">
-              {groupedLocations.map(([cityName, locs]) => (
-                <div key={cityName}>
-                  <h3 className="mb-2 text-sm font-semibold text-muted-foreground">
-                    {cityName}{" "}
+            <div className="space-y-6">
+              {groupedLocations.map(([groupName, locs]) => (
+                <div key={groupName}>
+                  <h3 className="mb-3 text-sm font-semibold text-content-muted">
+                    {groupName}{" "}
                     <span className="font-normal">({locs.length})</span>
                   </h3>
-                  <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                     {locs.map(renderLocationCard)}
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
               {filteredLocations.map(renderLocationCard)}
             </div>
           )}

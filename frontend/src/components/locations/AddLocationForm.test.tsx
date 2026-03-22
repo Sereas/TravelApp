@@ -38,8 +38,8 @@ describe("AddLocationForm", () => {
     expect(screen.getByLabelText(/address/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/city/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/google maps link/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/working hours/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/requires booking/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/hours/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/booking/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/category/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/note/i)).toBeInTheDocument();
   });
@@ -85,16 +85,13 @@ describe("AddLocationForm", () => {
     await userEvent.type(screen.getByLabelText(/location name/i), "Louvre");
     await userEvent.type(screen.getByLabelText(/address/i), "Rue de Rivoli");
     await userEvent.type(screen.getByLabelText(/city/i), "Paris");
-    await userEvent.type(screen.getByLabelText(/working hours/i), "9-18");
-    await userEvent.selectOptions(
-      screen.getByLabelText(/requires booking/i),
-      "yes"
-    );
+    await userEvent.type(screen.getByLabelText(/^hours/i), "9-18");
+    await userEvent.selectOptions(screen.getByLabelText(/^booking/i), "yes");
     await userEvent.selectOptions(screen.getByLabelText(/category/i), "Museum");
     await userEvent.type(screen.getByLabelText(/note/i), "Book ahead");
 
     await userEvent.click(
-      screen.getByRole("button", { name: /add location/i })
+      screen.getByRole("button", { name: /^add location$/i })
     );
 
     await waitFor(() => {
@@ -112,7 +109,7 @@ describe("AddLocationForm", () => {
         category: "Museum",
       });
     });
-    expect(onAdded).toHaveBeenCalledWith(newLocation);
+    expect(onAdded).toHaveBeenCalledWith(newLocation, null);
   });
 
   it("sends null for empty optional fields", async () => {
@@ -140,7 +137,7 @@ describe("AddLocationForm", () => {
     );
     await userEvent.type(screen.getByLabelText(/location name/i), "Place");
     await userEvent.click(
-      screen.getByRole("button", { name: /add location/i })
+      screen.getByRole("button", { name: /^add location$/i })
     );
 
     await waitFor(() => {
@@ -173,7 +170,7 @@ describe("AddLocationForm", () => {
     );
     await userEvent.type(screen.getByLabelText(/location name/i), "Place");
     await userEvent.click(
-      screen.getByRole("button", { name: /add location/i })
+      screen.getByRole("button", { name: /^add location$/i })
     );
 
     expect(await screen.findByText("Server error")).toBeInTheDocument();
@@ -206,7 +203,7 @@ describe("AddLocationForm", () => {
     );
     await userEvent.type(screen.getByLabelText(/location name/i), "Place");
     await userEvent.click(
-      screen.getByRole("button", { name: /add location/i })
+      screen.getByRole("button", { name: /^add location$/i })
     );
 
     expect(screen.getByRole("button", { name: /adding/i })).toBeInTheDocument();
@@ -264,6 +261,98 @@ describe("AddLocationForm", () => {
       ).toBeInTheDocument();
     });
     expect(screen.getByText(/Louvre/)).toBeInTheDocument();
+  });
+
+  it("shows day picker when availableDays are provided", () => {
+    render(
+      <AddLocationForm
+        tripId={tripId}
+        existingLocations={[]}
+        availableDays={[
+          { id: "day-1", label: "May 15" },
+          { id: "day-2", label: "May 16" },
+        ]}
+        onAdded={onAdded}
+        onCancel={onCancel}
+      />
+    );
+    expect(
+      screen.getByRole("button", { name: /schedule to day/i })
+    ).toBeInTheDocument();
+  });
+
+  it("passes selected day ID to onAdded", async () => {
+    const newLocation = {
+      id: "loc-new",
+      name: "Place",
+      address: null,
+      google_link: null,
+      note: null,
+      city: null,
+      working_hours: null,
+      requires_booking: null,
+      category: null,
+      added_by_user_id: null,
+      added_by_email: null,
+      latitude: null,
+      longitude: null,
+    };
+    mockAdd.mockResolvedValue(newLocation);
+
+    render(
+      <AddLocationForm
+        tripId={tripId}
+        existingLocations={[]}
+        availableDays={[
+          { id: "day-1", label: "May 15" },
+          { id: "day-2", label: "May 16" },
+        ]}
+        onAdded={onAdded}
+        onCancel={onCancel}
+      />
+    );
+
+    await userEvent.type(screen.getByLabelText(/location name/i), "Place");
+    // Open the day picker popover and select "May 16"
+    await userEvent.click(
+      screen.getByRole("button", { name: /schedule to day/i })
+    );
+    await userEvent.click(screen.getByText("May 16"));
+    await userEvent.click(
+      screen.getByRole("button", { name: /^add location$/i })
+    );
+
+    await waitFor(() => {
+      expect(onAdded).toHaveBeenCalledWith(newLocation, "day-2");
+    });
+  });
+
+  it("does not show day picker when no days available", () => {
+    render(
+      <AddLocationForm
+        tripId={tripId}
+        existingLocations={[]}
+        onAdded={onAdded}
+        onCancel={onCancel}
+      />
+    );
+    expect(
+      screen.queryByRole("button", { name: /schedule to day/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows map hint message", () => {
+    render(
+      <AddLocationForm
+        tripId={tripId}
+        existingLocations={[]}
+        onAdded={onAdded}
+        onCancel={onCancel}
+      />
+    );
+    expect(
+      screen.getByText(/auto-fills details.*enables map pin/i)
+    ).toBeInTheDocument();
   });
 
   it("calls Google preview on blur and prefills fields", async () => {

@@ -82,7 +82,9 @@ describe("EditLocationRow", () => {
     await userEvent.clear(cityInput);
     await userEvent.type(cityInput, "Paris, France");
 
-    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /^save changes$/i })
+    );
 
     await waitFor(() => {
       expect(mockUpdate).toHaveBeenCalledWith(
@@ -109,7 +111,9 @@ describe("EditLocationRow", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /^save changes$/i })
+    );
 
     expect(await screen.findByText("Update failed")).toBeInTheDocument();
     expect(onUpdated).not.toHaveBeenCalled();
@@ -139,7 +143,9 @@ describe("EditLocationRow", () => {
         onCancel={onCancel}
       />
     );
-    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /^save changes$/i })
+    );
 
     expect(screen.getByRole("button", { name: /saving/i })).toBeInTheDocument();
   });
@@ -171,5 +177,17 @@ describe("EditLocationRow", () => {
       />
     );
     expect(screen.getByDisplayValue("Unknown Place")).toBeInTheDocument();
+  });
+
+  it("renders dialog with Edit Location title", () => {
+    render(
+      <EditLocationRow
+        tripId={tripId}
+        location={sampleLocation}
+        onUpdated={onUpdated}
+        onCancel={onCancel}
+      />
+    );
+    expect(screen.getByText("Edit Location")).toBeInTheDocument();
   });
 });

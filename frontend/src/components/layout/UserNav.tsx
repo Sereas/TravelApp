@@ -47,9 +47,9 @@ export function UserNav() {
       <PopoverContent
         align="end"
         sideOffset={8}
-        className="w-64 rounded-xl border border-[#E8E5DD] bg-surface-card p-0 shadow-md"
+        className="w-64 rounded-xl border border-warm-border bg-surface-card p-0 shadow-md"
       >
-        <div className="border-b border-[#E8E5DD] px-4 py-3">
+        <div className="border-b border-warm-border px-4 py-3">
           <p className="text-xs text-content-muted">Signed in as</p>
           <p className="mt-0.5 truncate text-sm font-medium text-content-primary">
             {user.email}

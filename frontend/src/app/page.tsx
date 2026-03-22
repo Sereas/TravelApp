@@ -27,7 +27,7 @@ export default function HomePage() {
       <section className="w-full max-w-4xl px-4 pb-10">
         <div className="grid gap-6 sm:grid-cols-3">
           <div
-            className="rounded-xl border border-[#E8E5DD] border-l-brand-green bg-surface-card p-6 shadow-sm transition-shadow duration-200 hover:shadow-md"
+            className="rounded-xl border border-warm-border border-l-brand-green bg-surface-card p-6 shadow-sm transition-shadow duration-200 hover:shadow-md"
             style={{ borderLeftWidth: "3px" }}
           >
             <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-brand-green-light text-brand-green">
@@ -42,7 +42,7 @@ export default function HomePage() {
           </div>
 
           <div
-            className="rounded-xl border border-[#E8E5DD] border-l-brand-green bg-surface-card p-6 shadow-sm transition-shadow duration-200 hover:shadow-md"
+            className="rounded-xl border border-warm-border border-l-brand-green bg-surface-card p-6 shadow-sm transition-shadow duration-200 hover:shadow-md"
             style={{ borderLeftWidth: "3px" }}
           >
             <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-brand-green-light text-brand-green">
@@ -57,7 +57,7 @@ export default function HomePage() {
           </div>
 
           <div
-            className="rounded-xl border border-[#E8E5DD] border-l-brand-green bg-surface-card p-6 shadow-sm transition-shadow duration-200 hover:shadow-md"
+            className="rounded-xl border border-warm-border border-l-brand-green bg-surface-card p-6 shadow-sm transition-shadow duration-200 hover:shadow-md"
             style={{ borderLeftWidth: "3px" }}
           >
             <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-brand-green-light text-brand-green">

@@ -5,11 +5,23 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ErrorBanner } from "@/components/feedback/ErrorBanner";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { api, type Location } from "@/lib/api";
+import {
+  formInputClass,
+  formSelectClass,
+  formLabelClass,
+  OptionalMark,
+} from "@/lib/form-styles";
 import {
   REQUIRES_BOOKING_OPTIONS,
   CATEGORY_OPTIONS,
-  selectClassName,
 } from "@/lib/location-constants";
 
 interface EditLocationRowProps {
@@ -65,126 +77,197 @@ export function EditLocationRow({
     }
   }
 
+  const inputClass = formInputClass;
+  const selectClass = formSelectClass;
+  const labelClass = formLabelClass;
+  const optionalMark = OptionalMark;
+
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="space-y-2 rounded-md border border-border px-4 py-3"
-    >
-      {error && <ErrorBanner message={error} />}
-      <div className="space-y-2">
-        <Label htmlFor="edit-location-name">Location name</Label>
-        <Input
-          id="edit-location-name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-          placeholder="Location name"
-          aria-label="Location name"
-          autoFocus
-          autoComplete="off"
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="edit-location-address">Address (optional)</Label>
-        <Input
-          id="edit-location-address"
-          value={address}
-          onChange={(e) => setAddress(e.target.value)}
-          placeholder="e.g. 5 Avenue Anatole France, 75007 Paris"
-          aria-label="Address"
-          autoComplete="off"
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="edit-location-city">City (optional)</Label>
-        <Input
-          id="edit-location-city"
-          value={city}
-          onChange={(e) => setCity(e.target.value)}
-          placeholder="e.g. Paris"
-          aria-label="City"
-          autoComplete="off"
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="edit-location-google-link">
-          Google Maps link (optional)
-        </Label>
-        <Input
-          id="edit-location-google-link"
-          type="url"
-          value={googleLink}
-          onChange={(e) => setGoogleLink(e.target.value)}
-          placeholder="https://maps.google.com/..."
-          aria-label="Google Maps link"
-          autoComplete="off"
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="edit-location-working-hours">
-          Working hours (optional)
-        </Label>
-        <Input
-          id="edit-location-working-hours"
-          value={workingHours}
-          onChange={(e) => setWorkingHours(e.target.value)}
-          placeholder="e.g. 9:00–18:00"
-          aria-label="Working hours"
-          autoComplete="off"
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="edit-location-requires-booking">
-          Requires booking (optional)
-        </Label>
-        <select
-          id="edit-location-requires-booking"
-          className={selectClassName}
-          value={requiresBooking}
-          onChange={(e) => setRequiresBooking(e.target.value)}
-        >
-          {REQUIRES_BOOKING_OPTIONS.map((opt) => (
-            <option key={opt.value || "_"} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="edit-location-category">Category (optional)</Label>
-        <select
-          id="edit-location-category"
-          className={selectClassName}
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-        >
-          <option value="">—</option>
-          {CATEGORY_OPTIONS.map((opt) => (
-            <option key={opt} value={opt}>
-              {opt}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="edit-location-note">Note (optional)</Label>
-        <Input
-          id="edit-location-note"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="Note (optional)"
-          aria-label="Location note"
-          autoComplete="off"
-        />
-      </div>
-      <div className="flex gap-2">
-        <Button type="submit" size="sm" disabled={saving}>
-          {saving ? "Saving…" : "Save"}
-        </Button>
-        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
-          Cancel
-        </Button>
-      </div>
-    </form>
+    <Dialog open onOpenChange={(open) => !open && onCancel()}>
+      <DialogContent className="max-w-md gap-0 p-0">
+        <DialogHeader className="px-5 pb-3 pt-5">
+          <DialogTitle>Edit Location</DialogTitle>
+          <DialogDescription className="sr-only">
+            Edit location details
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit}>
+          {error && (
+            <div className="px-5 pt-1">
+              <ErrorBanner message={error} />
+            </div>
+          )}
+
+          {/* Fields */}
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2.5 px-5 pt-3">
+            {/* Name — required, full width */}
+            <div className="col-span-2 flex flex-col gap-1">
+              <Label htmlFor="edit-location-name" className={labelClass}>
+                Location name
+              </Label>
+              <input
+                id="edit-location-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                placeholder="e.g. Eiffel Tower"
+                aria-label="Location name"
+                autoFocus
+                autoComplete="off"
+                className={inputClass}
+              />
+            </div>
+
+            {/* City */}
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="edit-location-city" className={labelClass}>
+                City {optionalMark}
+              </Label>
+              <input
+                id="edit-location-city"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                placeholder="e.g. Paris"
+                aria-label="City"
+                autoComplete="off"
+                className={inputClass}
+              />
+            </div>
+
+            {/* Category */}
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="edit-location-category" className={labelClass}>
+                Category {optionalMark}
+              </Label>
+              <select
+                id="edit-location-category"
+                className={selectClass}
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+              >
+                <option value="">—</option>
+                {CATEGORY_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Address — full width */}
+            <div className="col-span-2 flex flex-col gap-1">
+              <Label htmlFor="edit-location-address" className={labelClass}>
+                Address {optionalMark}
+              </Label>
+              <input
+                id="edit-location-address"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="e.g. 5 Avenue Anatole France, 75007 Paris"
+                aria-label="Address"
+                autoComplete="off"
+                className={inputClass}
+              />
+            </div>
+
+            {/* Google Maps link — full width */}
+            <div className="col-span-2 flex flex-col gap-1">
+              <Label htmlFor="edit-location-google-link" className={labelClass}>
+                Google Maps link {optionalMark}
+              </Label>
+              <input
+                id="edit-location-google-link"
+                type="url"
+                value={googleLink}
+                onChange={(e) => setGoogleLink(e.target.value)}
+                placeholder="https://maps.google.com/..."
+                aria-label="Google Maps link"
+                autoComplete="off"
+                className={inputClass}
+              />
+            </div>
+
+            {/* Working hours */}
+            <div className="flex flex-col gap-1">
+              <Label
+                htmlFor="edit-location-working-hours"
+                className={labelClass}
+              >
+                Hours {optionalMark}
+              </Label>
+              <input
+                id="edit-location-working-hours"
+                value={workingHours}
+                onChange={(e) => setWorkingHours(e.target.value)}
+                placeholder="e.g. 9:00–18:00"
+                aria-label="Working hours"
+                autoComplete="off"
+                className={inputClass}
+              />
+            </div>
+
+            {/* Requires booking */}
+            <div className="flex flex-col gap-1">
+              <Label
+                htmlFor="edit-location-requires-booking"
+                className={labelClass}
+              >
+                Booking {optionalMark}
+              </Label>
+              <select
+                id="edit-location-requires-booking"
+                className={selectClass}
+                value={requiresBooking}
+                onChange={(e) => setRequiresBooking(e.target.value)}
+              >
+                {REQUIRES_BOOKING_OPTIONS.map((opt) => (
+                  <option key={opt.value || "_"} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Note — full width */}
+            <div className="col-span-2 flex flex-col gap-1">
+              <Label htmlFor="edit-location-note" className={labelClass}>
+                Note {optionalMark}
+              </Label>
+              <input
+                id="edit-location-note"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="e.g. Visit at sunset"
+                aria-label="Location note"
+                autoComplete="off"
+                className={inputClass}
+              />
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="mt-4 flex items-center justify-end gap-2 border-t border-warm-border px-5 py-3">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onCancel}
+              className="rounded-full px-4 text-content-muted"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={saving}
+              size="sm"
+              className="rounded-full bg-brand-terracotta px-5 font-semibold text-white hover:bg-brand-terracotta-dark"
+            >
+              {saving ? "Saving…" : "Save Changes"}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

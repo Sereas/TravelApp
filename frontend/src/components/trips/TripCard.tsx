@@ -52,7 +52,7 @@ export function TripCard({
 
   return (
     <div
-      className={`group overflow-hidden rounded-xl border border-[#E8E5DD] bg-surface-card shadow-sm transition-all duration-200${
+      className={`group overflow-hidden rounded-xl border border-warm-border bg-surface-card shadow-sm transition-all duration-200${
         onClick ? " cursor-pointer hover:-translate-y-0.5 hover:shadow-md" : ""
       }`}
       onClick={() => onClick?.(id)}

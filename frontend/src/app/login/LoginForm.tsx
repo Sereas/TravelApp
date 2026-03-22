@@ -180,7 +180,7 @@ export function LoginForm() {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   autoComplete="email"
-                  className="rounded-lg border-[#E8E5DD] bg-surface-card focus-visible:ring-brand-green"
+                  className="rounded-lg border-warm-border bg-surface-card focus-visible:ring-brand-green"
                 />
               </div>
 
@@ -197,7 +197,7 @@ export function LoginForm() {
                   required
                   minLength={6}
                   autoComplete={isLogin ? "current-password" : "new-password"}
-                  className="rounded-lg border-[#E8E5DD] bg-surface-card focus-visible:ring-brand-green"
+                  className="rounded-lg border-warm-border bg-surface-card focus-visible:ring-brand-green"
                 />
               </div>
 
@@ -218,7 +218,7 @@ export function LoginForm() {
                     required
                     minLength={6}
                     autoComplete="new-password"
-                    className="rounded-lg border-[#E8E5DD] bg-surface-card focus-visible:ring-brand-green"
+                    className="rounded-lg border-warm-border bg-surface-card focus-visible:ring-brand-green"
                   />
                 </div>
               )}
@@ -252,7 +252,7 @@ export function LoginForm() {
 
             <div className="relative my-6">
               <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-[#E8E5DD]" />
+                <span className="w-full border-t border-warm-border" />
               </div>
               <div className="relative flex justify-center text-xs uppercase">
                 <span className="bg-surface-page px-2 text-content-muted">
@@ -264,7 +264,7 @@ export function LoginForm() {
             <button
               type="button"
               onClick={handleGoogleLogin}
-              className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-[#E8E5DD] bg-surface-card px-4 py-2.5 text-sm font-medium text-content-primary shadow-sm transition-all duration-200 hover:bg-brand-green-light hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green focus-visible:ring-offset-2"
+              className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-warm-border bg-surface-card px-4 py-2.5 text-sm font-medium text-content-primary shadow-sm transition-all duration-200 hover:bg-brand-green-light hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green focus-visible:ring-offset-2"
             >
               <svg className="h-4 w-4" viewBox="0 0 24 24">
                 <path

@@ -84,7 +84,7 @@ export function CreateTripDialog({
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="overflow-hidden p-0 sm:max-w-md">
         {/* Illustrated banner */}
-        <div className="flex h-32 items-center justify-center bg-gradient-to-br from-brand-green-light via-[#E8E5DD] to-brand-terracotta-light">
+        <div className="flex h-32 items-center justify-center bg-gradient-to-br from-brand-green-light via-warm-border to-brand-terracotta-light">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/80 shadow-sm backdrop-blur-sm">
             <Image
               src="/logo.svg"
@@ -118,7 +118,7 @@ export function CreateTripDialog({
                 onChange={(e) => setName(e.target.value)}
                 required
                 autoFocus
-                className="rounded-lg border-[#E8E5DD] bg-surface-card focus-visible:ring-brand-green"
+                className="rounded-lg border-warm-border bg-surface-card focus-visible:ring-brand-green"
               />
             </div>
 

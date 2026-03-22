@@ -5,23 +5,44 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ErrorBanner } from "@/components/feedback/ErrorBanner";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { api, type Location } from "@/lib/api";
+import {
+  formInputClass,
+  formSelectClass,
+  formLabelClass,
+  OptionalMark,
+} from "@/lib/form-styles";
 import {
   REQUIRES_BOOKING_OPTIONS,
   CATEGORY_OPTIONS,
-  selectClassName,
+  type DayChoice,
 } from "@/lib/location-constants";
+import { CalendarPlus, ChevronDown, Link2, X } from "lucide-react";
 
 interface AddLocationFormProps {
   tripId: string;
   existingLocations: Location[];
-  onAdded: (location: Location) => void;
+  availableDays?: DayChoice[];
+  onAdded: (location: Location, scheduleDayId?: string | null) => void;
   onCancel: () => void;
 }
 
 export function AddLocationForm({
   tripId,
   existingLocations,
+  availableDays,
   onAdded,
   onCancel,
 }: AddLocationFormProps) {
@@ -44,13 +65,13 @@ export function AddLocationForm({
     null
   );
   const [duplicateName, setDuplicateName] = useState<string | null>(null);
+  const [scheduleDayId, setScheduleDayId] = useState("");
 
   async function handleGoogleLinkBlur() {
     const trimmed = googleLink.trim();
     if (!trimmed) {
       return;
     }
-    // Avoid repeated calls if the user tabs through fields without changing the link.
     if (previewed) {
       return;
     }
@@ -65,7 +86,6 @@ export function AddLocationForm({
       setGoogleSourceType("manual_url");
       setGoogleRaw(preview.google_raw);
 
-      // Check if this Google Place already exists in the trip's locations.
       const existing = existingLocations.find(
         (loc) => loc.google_place_id === preview.google_place_id
       );
@@ -89,9 +109,7 @@ export function AddLocationForm({
       if (!category && preview.suggested_category) {
         setCategory(preview.suggested_category);
       }
-      // latitude/longitude are kept only in backend; UI does not need them yet.
     } catch (err) {
-      // Soft-fail: user can still fill everything manually.
       setError(
         err instanceof Error
           ? err.message
@@ -121,147 +139,281 @@ export function AddLocationForm({
         requires_booking: requiresBooking || null,
         category: category || null,
       });
-      onAdded(location);
+      onAdded(location, scheduleDayId || null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add location");
       setSaving(false);
     }
   }
 
+  const inputClass = formInputClass;
+  const selectClass = formSelectClass;
+  const labelClass = formLabelClass;
+  const optionalMark = OptionalMark;
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-3">
-      {error && <ErrorBanner message={error} />}
+    <Dialog open onOpenChange={(open) => !open && onCancel()}>
+      <DialogContent className="max-w-md gap-0 p-0">
+        <DialogHeader className="px-5 pb-3 pt-5">
+          <DialogTitle>Add Location</DialogTitle>
+          <DialogDescription className="sr-only">
+            Add a new location to your trip
+          </DialogDescription>
+        </DialogHeader>
 
-      <div className="space-y-2 rounded-md bg-blue-50/50 p-3">
-        <Label htmlFor="add-location-google-link">Google Maps link</Label>
-        <p className="text-xs text-muted-foreground">
-          Paste a link to auto-fill details
-        </p>
-        <Input
-          id="add-location-google-link"
-          type="url"
-          placeholder="https://maps.google.com/..."
-          value={googleLink}
-          onChange={(e) => {
-            setGoogleLink(e.target.value);
-            setPreviewed(false);
-            setDuplicateName(null);
-          }}
-          onBlur={() => void handleGoogleLinkBlur()}
-          autoFocus
-          autoComplete="off"
-        />
-        {previewLoading && (
-          <p className="text-xs text-muted-foreground">Fetching from Google…</p>
-        )}
-        {duplicateName && (
-          <p className="text-sm font-medium text-amber-600">
-            &quot;{duplicateName}&quot; already exists in this trip.
-          </p>
-        )}
-      </div>
+        <form onSubmit={handleSubmit}>
+          {/* Hero: Google Maps link */}
+          <div className="mx-5 rounded-xl bg-brand-green-light/40 px-4 py-3">
+            <div className="mb-2 flex items-center gap-2">
+              <Link2 size={14} className="text-brand-green" />
+              <Label
+                htmlFor="add-location-google-link"
+                className="text-sm font-semibold text-content-primary"
+              >
+                Google Maps link
+              </Label>
+            </div>
+            <Input
+              id="add-location-google-link"
+              type="url"
+              placeholder="https://maps.google.com/..."
+              value={googleLink}
+              onChange={(e) => {
+                setGoogleLink(e.target.value);
+                setPreviewed(false);
+                setDuplicateName(null);
+              }}
+              onBlur={() => void handleGoogleLinkBlur()}
+              autoFocus
+              autoComplete="off"
+              className="h-9 rounded-lg border-brand-green/30 bg-white text-sm focus-visible:ring-brand-green"
+            />
+            <p className="mt-1.5 text-[11px] leading-relaxed text-brand-green-dark/70">
+              Auto-fills details &amp; enables map pin. You can also fill in
+              fields manually below.
+            </p>
+            {previewLoading && (
+              <p className="mt-1 text-xs text-brand-green">Fetching details…</p>
+            )}
+            {duplicateName && (
+              <p className="mt-1 text-xs font-medium text-amber-600">
+                &quot;{duplicateName}&quot; already exists in this trip.
+              </p>
+            )}
+          </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="add-location-name">Location name</Label>
-        <Input
-          id="add-location-name"
-          placeholder="e.g. Eiffel Tower"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-          autoComplete="off"
-        />
-      </div>
+          {error && (
+            <div className="px-5 pt-3">
+              <ErrorBanner message={error} />
+            </div>
+          )}
 
-      <div className="space-y-2">
-        <Label htmlFor="add-location-address">Address (optional)</Label>
-        <Input
-          id="add-location-address"
-          placeholder="e.g. 5 Avenue Anatole France, 75007 Paris"
-          value={address}
-          onChange={(e) => setAddress(e.target.value)}
-          autoComplete="off"
-        />
-      </div>
+          {/* Fields */}
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2.5 px-5 pt-4">
+            {/* Name — required, full width */}
+            <div className="col-span-2 flex flex-col gap-1">
+              <Label htmlFor="add-location-name" className={labelClass}>
+                Location name
+              </Label>
+              <input
+                id="add-location-name"
+                placeholder="e.g. Eiffel Tower"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                autoComplete="off"
+                className={inputClass}
+              />
+            </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="add-location-city">City (optional)</Label>
-        <Input
-          id="add-location-city"
-          placeholder="e.g. Paris"
-          value={city}
-          onChange={(e) => setCity(e.target.value)}
-          autoComplete="off"
-        />
-      </div>
+            {/* City */}
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="add-location-city" className={labelClass}>
+                City {optionalMark}
+              </Label>
+              <input
+                id="add-location-city"
+                placeholder="e.g. Paris"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                autoComplete="off"
+                className={inputClass}
+              />
+            </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="add-location-working-hours">
-          Working hours (optional)
-        </Label>
-        <Input
-          id="add-location-working-hours"
-          placeholder="e.g. 9:00–18:00"
-          value={workingHours}
-          onChange={(e) => setWorkingHours(e.target.value)}
-          autoComplete="off"
-        />
-      </div>
+            {/* Category */}
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="add-location-category" className={labelClass}>
+                Category {optionalMark}
+              </Label>
+              <select
+                id="add-location-category"
+                className={selectClass}
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+              >
+                <option value="">—</option>
+                {CATEGORY_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="add-location-requires-booking">
-          Requires booking (optional)
-        </Label>
-        <select
-          id="add-location-requires-booking"
-          className={selectClassName}
-          value={requiresBooking}
-          onChange={(e) => setRequiresBooking(e.target.value)}
-        >
-          {REQUIRES_BOOKING_OPTIONS.map((opt) => (
-            <option key={opt.value || "_"} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </div>
+            {/* Address — full width */}
+            <div className="col-span-2 flex flex-col gap-1">
+              <Label htmlFor="add-location-address" className={labelClass}>
+                Address {optionalMark}
+              </Label>
+              <input
+                id="add-location-address"
+                placeholder="e.g. 5 Avenue Anatole France, 75007 Paris"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                autoComplete="off"
+                className={inputClass}
+              />
+            </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="add-location-category">Category (optional)</Label>
-        <select
-          id="add-location-category"
-          className={selectClassName}
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-        >
-          <option value="">—</option>
-          {CATEGORY_OPTIONS.map((opt) => (
-            <option key={opt} value={opt}>
-              {opt}
-            </option>
-          ))}
-        </select>
-      </div>
+            {/* Working hours */}
+            <div className="flex flex-col gap-1">
+              <Label
+                htmlFor="add-location-working-hours"
+                className={labelClass}
+              >
+                Hours {optionalMark}
+              </Label>
+              <input
+                id="add-location-working-hours"
+                placeholder="e.g. 9:00–18:00"
+                value={workingHours}
+                onChange={(e) => setWorkingHours(e.target.value)}
+                autoComplete="off"
+                className={inputClass}
+              />
+            </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="add-location-note">Note (optional)</Label>
-        <Input
-          id="add-location-note"
-          placeholder="e.g. Visit at sunset"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          autoComplete="off"
-        />
-      </div>
+            {/* Requires booking */}
+            <div className="flex flex-col gap-1">
+              <Label
+                htmlFor="add-location-requires-booking"
+                className={labelClass}
+              >
+                Booking {optionalMark}
+              </Label>
+              <select
+                id="add-location-requires-booking"
+                className={selectClass}
+                value={requiresBooking}
+                onChange={(e) => setRequiresBooking(e.target.value)}
+              >
+                {REQUIRES_BOOKING_OPTIONS.map((opt) => (
+                  <option key={opt.value || "_"} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-      <div className="flex gap-3">
-        <Button type="submit" disabled={saving}>
-          {saving ? "Adding…" : "Add location"}
-        </Button>
-        <Button type="button" variant="ghost" onClick={onCancel}>
-          Cancel
-        </Button>
-      </div>
-    </form>
+            {/* Note — full width */}
+            <div className="col-span-2 flex flex-col gap-1">
+              <Label htmlFor="add-location-note" className={labelClass}>
+                Note {optionalMark}
+              </Label>
+              <input
+                id="add-location-note"
+                placeholder="e.g. Visit at sunset"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                autoComplete="off"
+                className={inputClass}
+              />
+            </div>
+
+            {/* Schedule to day — full width */}
+            {availableDays && availableDays.length > 0 && (
+              <div className="col-span-2 flex flex-col gap-1">
+                <Label className={labelClass}>
+                  Schedule to day {optionalMark}
+                </Label>
+                {scheduleDayId ? (
+                  <div className="flex items-center gap-1.5">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-green-light px-2.5 py-1 text-xs font-medium text-brand-green-dark">
+                      <CalendarPlus size={12} />
+                      {availableDays.find((d) => d.id === scheduleDayId)?.label}
+                    </span>
+                    <button
+                      type="button"
+                      className="rounded-full p-0.5 text-content-muted transition-colors hover:bg-warm-border hover:text-content-primary"
+                      onClick={() => setScheduleDayId("")}
+                      aria-label="Clear day selection"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ) : (
+                  <Popover modal>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className="flex h-8 w-full items-center justify-between rounded-lg border border-dashed border-warm-border bg-surface-card px-2.5 text-sm text-content-muted transition-colors hover:border-brand-green/40 hover:bg-brand-green-light/30"
+                        aria-label="Schedule to day"
+                      >
+                        <span className="text-xs">Don&apos;t schedule yet</span>
+                        <ChevronDown size={14} />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      className="w-48 p-1"
+                      align="start"
+                      sideOffset={4}
+                    >
+                      <div className="flex max-h-44 flex-col overflow-y-auto">
+                        {availableDays.map((day) => (
+                          <button
+                            key={day.id}
+                            type="button"
+                            className="flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm font-medium text-content-primary transition-colors hover:bg-brand-green-light"
+                            onClick={() => setScheduleDayId(day.id)}
+                          >
+                            <CalendarPlus
+                              size={13}
+                              className="shrink-0 text-brand-green"
+                            />
+                            {day.label}
+                          </button>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="mt-4 flex items-center justify-end gap-2 border-t border-warm-border px-5 py-3">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onCancel}
+              className="rounded-full px-4 text-content-muted"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={saving}
+              size="sm"
+              className="rounded-full bg-brand-terracotta px-5 font-semibold text-white hover:bg-brand-terracotta-dark"
+            >
+              {saving ? "Adding…" : "Add Location"}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
