@@ -44,6 +44,7 @@ def test_preview_location_from_google_link_returns_200(client: TestClient, monke
                 "Monday: Closed",
                 "Tuesday: 9:00 AM - 6:00 PM",
             ],
+            photos=[],
             raw={"result": {"place_id": "ChIJCzYy5IS16lQRQrfeQ5K5Oxw"}, "status": "OK"},
         )
 

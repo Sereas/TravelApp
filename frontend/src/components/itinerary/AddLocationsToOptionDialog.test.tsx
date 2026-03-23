@@ -19,6 +19,10 @@ const defaultLocations = [
     google_place_id: null,
     latitude: null,
     longitude: null,
+    image_url: null,
+    user_image_url: null,
+    attribution_name: null,
+    attribution_uri: null,
   },
   {
     id: "loc-2",
@@ -35,6 +39,10 @@ const defaultLocations = [
     google_place_id: null,
     latitude: null,
     longitude: null,
+    image_url: null,
+    user_image_url: null,
+    attribution_name: null,
+    attribution_uri: null,
   },
   {
     id: "loc-3",
@@ -51,6 +59,10 @@ const defaultLocations = [
     google_place_id: null,
     latitude: null,
     longitude: null,
+    image_url: null,
+    user_image_url: null,
+    attribution_name: null,
+    attribution_uri: null,
   },
 ];
 

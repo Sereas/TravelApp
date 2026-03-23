@@ -135,6 +135,10 @@ class LocationResponse(BaseModel):
     category: str | None = None
     latitude: float | None = None
     longitude: float | None = None
+    image_url: str | None = None
+    user_image_url: str | None = None
+    attribution_name: str | None = None
+    attribution_uri: str | None = None
 
 
 # Batch add: same shape as AddLocationBody per item
@@ -340,6 +344,10 @@ class LocationSummary(BaseModel):
     note: str | None = None
     working_hours: str | None = None
     requires_booking: str | None = None
+    image_url: str | None = None
+    user_image_url: str | None = None
+    attribution_name: str | None = None
+    attribution_uri: str | None = None
 
 
 class OptionLocationResponse(BaseModel):

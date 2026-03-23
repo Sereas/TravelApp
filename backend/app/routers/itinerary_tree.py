@@ -70,6 +70,10 @@ def _build_itinerary_response(
                 note=loc_row.get("note"),
                 working_hours=loc_row.get("working_hours"),
                 requires_booking=loc_row.get("requires_booking"),
+                image_url=loc_row.get("image_url"),
+                user_image_url=loc_row.get("user_image_url"),
+                attribution_name=loc_row.get("attribution_name"),
+                attribution_uri=loc_row.get("attribution_uri"),
             )
         node = ItineraryOptionLocation(
             location_id=loc_id,
@@ -165,6 +169,10 @@ def _rpc_rows_to_tree_data(
                     "note": r.get("loc_note"),
                     "working_hours": r.get("loc_working_hours"),
                     "requires_booking": r.get("loc_requires_booking"),
+                    "image_url": r.get("loc_photo_url"),
+                    "user_image_url": r.get("loc_user_image_url"),
+                    "attribution_name": r.get("loc_attribution_name"),
+                    "attribution_uri": r.get("loc_attribution_uri"),
                 }
 
     # Preserve day order (sort_order) and option order (option_index)

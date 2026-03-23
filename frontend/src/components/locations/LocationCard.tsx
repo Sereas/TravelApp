@@ -4,6 +4,7 @@ import { useState } from "react";
 import {
   CalendarCheck,
   CalendarPlus,
+  Camera,
   ChevronDown,
   ChevronUp,
   Clock,
@@ -27,6 +28,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
+import { PhotoUploadDialog } from "./PhotoUploadDialog";
 
 export interface LocationCardProps {
   id: string;
@@ -39,6 +41,12 @@ export interface LocationCardProps {
   requires_booking?: string | null;
   working_hours?: string | null;
   added_by_email?: string | null;
+  image_url?: string | null;
+  user_image_url?: string | null;
+  attribution_name?: string | null;
+  attribution_uri?: string | null;
+  onPhotoUpload?: (file: File) => Promise<void>;
+  onPhotoReset?: () => Promise<void>;
   /** When true, shows a visual indicator that this location is scheduled in the itinerary. */
   inItinerary?: boolean;
   /** Which day(s) this location appears on in the itinerary (e.g. "May 15", "Day 1, Day 3"). */
@@ -115,6 +123,12 @@ export function LocationCard({
   actions,
   onEdit,
   onDelete,
+  image_url,
+  user_image_url,
+  attribution_name,
+  attribution_uri,
+  onPhotoUpload,
+  onPhotoReset,
   deleteTrigger,
   className,
 }: LocationCardProps) {
@@ -123,6 +137,10 @@ export function LocationCard({
   const useMenu = onEdit != null || onDelete != null || deleteTrigger != null;
   const [menuOpen, setMenuOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [photoDialogOpen, setPhotoDialogOpen] = useState(false);
+  const effectiveImageUrl = user_image_url ?? image_url;
+  // Show attribution only when displaying a Google-sourced photo (not user override)
+  const showAttribution = !user_image_url && image_url && attribution_name;
   const canSchedule =
     availableDays != null &&
     availableDays.length > 0 &&
@@ -144,25 +162,52 @@ export function LocationCard({
         className
       )}
     >
-      {/* Image placeholder area */}
+      {/* Image area */}
       <div className="relative aspect-[16/10] w-full overflow-hidden rounded-t-xl">
-        <div
-          className={cn(
-            "flex h-full w-full items-center justify-center bg-gradient-to-br",
-            catMeta?.gradient ?? "from-gray-100 to-gray-50"
-          )}
-          data-testid="image-placeholder"
-        >
-          {category ? (
-            <CategoryIcon
-              category={category as CategoryKey}
-              size={40}
-              className="opacity-20"
+        {effectiveImageUrl ? (
+          <>
+            <img
+              src={effectiveImageUrl}
+              alt={name}
+              className="h-full w-full object-cover"
+              loading="lazy"
             />
-          ) : (
-            <MapPin size={40} className="text-gray-400 opacity-20" />
-          )}
-        </div>
+            {showAttribution && (
+              <div className="absolute bottom-0 right-0 bg-black/50 px-1.5 py-0.5 text-[10px] leading-tight text-white/80">
+                {attribution_uri ? (
+                  <a
+                    href={attribution_uri}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-white"
+                  >
+                    {attribution_name}
+                  </a>
+                ) : (
+                  attribution_name
+                )}
+              </div>
+            )}
+          </>
+        ) : (
+          <div
+            className={cn(
+              "flex h-full w-full items-center justify-center bg-gradient-to-br",
+              catMeta?.gradient ?? "from-gray-100 to-gray-50"
+            )}
+            data-testid="image-placeholder"
+          >
+            {category ? (
+              <CategoryIcon
+                category={category as CategoryKey}
+                size={40}
+                className="opacity-20"
+              />
+            ) : (
+              <MapPin size={40} className="text-gray-400 opacity-20" />
+            )}
+          </div>
+        )}
 
         {/* Overlaid badges */}
         <div className="absolute bottom-3 left-3 flex items-center gap-1.5">
@@ -175,6 +220,21 @@ export function LocationCard({
             <BookingBadge status={requires_booking} />
           )}
         </div>
+
+        {/* Camera icon for photo upload */}
+        {onPhotoUpload && (
+          <div className="absolute left-2 top-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 shrink-0 rounded-full bg-black/20 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/40 hover:text-white group-hover:opacity-100"
+              aria-label="Upload photo"
+              onClick={() => setPhotoDialogOpen(true)}
+            >
+              <Camera size={16} />
+            </Button>
+          </div>
+        )}
 
         {/* Three-dot menu overlay */}
         {useMenu && (
@@ -428,6 +488,18 @@ export function LocationCard({
           )}
         </div>
       </div>
+
+      {/* Photo upload dialog */}
+      {onPhotoUpload && onPhotoReset && (
+        <PhotoUploadDialog
+          open={photoDialogOpen}
+          onOpenChange={setPhotoDialogOpen}
+          currentImageUrl={effectiveImageUrl ?? null}
+          hasUserOverride={user_image_url != null && user_image_url !== ""}
+          onUpload={onPhotoUpload}
+          onReset={onPhotoReset}
+        />
+      )}
     </div>
   );
 }

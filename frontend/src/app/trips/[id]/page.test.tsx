@@ -94,6 +94,10 @@ const sampleLocations = [
     google_place_id: null,
     latitude: null,
     longitude: null,
+    image_url: null,
+    user_image_url: null,
+    attribution_name: null,
+    attribution_uri: null,
   },
   {
     id: "loc-2",
@@ -110,6 +114,10 @@ const sampleLocations = [
     google_place_id: null,
     latitude: null,
     longitude: null,
+    image_url: null,
+    user_image_url: null,
+    attribution_name: null,
+    attribution_uri: null,
   },
 ];
 

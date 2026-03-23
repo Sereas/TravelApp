@@ -54,6 +54,38 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return res.json();
 }
 
+async function requestUpload<T>(path: string, file: File): Promise<T> {
+  const token = await getAccessToken();
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers,
+    body: formData,
+  });
+
+  if (res.status === 204) {
+    return undefined as T;
+  }
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(
+      body.detail ?? `Request failed with status ${res.status}`,
+      res.status,
+      body.detail
+    );
+  }
+
+  return res.json();
+}
+
 export interface Trip {
   id: string;
   name: string;
@@ -76,6 +108,10 @@ export interface Location {
   category: string | null;
   latitude: number | null;
   longitude: number | null;
+  image_url: string | null;
+  user_image_url: string | null;
+  attribution_name: string | null;
+  attribution_uri: string | null;
 }
 
 /** Minimal location info embedded in itinerary tree. */
@@ -89,6 +125,10 @@ export interface LocationSummary {
   note: string | null;
   working_hours: string | null;
   requires_booking: string | null;
+  image_url: string | null;
+  user_image_url: string | null;
+  attribution_name: string | null;
+  attribution_uri: string | null;
 }
 
 export interface ItineraryOptionLocation {
@@ -305,6 +345,17 @@ export const api = {
 
     delete: (tripId: string, locationId: string) =>
       request<void>(`/api/v1/trips/${tripId}/locations/${locationId}`, {
+        method: "DELETE",
+      }),
+
+    uploadPhoto: (tripId: string, locationId: string, file: File) =>
+      requestUpload<Location>(
+        `/api/v1/trips/${tripId}/locations/${locationId}/photo`,
+        file
+      ),
+
+    deletePhoto: (tripId: string, locationId: string) =>
+      request<void>(`/api/v1/trips/${tripId}/locations/${locationId}/photo`, {
         method: "DELETE",
       }),
   },

@@ -34,6 +34,7 @@ class PlaceResolution:
     website: str | None
     formatted_phone_number: str | None
     opening_hours_text: list[str]
+    photos: list[dict[str, Any]]
     raw: dict[str, Any]
 
 
@@ -41,15 +42,41 @@ class GooglePlacesClient:
     """Thin wrapper around the **new** Places API (v1)."""
 
     _SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
+    _MEDIA_URL = "https://places.googleapis.com/v1"
 
     def __init__(self, api_key: str) -> None:
         if not api_key:
             raise GooglePlacesDisabledError("GOOGLE_PLACES_API_KEY is not configured")
         self._api_key = api_key
-        self._http = httpx.Client(timeout=5.0)
+        self._http = httpx.Client(timeout=10.0)
 
     def close(self) -> None:
         self._http.close()
+
+    def fetch_photo_bytes(
+        self,
+        photo_resource_name: str,
+        max_width_px: int = 600,
+        max_height_px: int = 400,
+    ) -> bytes:
+        """Download photo bytes for a Places photo resource.
+
+        Uses skipHttpRedirect=true to get the photoUri in JSON, then downloads
+        the actual image bytes from that URI.
+        """
+        url = (
+            f"{self._MEDIA_URL}/{photo_resource_name}/media"
+            f"?maxWidthPx={max_width_px}&maxHeightPx={max_height_px}"
+            f"&key={self._api_key}&skipHttpRedirect=true"
+        )
+        resp = self._http.get(url)
+        resp.raise_for_status()
+        photo_uri = resp.json().get("photoUri")
+        if not photo_uri:
+            raise RuntimeError(f"No photoUri in response for {photo_resource_name}")
+        img_resp = self._http.get(photo_uri)
+        img_resp.raise_for_status()
+        return img_resp.content
 
     def resolve_from_link(self, google_link: str) -> PlaceResolution:
         """Resolve a Google Maps URL using name + location bias via Places API (new).
@@ -136,7 +163,8 @@ class GooglePlacesClient:
             "places.types,"
             "places.websiteUri,"
             "places.nationalPhoneNumber,"
-            "places.regularOpeningHours.weekdayDescriptions"
+            "places.regularOpeningHours.weekdayDescriptions,"
+            "places.photos"
         )
         headers = {
             "X-Goog-Api-Key": self._api_key,
@@ -177,6 +205,7 @@ class GooglePlacesClient:
             website=place.get("websiteUri"),
             formatted_phone_number=place.get("nationalPhoneNumber"),
             opening_hours_text=[str(t) for t in opening],
+            photos=place.get("photos") or [],
             raw=data,
         )
 

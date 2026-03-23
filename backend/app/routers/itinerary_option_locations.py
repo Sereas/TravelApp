@@ -22,7 +22,8 @@ router = APIRouter(prefix="/trips", tags=["itinerary-option-locations"])
 
 _OPTION_LOCATIONS_SELECT = "option_id, location_id, sort_order, time_period"
 _LOCATION_SUMMARY_SELECT = (
-    "location_id, name, city, address, google_link, category, note, working_hours, requires_booking"
+    "location_id, name, city, address, google_link, google_place_id, "
+    "category, note, working_hours, requires_booking, user_image_url"
 )
 
 
@@ -40,7 +41,32 @@ def _build_location_summary(loc_row: dict | None, location_id: str) -> LocationS
         note=loc_row.get("note"),
         working_hours=loc_row.get("working_hours"),
         requires_booking=loc_row.get("requires_booking"),
+        image_url=loc_row.get("image_url"),
+        user_image_url=loc_row.get("user_image_url"),
+        attribution_name=loc_row.get("attribution_name"),
+        attribution_uri=loc_row.get("attribution_uri"),
     )
+
+
+def _enrich_locations_with_photos(supabase, locations_by_id: dict[str, dict]) -> None:
+    """Batch-fetch photo URLs and inject image_url into location dicts (single query)."""
+    place_ids = [
+        loc["google_place_id"] for loc in locations_by_id.values() if loc.get("google_place_id")
+    ]
+    if not place_ids:
+        return
+    photos = (
+        supabase.table("place_photos")
+        .select("google_place_id, photo_url, attribution_name, attribution_uri")
+        .in_("google_place_id", place_ids)
+        .execute()
+    )
+    photo_map = {row["google_place_id"]: row for row in (photos.data or [])}
+    for loc in locations_by_id.values():
+        photo_row = photo_map.get(loc.get("google_place_id") or "")
+        loc["image_url"] = photo_row["photo_url"] if photo_row else None
+        loc["attribution_name"] = photo_row.get("attribution_name") if photo_row else None
+        loc["attribution_uri"] = photo_row.get("attribution_uri") if photo_row else None
 
 
 def _option_location_row_to_response(
@@ -128,6 +154,7 @@ async def list_option_locations(
         )
         for loc in loc_result.data or []:
             locations_by_id[str(loc["location_id"])] = loc
+    _enrich_locations_with_photos(supabase, locations_by_id)
     logger.info(
         "option_locations_listed",
         trip_id=str(trip_id),
@@ -202,6 +229,8 @@ async def add_location_to_option(
         .execute()
     )
     loc_data = (loc_row.data or [None])[0] if loc_row.data else None
+    if loc_data:
+        _enrich_locations_with_photos(supabase, {str(rec.get("location_id")): loc_data})
     logger.info(
         "option_location_added",
         trip_id=str(trip_id),
@@ -278,6 +307,7 @@ async def reorder_option_locations(
         .execute()
     )
     loc_by_id = {str(r["location_id"]): r for r in (loc_rows.data or [])}
+    _enrich_locations_with_photos(supabase, loc_by_id)
     logger.info(
         "option_locations_reordered",
         trip_id=str(trip_id),
@@ -361,6 +391,8 @@ async def update_option_location(
         .execute()
     )
     loc_data = (loc_row.data or [None])[0] if loc_row.data else None
+    if loc_data:
+        _enrich_locations_with_photos(supabase, {str(location_id): loc_data})
     logger.info(
         "option_location_updated",
         trip_id=str(trip_id),
@@ -512,6 +544,7 @@ async def batch_add_locations_to_option(
         .execute()
     )
     loc_by_id = {str(r["location_id"]): r for r in (loc_rows.data or [])}
+    _enrich_locations_with_photos(supabase, loc_by_id)
     created: list[OptionLocationResponse] = []
     for rec in rpc_result.data:
         loc_data = loc_by_id.get(str(rec.get("location_id")))

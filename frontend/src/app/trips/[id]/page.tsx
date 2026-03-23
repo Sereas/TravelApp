@@ -908,6 +908,10 @@ export default function TripDetailPage() {
                             note: loc.note,
                             working_hours: loc.working_hours,
                             requires_booking: loc.requires_booking,
+                            image_url: loc.image_url,
+                            user_image_url: loc.user_image_url,
+                            attribution_name: loc.attribution_name,
+                            attribution_uri: loc.attribution_uri,
                           },
                         },
                       ],
@@ -950,6 +954,66 @@ export default function TripDetailPage() {
       // Revert optimistic update on error.
       fetchItinerary();
     }
+  }
+
+  async function handlePhotoUpload(locationId: string, file: File) {
+    const updated = await api.locations.uploadPhoto(tripId, locationId, file);
+    setLocations((prev) =>
+      prev.map((loc) => (loc.id === locationId ? updated : loc))
+    );
+    // Update itinerary LocationSummary too
+    setItinerary((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        days: prev.days.map((d) => ({
+          ...d,
+          options: d.options.map((o) => ({
+            ...o,
+            locations: o.locations.map((l) =>
+              l.location_id === locationId
+                ? {
+                    ...l,
+                    location: {
+                      ...l.location,
+                      user_image_url: updated.user_image_url,
+                    },
+                  }
+                : l
+            ),
+          })),
+        })),
+      };
+    });
+  }
+
+  async function handlePhotoReset(locationId: string) {
+    await api.locations.deletePhoto(tripId, locationId);
+    setLocations((prev) =>
+      prev.map((loc) =>
+        loc.id === locationId ? { ...loc, user_image_url: null } : loc
+      )
+    );
+    setItinerary((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        days: prev.days.map((d) => ({
+          ...d,
+          options: d.options.map((o) => ({
+            ...o,
+            locations: o.locations.map((l) =>
+              l.location_id === locationId
+                ? {
+                    ...l,
+                    location: { ...l.location, user_image_url: null },
+                  }
+                : l
+            ),
+          })),
+        })),
+      };
+    });
   }
 
   function handleLocationAdded(
@@ -1014,6 +1078,12 @@ export default function TripDetailPage() {
         requires_booking={loc.requires_booking}
         working_hours={loc.working_hours}
         added_by_email={loc.added_by_email}
+        image_url={loc.image_url}
+        user_image_url={loc.user_image_url}
+        attribution_name={loc.attribution_name}
+        attribution_uri={loc.attribution_uri}
+        onPhotoUpload={(file) => handlePhotoUpload(loc.id, file)}
+        onPhotoReset={() => handlePhotoReset(loc.id)}
         inItinerary={dayLabels != null}
         itineraryDayLabel={dayLabels?.join(", ") ?? null}
         availableDays={dayLabels == null ? availableDays : undefined}

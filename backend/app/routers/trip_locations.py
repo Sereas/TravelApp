@@ -1,10 +1,12 @@
 """Trip locations API: add, list, batch-add, update locations for a trip."""
 
+import contextlib
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 
+from backend.app.clients.google_places import GooglePlacesDisabledError, get_google_places_client
 from backend.app.db.supabase import get_supabase_client
 from backend.app.dependencies import get_current_user_email, get_current_user_id
 from backend.app.models.schemas import (
@@ -13,6 +15,11 @@ from backend.app.models.schemas import (
     UpdateLocationBody,
 )
 from backend.app.routers.trip_ownership import _ensure_resource_chain
+from backend.app.services.place_photos import ensure_place_photo
+
+_ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+_MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5 MB
+_EXT_MAP = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger("locations")
 
@@ -23,7 +30,7 @@ router = APIRouter(prefix="/trips", tags=["trips-locations"])
 _LOCATIONS_SELECT = (
     "location_id, trip_id, name, address, google_link, google_place_id, "
     "google_source_type, added_by_email, note, added_by_user_id, city, "
-    "working_hours, requires_booking, category, latitude, longitude"
+    "working_hours, requires_booking, category, latitude, longitude, user_image_url"
 )
 # Used only for the single-item POST response where the client may need raw data.
 _LOCATIONS_SELECT_WITH_RAW = _LOCATIONS_SELECT + ", google_raw"
@@ -66,6 +73,10 @@ def _loc_to_response(loc: dict) -> LocationResponse:
         category=loc.get("category"),
         latitude=loc.get("latitude"),
         longitude=loc.get("longitude"),
+        image_url=loc.get("image_url"),
+        user_image_url=loc.get("user_image_url"),
+        attribution_name=loc.get("attribution_name"),
+        attribution_uri=loc.get("attribution_uri"),
     )
 
 
@@ -148,6 +159,29 @@ async def add_location(
         )
         if fetch.data and len(fetch.data) > 0:
             loc = fetch.data[0]
+    # Fetch photo if this location has a google_place_id and photos in raw data
+    gp_id = loc.get("google_place_id")
+    if gp_id:
+        raw = loc.get("google_raw") or body.google_raw or {}
+        photos = (raw.get("places") or [{}])[0].get("photos") or [] if raw else []
+        if photos:
+            try:
+                client = get_google_places_client()
+                url = ensure_place_photo(supabase, client, gp_id, photos)
+                if url:
+                    loc["image_url"] = url
+                    # Fetch attribution from the cached row
+                    attr_row = (
+                        supabase.table("place_photos")
+                        .select("attribution_name, attribution_uri")
+                        .eq("google_place_id", gp_id)
+                        .execute()
+                    )
+                    if attr_row.data:
+                        loc["attribution_name"] = attr_row.data[0].get("attribution_name")
+                        loc["attribution_uri"] = attr_row.data[0].get("attribution_uri")
+            except GooglePlacesDisabledError:
+                pass
     logger.info(
         "location_added",
         location_id=str(loc["location_id"]),
@@ -177,6 +211,22 @@ async def list_locations(
         supabase.table("locations").select(_LOCATIONS_SELECT).eq("trip_id", str(trip_id)).execute()
     )
     items = result.data if result.data else []
+    # Batch-fetch photo URLs for all locations with a google_place_id (single query)
+    place_ids = [loc["google_place_id"] for loc in items if loc.get("google_place_id")]
+    photo_map: dict[str, dict] = {}
+    if place_ids:
+        photos = (
+            supabase.table("place_photos")
+            .select("google_place_id, photo_url, attribution_name, attribution_uri")
+            .in_("google_place_id", place_ids)
+            .execute()
+        )
+        photo_map = {row["google_place_id"]: row for row in (photos.data or [])}
+    for loc in items:
+        photo_row = photo_map.get(loc.get("google_place_id") or "")
+        loc["image_url"] = photo_row["photo_url"] if photo_row else None
+        loc["attribution_name"] = photo_row.get("attribution_name") if photo_row else None
+        loc["attribution_uri"] = photo_row.get("attribution_uri") if photo_row else None
     logger.info("locations_listed", trip_id=str(trip_id), count=len(items))
     return [_loc_to_response(loc) for loc in items]
 
@@ -254,6 +304,40 @@ async def batch_add_locations(
     else:
         fetched_by_id = {}
     final_locs = [fetched_by_id.get(str(loc.get("location_id")), loc) for loc in result.data]
+    # Warm place_photos cache for new locations with google_place_id + photos
+    # 1. Collect unique google_place_ids that have photos in the request body
+    place_id_to_photos: dict[str, list] = {}
+    for item in body:
+        if item.google_place_id and item.google_raw:
+            photos = (item.google_raw.get("places") or [{}])[0].get("photos") or []
+            if photos:
+                place_id_to_photos.setdefault(item.google_place_id, photos)
+    if place_id_to_photos:
+        # 2. Check which are already cached (single query)
+        cached = (
+            supabase.table("place_photos")
+            .select("google_place_id, photo_url, attribution_name, attribution_uri")
+            .in_("google_place_id", list(place_id_to_photos.keys()))
+            .execute()
+        )
+        cached_map: dict[str, dict] = {row["google_place_id"]: row for row in (cached.data or [])}
+        # 3. Fetch and cache photos for misses
+        try:
+            client = get_google_places_client()
+            for gp_id, photos in place_id_to_photos.items():
+                if gp_id not in cached_map:
+                    url = ensure_place_photo(supabase, client, gp_id, photos)
+                    if url:
+                        cached_map[gp_id] = {"photo_url": url}
+        except GooglePlacesDisabledError:
+            pass
+        # 4. Attach image_url to response rows
+        for loc in final_locs:
+            gp_id = loc.get("google_place_id")
+            if gp_id and gp_id in cached_map:
+                loc["image_url"] = cached_map[gp_id].get("photo_url")
+                loc["attribution_name"] = cached_map[gp_id].get("attribution_name")
+                loc["attribution_uri"] = cached_map[gp_id].get("attribution_uri")
     out = [_loc_to_response(full) for full in final_locs]
     logger.info("locations_batch_added", trip_id=str(trip_id), count=len(body))
     return out
@@ -337,6 +421,34 @@ async def update_location(
             detail="Location was updated but could not be retrieved; please refresh",
         )
     loc = fetch.data[0]
+    # Enrich with photo URL (and warm cache if google_place_id changed)
+    gp_id = loc.get("google_place_id")
+    if gp_id:
+        old_gp_id = loc_result.data[0].get("google_place_id")
+        gp_id_changed = "google_place_id" in body.model_fields_set and gp_id != old_gp_id
+        raw_changed = "google_raw" in body.model_fields_set
+        photo_row = (
+            supabase.table("place_photos")
+            .select("google_place_id, photo_url, attribution_name, attribution_uri")
+            .eq("google_place_id", gp_id)
+            .execute()
+        )
+        if photo_row.data:
+            loc["image_url"] = photo_row.data[0]["photo_url"]
+            loc["attribution_name"] = photo_row.data[0].get("attribution_name")
+            loc["attribution_uri"] = photo_row.data[0].get("attribution_uri")
+        elif gp_id_changed or raw_changed:
+            # New google_place_id or updated raw with photos — warm the cache
+            raw = body.google_raw or {}
+            photos = (raw.get("places") or [{}])[0].get("photos") or [] if raw else []
+            if photos:
+                try:
+                    client = get_google_places_client()
+                    url = ensure_place_photo(supabase, client, gp_id, photos)
+                    if url:
+                        loc["image_url"] = url
+                except GooglePlacesDisabledError:
+                    pass
     logger.info(
         "location_updated",
         location_id=str(location_id),
@@ -380,6 +492,152 @@ async def delete_location(
     supabase.table("locations").delete().eq("location_id", str(location_id)).execute()
     logger.info(
         "location_deleted",
+        location_id=str(location_id),
+        trip_id=str(trip_id),
+    )
+
+
+@router.post(
+    "/{trip_id}/locations/{location_id}/photo",
+    response_model=LocationResponse,
+)
+async def upload_location_photo(
+    trip_id: UUID,
+    location_id: UUID,
+    file: UploadFile,
+    user_id: UUID = Depends(get_current_user_id),
+    supabase=Depends(get_supabase_client),
+):
+    """Upload a user photo override for a location. Replaces any existing override."""
+    if file.content_type not in _ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid image type: {file.content_type}. Allowed: jpeg, png, webp",
+        )
+    _ensure_resource_chain(supabase, trip_id, user_id)
+
+    # Verify location belongs to trip
+    loc_result = (
+        supabase.table("locations")
+        .select(_LOCATIONS_SELECT)
+        .eq("location_id", str(location_id))
+        .eq("trip_id", str(trip_id))
+        .execute()
+    )
+    if not loc_result.data or len(loc_result.data) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Location not found",
+        )
+
+    # Read and validate size
+    content = await file.read()
+    if len(content) > _MAX_IMAGE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"File too large ({len(content)} bytes). Maximum: {_MAX_IMAGE_SIZE} bytes (5 MB)"
+            ),
+        )
+
+    ext = _EXT_MAP.get(file.content_type, "jpg")
+    storage_path = f"{trip_id}/{location_id}.{ext}"
+
+    # Upsert to storage (remove old file first, ignore errors if it doesn't exist)
+    bucket = supabase.storage.from_("user-photos")
+    with contextlib.suppress(Exception):
+        bucket.remove([storage_path])
+    bucket.upload(
+        storage_path,
+        content,
+        {"content-type": file.content_type, "upsert": "true"},
+    )
+
+    # Build public URL
+    public_url = bucket.get_public_url(storage_path)
+
+    # Update locations row
+    supabase.table("locations").update({"user_image_url": public_url}).eq(
+        "location_id", str(location_id)
+    ).eq("trip_id", str(trip_id)).execute()
+
+    # Fetch updated row
+    fetch = (
+        supabase.table("locations")
+        .select(_LOCATIONS_SELECT)
+        .eq("location_id", str(location_id))
+        .eq("trip_id", str(trip_id))
+        .execute()
+    )
+    loc = fetch.data[0] if fetch.data else loc_result.data[0]
+    loc["user_image_url"] = public_url
+    # Enrich with photo URL and attribution
+    gp_id = loc.get("google_place_id")
+    if gp_id:
+        photos = (
+            supabase.table("place_photos")
+            .select("google_place_id, photo_url, attribution_name, attribution_uri")
+            .eq("google_place_id", gp_id)
+            .execute()
+        )
+        if photos.data:
+            loc["image_url"] = photos.data[0]["photo_url"]
+            loc["attribution_name"] = photos.data[0].get("attribution_name")
+            loc["attribution_uri"] = photos.data[0].get("attribution_uri")
+    logger.info(
+        "location_photo_uploaded",
+        location_id=str(location_id),
+        trip_id=str(trip_id),
+    )
+    return _loc_to_response(loc)
+
+
+@router.delete(
+    "/{trip_id}/locations/{location_id}/photo",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_location_photo(
+    trip_id: UUID,
+    location_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+    supabase=Depends(get_supabase_client),
+):
+    """Remove the user photo override, reverting to the Google photo (if any)."""
+    _ensure_resource_chain(supabase, trip_id, user_id)
+
+    loc_result = (
+        supabase.table("locations")
+        .select("location_id, user_image_url")
+        .eq("location_id", str(location_id))
+        .eq("trip_id", str(trip_id))
+        .execute()
+    )
+    if not loc_result.data or len(loc_result.data) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Location not found",
+        )
+
+    user_image_url = loc_result.data[0].get("user_image_url")
+    if not user_image_url:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No user photo to delete",
+        )
+
+    # Remove from storage (best-effort)
+    bucket = supabase.storage.from_("user-photos")
+    for ext in ("jpg", "png", "webp"):
+        with contextlib.suppress(Exception):
+            bucket.remove([f"{trip_id}/{location_id}.{ext}"])
+
+    # Clear the column
+    supabase.table("locations").update({"user_image_url": None}).eq(
+        "location_id", str(location_id)
+    ).eq("trip_id", str(trip_id)).execute()
+
+    logger.info(
+        "location_photo_deleted",
         location_id=str(location_id),
         trip_id=str(trip_id),
     )
