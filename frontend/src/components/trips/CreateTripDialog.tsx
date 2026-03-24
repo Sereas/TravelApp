@@ -84,7 +84,7 @@ export function CreateTripDialog({
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="overflow-hidden p-0 sm:max-w-md">
         {/* Illustrated banner */}
-        <div className="flex h-32 items-center justify-center bg-gradient-to-br from-brand-green-light via-warm-border to-brand-terracotta-light">
+        <div className="flex h-32 items-center justify-center bg-gradient-to-br from-brand-muted via-border to-primary/15">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/80 shadow-sm backdrop-blur-sm">
             <Image
               src="/logo.svg"
@@ -108,7 +108,7 @@ export function CreateTripDialog({
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="trip-name" className="text-content-primary">
+              <Label htmlFor="trip-name" className="text-foreground">
                 Trip name
               </Label>
               <Input
@@ -118,13 +118,13 @@ export function CreateTripDialog({
                 onChange={(e) => setName(e.target.value)}
                 required
                 autoFocus
-                className="rounded-lg border-warm-border bg-surface-card focus-visible:ring-brand-green"
+                className="rounded-lg border-border bg-card focus-visible:ring-brand"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label className="text-content-primary">Start date</Label>
+                <Label className="text-foreground">Start date</Label>
                 <DatePicker
                   value={startDate}
                   onChange={(date) => {
@@ -137,7 +137,7 @@ export function CreateTripDialog({
                 />
               </div>
               <div className="space-y-2">
-                <Label className="text-content-primary">End date</Label>
+                <Label className="text-foreground">End date</Label>
                 <DatePicker
                   value={endDate}
                   onChange={setEndDate}
@@ -149,7 +149,7 @@ export function CreateTripDialog({
 
             {tripDuration && (
               <div className="flex items-center gap-2">
-                <span className="rounded-full bg-brand-green-light px-3 py-1 text-xs font-medium text-brand-green">
+                <span className="rounded-full bg-brand-muted px-3 py-1 text-xs font-medium text-brand">
                   {tripDuration}
                 </span>
               </div>
@@ -159,14 +159,14 @@ export function CreateTripDialog({
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="cursor-pointer rounded-full px-5 py-2 text-sm font-medium text-content-muted transition-colors duration-150 hover:bg-brand-green-light hover:text-content-primary"
+                className="cursor-pointer rounded-full px-5 py-2 text-sm font-medium text-muted-foreground transition-colors duration-150 hover:bg-brand-muted hover:text-foreground"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={loading}
-                className="cursor-pointer rounded-full bg-brand-terracotta px-6 py-2 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-brand-terracotta-dark hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-terracotta focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                className="cursor-pointer rounded-full bg-primary px-6 py-2 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-primary-strong hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {loading ? "Creating…" : "Create trip"}
               </button>

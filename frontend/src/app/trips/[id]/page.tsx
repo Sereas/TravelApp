@@ -202,7 +202,7 @@ export default function TripDetailPage() {
         <ErrorBanner message={error} onRetry={fetchData} />
         <button
           type="button"
-          className="inline-flex items-center gap-1 text-xs font-medium text-content-muted transition-colors hover:text-content-primary"
+          className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
           onClick={() => router.push("/trips")}
         >
           <ChevronLeft size={14} className="shrink-0" />
@@ -399,7 +399,7 @@ export default function TripDetailPage() {
       <div>
         <button
           type="button"
-          className="mb-3 -ml-1 inline-flex items-center gap-1 text-xs font-medium text-content-muted transition-colors hover:text-content-primary"
+          className="mb-3 -ml-1 inline-flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
           onClick={() => router.push("/trips")}
         >
           <ChevronLeft size={14} className="shrink-0" />
@@ -416,30 +416,30 @@ export default function TripDetailPage() {
           />
         ) : (
           <div>
-            <h1 className="font-serif text-3xl font-bold tracking-tight text-content-primary">
+            <h1 className="font-serif text-3xl font-bold tracking-tight text-foreground">
               {trip.name}
             </h1>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {dateDisplay && (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-green-light px-3 py-1 text-xs font-medium text-brand-green-dark">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-muted px-3 py-1 text-xs font-medium text-brand-strong">
                   <Calendar size={12} />
                   {dateDisplay}
                 </span>
               )}
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-warm-border px-3 py-1 text-xs font-medium text-content-muted">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs font-medium text-muted-foreground">
                 <Users size={12} />1 Traveler
               </span>
               <div className="flex-1" />
               <button
                 type="button"
-                className="inline-flex items-center gap-1.5 rounded-full border border-warm-border px-4 py-1.5 text-sm font-medium text-content-primary transition-colors hover:bg-brand-green-light"
+                className="inline-flex items-center gap-1.5 rounded-full border border-border px-4 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-brand-muted"
                 aria-label="Share trip"
               >
                 <Share2 size={14} />
                 Share
               </button>
               <Button
-                className="rounded-full bg-brand-terracotta px-5 py-1.5 text-sm font-semibold text-white hover:bg-brand-terracotta-dark"
+                className="rounded-full bg-primary px-5 py-1.5 text-sm font-semibold text-white hover:bg-primary-strong"
                 onClick={() => setEditingTrip(true)}
                 aria-label="Edit trip"
               >
@@ -452,7 +452,7 @@ export default function TripDetailPage() {
       </div>
 
       {/* Tabs: Locations | Itinerary */}
-      <div className="border-b border-warm-border">
+      <div className="border-b border-border">
         <nav className="flex gap-6" role="tablist" aria-label="Trip sections">
           <button
             type="button"
@@ -463,8 +463,8 @@ export default function TripDetailPage() {
             className={cn(
               "border-b-[3px] pb-3 text-xs font-semibold uppercase tracking-wider transition-colors",
               activeTab === "locations"
-                ? "border-brand-green text-brand-green"
-                : "border-transparent text-content-muted hover:text-content-primary"
+                ? "border-brand text-brand"
+                : "border-transparent text-muted-foreground hover:text-foreground"
             )}
             onClick={() => setActiveTab("locations")}
           >
@@ -482,8 +482,8 @@ export default function TripDetailPage() {
             className={cn(
               "border-b-[3px] pb-3 text-xs font-semibold uppercase tracking-wider transition-colors",
               activeTab === "itinerary"
-                ? "border-brand-green text-brand-green"
-                : "border-transparent text-content-muted hover:text-content-primary"
+                ? "border-brand text-brand"
+                : "border-transparent text-muted-foreground hover:text-foreground"
             )}
             onClick={() => setActiveTab("itinerary")}
           >
@@ -504,7 +504,7 @@ export default function TripDetailPage() {
               <div className="relative flex-1 sm:max-w-xs">
                 <Search
                   size={14}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-content-muted"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
                 />
                 <input
                   type="search"
@@ -512,7 +512,7 @@ export default function TripDetailPage() {
                   placeholder="Search locations…"
                   value={locationNameSearch}
                   onChange={(e) => setLocationNameSearch(e.target.value)}
-                  className="h-9 w-full rounded-full border border-warm-border bg-surface-card pl-9 pr-4 text-sm placeholder:text-content-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-green"
+                  className="h-9 w-full rounded-full border border-border bg-card pl-9 pr-4 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand"
                   aria-label="Search by location name"
                 />
               </div>
@@ -520,10 +520,10 @@ export default function TripDetailPage() {
                 <button
                   type="button"
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full border border-warm-border px-3 py-1.5 text-sm font-medium transition-colors",
+                    "inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm font-medium transition-colors",
                     groupByCity
-                      ? "bg-brand-green-light text-brand-green-dark"
-                      : "text-content-primary hover:bg-brand-green-light"
+                      ? "bg-brand-muted text-brand-strong"
+                      : "text-foreground hover:bg-brand-muted"
                   )}
                   onClick={() => {
                     setGroupByCity((v) => !v);
@@ -538,10 +538,10 @@ export default function TripDetailPage() {
                 <button
                   type="button"
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full border border-warm-border px-3 py-1.5 text-sm font-medium transition-colors",
+                    "inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm font-medium transition-colors",
                     groupByPerson
-                      ? "bg-brand-green-light text-brand-green-dark"
-                      : "text-content-primary hover:bg-brand-green-light"
+                      ? "bg-brand-muted text-brand-strong"
+                      : "text-foreground hover:bg-brand-muted"
                   )}
                   onClick={() => {
                     setGroupByPerson((v) => !v);
@@ -560,7 +560,7 @@ export default function TripDetailPage() {
                     <PopoverTrigger asChild>
                       <button
                         type="button"
-                        className="inline-flex items-center gap-1.5 rounded-full bg-brand-terracotta px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-terracotta-dark"
+                        className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-strong"
                       >
                         <Plus size={16} strokeWidth={2.5} />
                         Add Location
@@ -574,15 +574,15 @@ export default function TripDetailPage() {
                     >
                       <button
                         type="button"
-                        className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-brand-green-light"
+                        className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-brand-muted"
                         onClick={() => setAddingLocation(true)}
                       >
-                        <MapPin size={16} className="text-brand-terracotta" />
+                        <MapPin size={16} className="text-primary" />
                         Paste Link
                       </button>
                       <button
                         type="button"
-                        className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-content-muted"
+                        className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground"
                         disabled
                       >
                         <Upload size={16} className="opacity-40" />
@@ -606,8 +606,8 @@ export default function TripDetailPage() {
                 className={cn(
                   "rounded-full px-3 py-1 text-xs font-medium transition-colors",
                   categoryFilter === null
-                    ? "bg-brand-green text-white"
-                    : "border border-warm-border bg-surface-card text-content-muted hover:bg-brand-green-light"
+                    ? "bg-brand text-white"
+                    : "border border-border bg-card text-muted-foreground hover:bg-brand-muted"
                 )}
                 onClick={() => setCategoryFilter(null)}
               >
@@ -619,8 +619,8 @@ export default function TripDetailPage() {
                   className={cn(
                     "rounded-full px-3 py-1 text-xs font-medium transition-colors",
                     categoryFilter === cat
-                      ? "bg-brand-green text-white"
-                      : "border border-warm-border bg-surface-card text-content-muted hover:bg-brand-green-light"
+                      ? "bg-brand text-white"
+                      : "border border-border bg-card text-muted-foreground hover:bg-brand-muted"
                   )}
                   onClick={() =>
                     setCategoryFilter(categoryFilter === cat ? null : cat)
@@ -658,7 +658,7 @@ export default function TripDetailPage() {
               </Button>
             </EmptyState>
           ) : filteredLocations.length === 0 && locationNameSearch.trim() ? (
-            <p className="py-4 text-sm text-content-muted">
+            <p className="py-4 text-sm text-muted-foreground">
               No locations match &quot;{locationNameSearch.trim()}&quot;. Try a
               different search or clear the search box.
             </p>
@@ -666,7 +666,7 @@ export default function TripDetailPage() {
             <div className="space-y-6">
               {groupedLocations.map(([groupName, locs]) => (
                 <div key={groupName}>
-                  <h3 className="mb-3 text-sm font-semibold text-content-muted">
+                  <h3 className="mb-3 text-sm font-semibold text-muted-foreground">
                     {groupName}{" "}
                     <span className="font-normal">({locs.length})</span>
                   </h3>

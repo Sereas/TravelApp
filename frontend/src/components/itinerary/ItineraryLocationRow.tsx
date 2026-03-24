@@ -34,26 +34,26 @@ const TIME_META: Record<
   morning: {
     label: "Morning",
     icon: Sunrise,
-    bg: "bg-amber-50",
-    text: "text-amber-800",
+    bg: "bg-time-morning-bg",
+    text: "text-time-morning-text",
   },
   afternoon: {
     label: "Afternoon",
     icon: Sun,
-    bg: "bg-sky-50",
-    text: "text-sky-800",
+    bg: "bg-time-afternoon-bg",
+    text: "text-time-afternoon-text",
   },
   evening: {
     label: "Evening",
     icon: Sunset,
-    bg: "bg-purple-50",
-    text: "text-purple-800",
+    bg: "bg-time-evening-bg",
+    text: "text-time-evening-text",
   },
   night: {
     label: "Night",
     icon: Moon,
-    bg: "bg-slate-800",
-    text: "text-slate-50",
+    bg: "bg-time-night-bg",
+    text: "text-time-night-text",
   },
 };
 
@@ -267,11 +267,11 @@ export function ItineraryLocationRow({
       >
         <div
           className={cn(
-            "group flex items-center gap-3 rounded-xl border border-transparent px-2 py-2 text-sm transition-colors",
+            "group flex items-center gap-3 rounded-xl border border-transparent px-2 py-2 text-sm transition-all duration-200",
             isDrag && "opacity-40",
             expanded
               ? "bg-accent/30 shadow-sm"
-              : "bg-white/70 hover:border-warm-border hover:bg-accent/10"
+              : "bg-white/70 hover:border-border hover:bg-accent/10 hover:-translate-y-px hover:shadow-sm motion-reduce:hover:translate-y-0 dark:bg-card/70"
           )}
         >
           <button
@@ -283,7 +283,7 @@ export function ItineraryLocationRow({
             }}
             aria-expanded={expanded}
           >
-            <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-warm-border bg-muted">
+            <div className="polaroid-img relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-muted">
               {imageUrl ? (
                 <img
                   src={imageUrl}
@@ -291,7 +291,7 @@ export function ItineraryLocationRow({
                   className="h-full w-full object-cover"
                 />
               ) : (
-                <div className="flex h-full w-full items-center justify-center bg-brand-green-light/30">
+                <div className="flex h-full w-full items-center justify-center bg-brand-muted/30">
                   {optionLocation.location.category ? (
                     <CategoryIcon
                       category={optionLocation.location.category as CategoryKey}
@@ -324,7 +324,7 @@ export function ItineraryLocationRow({
               </span>
             )}
             <div className="min-w-0 flex-1">
-              <div className="truncate font-medium text-content-primary">
+              <div className="truncate font-medium text-foreground">
                 {optionLocation.location.name}
               </div>
               <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground/70">
@@ -334,13 +334,13 @@ export function ItineraryLocationRow({
                   </span>
                 ) : null}
                 {optionLocation.location.category ? (
-                  <span className="rounded-full bg-brand-green-light/40 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-content-muted">
+                  <span className="rounded-full bg-brand-muted/40 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                     {optionLocation.location.category}
                   </span>
                 ) : null}
               </div>
               {optionLocation.location.note ? (
-                <div className="mt-1 whitespace-pre-wrap border-l-2 border-brand-green/30 pl-2 text-xs leading-5 text-content-muted/90">
+                <div className="mt-1 whitespace-pre-wrap border-l-2 border-primary/20 pl-2 text-xs leading-5 text-muted-foreground/80">
                   {optionLocation.location.note}
                 </div>
               ) : null}
@@ -352,8 +352,8 @@ export function ItineraryLocationRow({
               className={cn(
                 "inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium",
                 booking === "yes_done"
-                  ? "border-green-200 text-green-700"
-                  : "border-amber-200 text-amber-700"
+                  ? "border-booking-done-border bg-booking-done-bg text-booking-done-text"
+                  : "border-booking-pending-border bg-booking-pending-bg text-booking-pending-text"
               )}
             >
               <Ticket size={9} />
@@ -385,7 +385,7 @@ export function ItineraryLocationRow({
           >
             <button
               type="button"
-              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-transparent bg-muted/60 px-2 py-1 text-[10px] text-muted-foreground transition-colors hover:border-warm-border hover:bg-accent/70 hover:text-foreground"
+              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-transparent bg-muted/60 px-2 py-1 text-[10px] text-muted-foreground transition-colors hover:border-border hover:bg-accent/70 hover:text-foreground"
               onClick={() => onToggleTimePicker(optionLocation.location_id)}
               aria-label={`Time: ${tm.label}`}
             >

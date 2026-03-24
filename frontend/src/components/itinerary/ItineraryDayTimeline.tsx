@@ -60,28 +60,35 @@ const TIME_SECTIONS = [
     label: "Morning",
     displayLabel: "Sunrise",
     icon: Sunrise,
-    accent: "text-amber-700 bg-amber-50 border-amber-100",
+    accent:
+      "text-time-morning-text bg-time-morning-bg border-time-morning-border",
+    wash: "bg-gradient-to-b from-time-morning-bg/40 to-transparent",
   },
   {
     key: "afternoon",
     label: "Afternoon",
     displayLabel: "Midday",
     icon: Sun,
-    accent: "text-sky-700 bg-sky-50 border-sky-100",
+    accent:
+      "text-time-afternoon-text bg-time-afternoon-bg border-time-afternoon-border",
+    wash: "bg-gradient-to-b from-time-afternoon-bg/40 to-transparent",
   },
   {
     key: "evening",
     label: "Evening",
     displayLabel: "Sundown",
     icon: Sunset,
-    accent: "text-fuchsia-700 bg-fuchsia-50 border-fuchsia-100",
+    accent:
+      "text-time-evening-text bg-time-evening-bg border-time-evening-border",
+    wash: "bg-gradient-to-b from-time-evening-bg/40 to-transparent",
   },
   {
     key: "night",
     label: "Night",
     displayLabel: "Late",
     icon: Moon,
-    accent: "text-slate-700 bg-slate-100 border-slate-200",
+    accent: "text-time-night-text bg-time-night-bg border-time-night-border",
+    wash: "bg-gradient-to-b from-time-night-bg/40 to-transparent",
   },
 ] as const;
 
@@ -112,18 +119,23 @@ export function ItineraryDayTimeline({
 }: ItineraryDayTimelineProps) {
   if (sorted.length === 0) {
     return (
-      <div className="py-6 flex flex-col items-center gap-3 text-muted-foreground/50">
+      <div className="py-8 flex flex-col items-center gap-3 text-muted-foreground/50">
         <div className="flex gap-2 items-center">
           <div className="flex flex-col items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full bg-muted-foreground/20" />
-            <div className="w-0.5 h-4 bg-muted-foreground/10" />
-            <div className="w-2 h-2 rounded-full bg-muted-foreground/20" />
-            <div className="w-0.5 h-4 bg-muted-foreground/10" />
-            <div className="w-2 h-2 rounded-full bg-muted-foreground/20" />
+            <div className="w-2 h-2 rounded-full border-2 border-dashed border-muted-foreground/20" />
+            <div className="w-0.5 h-4 border-l border-dashed border-muted-foreground/15" />
+            <div className="w-2 h-2 rounded-full border-2 border-dashed border-muted-foreground/20" />
+            <div className="w-0.5 h-4 border-l border-dashed border-muted-foreground/15" />
+            <div className="w-2 h-2 rounded-full border-2 border-dashed border-muted-foreground/20" />
           </div>
-          <p className="ml-2 text-sm text-muted-foreground/60">
-            No locations planned yet
-          </p>
+          <div className="ml-2">
+            <p className="font-serif text-sm text-muted-foreground/60">
+              No locations planned yet
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground/40">
+              Add places from the unscheduled panel
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -146,19 +158,23 @@ export function ItineraryDayTimeline({
           <section
             key={section.key}
             aria-label={`${section.label} stops`}
-            className="rounded-2xl border border-warm-border/70 bg-white/60 px-3 py-3"
+            className={cn(
+              "rounded-2xl border border-border/70 px-3 py-3",
+              section.wash,
+              "bg-white/60 dark:bg-card/60"
+            )}
           >
             <div className="mb-2 flex items-center justify-between gap-3">
               <div
                 className={cn(
-                  "inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-semibold",
+                  "inline-flex items-center gap-2 rounded-full border px-2.5 py-1 font-serif text-xs font-semibold",
                   section.accent
                 )}
               >
                 <SectionIcon size={13} />
                 {section.displayLabel}
               </div>
-              <span className="text-xs text-content-muted">
+              <span className="text-xs text-muted-foreground">
                 {section.items.length}{" "}
                 {section.items.length === 1 ? "stop" : "stops"}
               </span>

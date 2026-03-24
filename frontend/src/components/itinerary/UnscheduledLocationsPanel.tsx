@@ -2,7 +2,14 @@
 
 import { useMemo, useState } from "react";
 import type { Location } from "@/lib/api";
-import { ChevronDown, Inbox, MapPin, Plus, Search } from "lucide-react";
+import {
+  ChevronDown,
+  Compass,
+  Inbox,
+  MapPin,
+  Plus,
+  Search,
+} from "lucide-react";
 
 const COLLAPSED_COUNT = 4;
 const SEARCH_THRESHOLD = 8;
@@ -45,30 +52,33 @@ export function UnscheduledLocationsPanel({
   const hiddenCount = filtered.length - COLLAPSED_COUNT;
 
   return (
-    <aside className="rounded-2xl border border-warm-border bg-surface-card p-4">
+    <aside className="rounded-2xl border border-border bg-card p-4">
       <div className="mb-2 flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm font-semibold text-content-primary">
-          <Inbox size={16} />
-          Unscheduled
+        <div className="flex items-center gap-2 font-serif text-sm font-semibold text-foreground">
+          <Inbox size={16} className="text-primary/60" />
+          Not yet planned
         </div>
         {unscheduled.length > 0 && (
-          <span className="rounded-full bg-brand-terracotta/10 px-2 py-0.5 text-[11px] font-semibold text-brand-terracotta">
+          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
             {unscheduled.length}
           </span>
         )}
       </div>
 
       {unscheduled.length === 0 ? (
-        <p className="py-3 text-center text-xs text-content-muted/60">
-          All places scheduled
-        </p>
+        <div className="py-4 text-center">
+          <Compass size={20} className="mx-auto mb-1.5 text-brand/40" />
+          <p className="font-serif text-xs text-muted-foreground/60">
+            All places planned!
+          </p>
+        </div>
       ) : (
         <>
           {showSearch && (
             <div className="relative mb-2">
               <Search
                 size={14}
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-content-muted/50"
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/50"
               />
               <input
                 type="text"
@@ -78,7 +88,7 @@ export function UnscheduledLocationsPanel({
                   setExpanded(false);
                 }}
                 placeholder="Filter places..."
-                className="w-full rounded-lg border border-warm-border bg-white py-1.5 pl-8 pr-3 text-xs text-content-primary placeholder:text-content-muted/40 focus:border-brand-green/40 focus:outline-none"
+                className="w-full rounded-lg border border-border bg-white py-1.5 pl-8 pr-3 text-xs text-foreground placeholder:text-muted-foreground/40 focus:border-brand/40 focus:outline-none"
               />
             </div>
           )}
@@ -91,11 +101,11 @@ export function UnscheduledLocationsPanel({
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5 text-[13px] leading-tight">
-                    <span className="truncate font-medium text-content-primary">
+                    <span className="truncate font-medium text-foreground">
                       {location.name}
                     </span>
                     {location.city && (
-                      <span className="inline-flex shrink-0 items-center gap-0.5 text-[11px] text-content-muted/60">
+                      <span className="inline-flex shrink-0 items-center gap-0.5 text-[11px] text-muted-foreground/60">
                         <MapPin size={9} />
                         {location.city}
                       </span>
@@ -105,7 +115,7 @@ export function UnscheduledLocationsPanel({
                 {currentDayId && (
                   <button
                     type="button"
-                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-brand-green/20 bg-brand-green-light/30 text-brand-green transition-colors hover:bg-brand-green hover:text-white"
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-brand/20 bg-brand-muted/30 text-brand transition-colors hover:bg-brand hover:text-white"
                     aria-label={`Add ${location.name}`}
                     title="Add to current day"
                     onClick={(event) => {
@@ -123,7 +133,7 @@ export function UnscheduledLocationsPanel({
           {needsCollapse && !expanded && hiddenCount > 0 && (
             <button
               type="button"
-              className="mt-1 flex w-full items-center justify-center gap-1 rounded-lg py-1.5 text-xs text-content-muted transition-colors hover:bg-muted/40 hover:text-content-primary"
+              className="mt-1 flex w-full items-center justify-center gap-1 rounded-lg py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
               onClick={() => setExpanded(true)}
             >
               Show {hiddenCount} more
@@ -134,7 +144,7 @@ export function UnscheduledLocationsPanel({
           {expanded && needsCollapse && (
             <button
               type="button"
-              className="mt-1 flex w-full items-center justify-center gap-1 rounded-lg py-1.5 text-xs text-content-muted transition-colors hover:bg-muted/40 hover:text-content-primary"
+              className="mt-1 flex w-full items-center justify-center gap-1 rounded-lg py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
               onClick={() => setExpanded(false)}
             >
               Show less
@@ -142,7 +152,7 @@ export function UnscheduledLocationsPanel({
           )}
 
           {filter.trim() && filtered.length === 0 && (
-            <p className="py-2 text-center text-xs text-content-muted/60">
+            <p className="py-2 text-center text-xs text-muted-foreground/60">
               No matches
             </p>
           )}

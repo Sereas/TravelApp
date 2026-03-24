@@ -124,7 +124,7 @@ export function ItineraryPlanSwitcher({
             variant="outline"
             size="sm"
             id={`plan-switch-${day.id}`}
-            className="h-8 min-w-[10.5rem] max-w-[min(16rem,55vw)] justify-between gap-2 border-warm-border/80 bg-surface-card/90 px-2.5 text-xs font-medium text-content-primary shadow-sm hover:bg-background"
+            className="h-8 min-w-[10.5rem] max-w-[min(16rem,55vw)] justify-between gap-2 border-border/80 bg-card/90 px-2.5 text-xs font-medium text-foreground shadow-sm hover:bg-background"
             title="Choose plan for this day"
             aria-haspopup="listbox"
             aria-expanded={planMenuOpen}
@@ -164,8 +164,8 @@ export function ItineraryPlanSwitcher({
                   className={cn(
                     "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition-colors",
                     selected
-                      ? "bg-brand-green-light/35 font-medium text-content-primary"
-                      : "text-content-muted hover:bg-brand-green-light/20 hover:text-content-primary"
+                      ? "bg-brand-muted/35 font-medium text-foreground"
+                      : "text-muted-foreground hover:bg-brand-muted/20 hover:text-foreground"
                   )}
                   onClick={() => {
                     if (!selected) onSelectOption(day.id, option.id);
@@ -174,7 +174,7 @@ export function ItineraryPlanSwitcher({
                 >
                   <span className="flex h-4 w-4 shrink-0 items-center justify-center">
                     {selected ? (
-                      <Check className="h-3.5 w-3.5 text-brand-green-dark" />
+                      <Check className="h-3.5 w-3.5 text-brand-strong" />
                     ) : null}
                   </span>
                   <span className="min-w-0 flex-1 truncate">{label}</span>
@@ -183,11 +183,11 @@ export function ItineraryPlanSwitcher({
             })}
           </div>
 
-          <div className="border-t border-warm-border/60 p-1">
+          <div className="border-t border-border/60 p-1">
             {!addingPlan ? (
               <button
                 type="button"
-                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-content-muted transition-colors hover:bg-brand-green-light/25 hover:text-content-primary"
+                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-muted-foreground transition-colors hover:bg-brand-muted/25 hover:text-foreground"
                 onClick={openAddFlow}
               >
                 <Plus className="h-3.5 w-3.5 shrink-0" strokeWidth={2.25} />
@@ -235,7 +235,7 @@ export function ItineraryPlanSwitcher({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="h-7 text-xs text-content-muted"
+                    className="h-7 text-xs text-muted-foreground"
                     disabled={createOptionLoading}
                     onClick={handleCancelAdd}
                   >
@@ -261,7 +261,7 @@ export function ItineraryPlanSwitcher({
               type="button"
               variant="ghost"
               size="icon"
-              className="h-8 w-8 shrink-0 text-content-muted hover:bg-brand-green-light/30 hover:text-content-primary"
+              className="h-8 w-8 shrink-0 text-muted-foreground hover:bg-brand-muted/30 hover:text-foreground"
               aria-label={`Plan settings: ${currentLabel}`}
             >
               <Settings2 className="h-4 w-4" />
@@ -312,7 +312,7 @@ export function ItineraryPlanSwitcher({
               <div className="flex flex-col gap-0.5">
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-content-primary hover:bg-brand-green-light/35"
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-foreground hover:bg-brand-muted/35"
                   onClick={() => setRenamingOptionId(currentOption.id)}
                 >
                   <Pencil className="h-3.5 w-3.5 shrink-0 opacity-70" />
@@ -322,7 +322,7 @@ export function ItineraryPlanSwitcher({
                   trigger={
                     <button
                       type="button"
-                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-brand-terracotta-dark hover:bg-brand-terracotta-light/50"
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-primary-strong hover:bg-primary/10"
                     >
                       <Trash2 className="h-3.5 w-3.5 shrink-0 opacity-80" />
                       Delete

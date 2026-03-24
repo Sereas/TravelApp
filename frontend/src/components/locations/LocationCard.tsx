@@ -155,10 +155,10 @@ export function LocationCard({
   return (
     <div
       className={cn(
-        "group relative flex flex-col overflow-hidden rounded-xl border bg-surface-card transition-all hover:shadow-md",
+        "group relative flex flex-col overflow-hidden rounded-xl border bg-card transition-all hover:shadow-md",
         inItinerary
-          ? "border-brand-green/25 shadow-sm shadow-brand-green/5"
-          : "border-warm-border",
+          ? "border-brand/25 shadow-sm shadow-brand/5"
+          : "border-border",
         className
       )}
     >
@@ -212,7 +212,7 @@ export function LocationCard({
         {/* Overlaid badges */}
         <div className="absolute bottom-3 left-3 flex items-center gap-1.5">
           {category && (
-            <span className="rounded-full bg-white/90 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-content-primary backdrop-blur-sm">
+            <span className="rounded-full bg-white/90 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-foreground backdrop-blur-sm">
               {category}
             </span>
           )}
@@ -295,13 +295,13 @@ export function LocationCard({
       {/* Content area */}
       <div className="flex flex-1 flex-col px-3.5 pb-3 pt-3">
         {/* Location name */}
-        <h3 className="text-[15px] font-semibold leading-snug tracking-tight text-content-primary">
+        <h3 className="text-[15px] font-semibold leading-snug tracking-tight text-foreground">
           {name}
         </h3>
 
         {/* City — prominent but subordinate to name */}
         {city && (
-          <p className="mt-0.5 text-xs font-medium text-content-muted">
+          <p className="mt-0.5 text-xs font-medium text-muted-foreground">
             {city}
           </p>
         )}
@@ -309,7 +309,7 @@ export function LocationCard({
         {/* Details: address, hours, notes */}
         <div className="mt-2 flex min-h-0 flex-1 flex-col gap-1.5">
           {address && (
-            <div className="flex items-center gap-1.5 text-[11px] text-content-muted/70">
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/70">
               <MapPin size={11} className="shrink-0" />
               <span className="truncate">{address}</span>
             </div>
@@ -321,7 +321,7 @@ export function LocationCard({
                   <button
                     type="button"
                     onClick={() => setHoursExpanded((e) => !e)}
-                    className="flex w-fit items-center gap-1.5 text-xs text-content-muted hover:text-content-primary"
+                    className="flex w-fit items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
                     aria-expanded={hoursExpanded}
                     aria-label={
                       hoursExpanded
@@ -337,7 +337,7 @@ export function LocationCard({
                     </span>
                   </button>
                   {hoursExpanded && (
-                    <div className="ml-0.5 mt-1 rounded-lg border border-warm-border bg-surface-card">
+                    <div className="ml-0.5 mt-1 rounded-lg border border-border bg-card">
                       {formatHoursLines(working_hours).map((line, i) => {
                         const parts = line.split(/:\s*(.+)/);
                         const dayName = parts[0];
@@ -348,17 +348,17 @@ export function LocationCard({
                             key={i}
                             className={cn(
                               "flex items-center justify-between px-2.5 py-1 text-[11px]",
-                              i > 0 && "border-t border-warm-border/60"
+                              i > 0 && "border-t border-border/60"
                             )}
                           >
-                            <span className="font-medium text-content-primary">
+                            <span className="font-medium text-foreground">
                               {dayName}
                             </span>
                             <span
                               className={
                                 isClosed
-                                  ? "text-content-muted/50"
-                                  : "text-content-muted"
+                                  ? "text-muted-foreground/50"
+                                  : "text-muted-foreground"
                               }
                             >
                               {time || line}
@@ -370,7 +370,7 @@ export function LocationCard({
                   )}
                 </>
               ) : (
-                <div className="flex items-center gap-1.5 text-xs text-content-muted">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Clock size={12} className="shrink-0 opacity-50" />
                   {working_hours}
                 </div>
@@ -378,7 +378,7 @@ export function LocationCard({
             </div>
           )}
           {note && (
-            <div className="rounded-lg border-l-2 border-brand-terracotta/30 bg-brand-terracotta/[0.04] py-1.5 pl-2.5 pr-2 text-xs leading-relaxed text-content-primary/80">
+            <div className="rounded-lg border-l-2 border-primary/30 bg-primary/[0.04] py-1.5 pl-2.5 pr-2 text-xs leading-relaxed text-foreground/80">
               {note.length <= NOTE_LONG_THRESHOLD ? (
                 <span>{note}</span>
               ) : (
@@ -387,7 +387,7 @@ export function LocationCard({
                   <button
                     type="button"
                     onClick={() => setNoteExpanded((e) => !e)}
-                    className="ml-1 inline-flex items-center gap-0.5 text-[11px] font-medium text-brand-terracotta hover:underline"
+                    className="ml-1 inline-flex items-center gap-0.5 text-[11px] font-medium text-primary hover:underline"
                     aria-expanded={noteExpanded}
                   >
                     {noteExpanded ? (
@@ -409,7 +409,7 @@ export function LocationCard({
         </div>
 
         {/* Footer: itinerary status + schedule + Maps link + Added by */}
-        <div className="mt-3 flex shrink-0 flex-col gap-1 border-t border-warm-border pt-2">
+        <div className="mt-3 flex shrink-0 flex-col gap-1 border-t border-border pt-2">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide">
               {inItinerary ? (
@@ -426,7 +426,7 @@ export function LocationCard({
                   <PopoverTrigger asChild>
                     <button
                       type="button"
-                      className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-brand-terracotta transition-colors hover:text-brand-terracotta-dark"
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-primary transition-colors hover:text-primary-strong"
                       aria-label="Schedule to a day"
                     >
                       <CalendarPlus size={12} className="shrink-0" />
@@ -438,7 +438,7 @@ export function LocationCard({
                     align="start"
                     sideOffset={4}
                   >
-                    <p className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-content-muted">
+                    <p className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                       Schedule to
                     </p>
                     <div className="flex max-h-52 flex-col overflow-y-auto">
@@ -446,7 +446,7 @@ export function LocationCard({
                         <button
                           key={day.id}
                           type="button"
-                          className="flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm font-medium text-content-primary transition-colors hover:bg-brand-green-light"
+                          className="flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm font-medium text-foreground transition-colors hover:bg-brand-muted"
                           onClick={() => {
                             onScheduleToDay!(day.id);
                             setScheduleOpen(false);
@@ -454,7 +454,7 @@ export function LocationCard({
                         >
                           <CalendarPlus
                             size={13}
-                            className="shrink-0 text-brand-green"
+                            className="shrink-0 text-brand"
                           />
                           {day.label}
                         </button>
@@ -463,7 +463,7 @@ export function LocationCard({
                   </PopoverContent>
                 </Popover>
               ) : (
-                <span className="inline-flex items-center gap-1 text-content-muted/50">
+                <span className="inline-flex items-center gap-1 text-muted-foreground/50">
                   <CalendarCheck size={12} className="shrink-0" />
                   <span>Not scheduled</span>
                 </span>
@@ -474,7 +474,7 @@ export function LocationCard({
                 href={google_link}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex shrink-0 items-center gap-1 rounded-md text-[11px] font-medium text-brand-terracotta transition-colors hover:text-brand-terracotta-dark"
+                className="inline-flex shrink-0 items-center gap-1 rounded-md text-[11px] font-medium text-primary transition-colors hover:text-primary-strong"
                 aria-label="Open in Google Maps"
               >
                 Details &rarr;
@@ -482,7 +482,7 @@ export function LocationCard({
             )}
           </div>
           {added_by_email && (
-            <p className="text-[11px] text-content-muted/50">
+            <p className="text-[11px] text-muted-foreground/50">
               Added by {added_by_email}
             </p>
           )}

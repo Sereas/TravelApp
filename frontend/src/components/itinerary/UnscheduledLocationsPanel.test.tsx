@@ -68,7 +68,7 @@ describe("UnscheduledLocationsPanel", () => {
       />
     );
 
-    expect(screen.getByText(/all places scheduled/i)).toBeInTheDocument();
+    expect(screen.getByText(/all places planned/i)).toBeInTheDocument();
   });
 
   it("collapses long lists and expands on click", async () => {

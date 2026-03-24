@@ -4,37 +4,26 @@
 
 @layer base {
   :root {
-    /* ShtabTravel brand tokens */
-    --color-bg: #f2efe7;
-    --color-surface: #ffffff;
-    --color-text-primary: #1c1f1a;
-    --color-text-muted: #6b7062;
-    --color-brand-green: #2d6a4f;
-    --color-brand-green-light: #e8f0ec;
-    --color-brand-green-dark: #1e4a36;
-    --color-brand-terracotta: #c17858;
-    --color-brand-terracotta-light: #f0ddd5;
-    --color-brand-terracotta-dark: #8b5a3e;
-    --color-border-accent: #2d6a4f;
-
-    /* shadcn/ui base tokens */
-    --background: 30 25% 98%;
-    --foreground: 20 20% 10%;
+    /* Page + surfaces (HSL) — single source for Tailwind theme */
+    --background: 42 33% 96%;
+    --foreground: 80 12% 11%;
 
     --card: 0 0% 100%;
-    --card-foreground: 20 20% 10%;
+    --card-foreground: 80 12% 11%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 20 20% 10%;
+    --popover-foreground: 80 12% 11%;
 
-    --primary: 24 90% 50%;
+    /* CTA / accent (terracotta) */
+    --primary: 16 45% 55%;
     --primary-foreground: 0 0% 100%;
+    --primary-strong: 18 42% 40%;
 
     --secondary: 30 30% 94%;
     --secondary-foreground: 20 20% 20%;
 
-    --muted: 30 15% 94%;
-    --muted-foreground: 20 10% 46%;
+    --muted: 152 22% 93%;
+    --muted-foreground: 80 8% 42%;
 
     --accent: 30 30% 94%;
     --accent-foreground: 20 20% 20%;
@@ -42,11 +31,46 @@
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 30 15% 90%;
-    --input: 30 15% 88%;
-    --ring: 24 90% 50%;
+    --border: 40 18% 90%;
+    --input: 40 16% 88%;
+    --ring: 152 42% 32%;
+
+    /* Forest brand (logo, selection, links) */
+    --brand: 152 42% 32%;
+    --brand-foreground: 0 0% 100%;
+    --brand-muted: 152 22% 93%;
+    --brand-strong: 152 38% 22%;
 
     --radius: 0.625rem;
+
+    /* Time periods */
+    --time-morning-bg: 36 100% 96%;
+    --time-morning-text: 36 80% 30%;
+    --time-morning-border: 36 60% 88%;
+    --time-afternoon-bg: 199 100% 96%;
+    --time-afternoon-text: 199 70% 30%;
+    --time-afternoon-border: 199 60% 88%;
+    --time-evening-bg: 280 60% 96%;
+    --time-evening-text: 280 50% 30%;
+    --time-evening-border: 280 40% 88%;
+    --time-night-bg: 220 20% 16%;
+    --time-night-text: 220 15% 92%;
+    --time-night-border: 220 15% 25%;
+
+    /* Route palette */
+    --route-1: 213 94% 68%;
+    --route-2: 160 64% 52%;
+    --route-3: 27 96% 61%;
+    --route-4: 263 70% 72%;
+    --route-5: 350 80% 65%;
+
+    /* Booking status */
+    --booking-done-bg: 145 60% 96%;
+    --booking-done-text: 145 50% 32%;
+    --booking-done-border: 145 40% 82%;
+    --booking-pending-bg: 36 80% 96%;
+    --booking-pending-text: 36 70% 30%;
+    --booking-pending-border: 36 50% 82%;
   }
 
   .dark {
@@ -59,13 +83,14 @@
     --popover: 20 20% 10%;
     --popover-foreground: 30 20% 95%;
 
-    --primary: 24 90% 55%;
+    --primary: 16 48% 58%;
     --primary-foreground: 0 0% 100%;
+    --primary-strong: 16 42% 48%;
 
     --secondary: 20 15% 16%;
     --secondary-foreground: 30 20% 95%;
 
-    --muted: 20 15% 16%;
+    --muted: 20 15% 18%;
     --muted-foreground: 30 10% 60%;
 
     --accent: 20 15% 16%;
@@ -76,7 +101,41 @@
 
     --border: 20 15% 16%;
     --input: 20 15% 16%;
-    --ring: 24 90% 55%;
+    --ring: 152 38% 45%;
+
+    --brand: 152 36% 48%;
+    --brand-foreground: 20 20% 7%;
+    --brand-muted: 152 18% 18%;
+    --brand-strong: 152 30% 65%;
+
+    /* Time periods (dark) */
+    --time-morning-bg: 36 40% 14%;
+    --time-morning-text: 36 60% 75%;
+    --time-morning-border: 36 30% 22%;
+    --time-afternoon-bg: 199 40% 14%;
+    --time-afternoon-text: 199 50% 75%;
+    --time-afternoon-border: 199 30% 22%;
+    --time-evening-bg: 280 30% 14%;
+    --time-evening-text: 280 40% 75%;
+    --time-evening-border: 280 25% 22%;
+    --time-night-bg: 220 25% 10%;
+    --time-night-text: 220 15% 80%;
+    --time-night-border: 220 20% 18%;
+
+    /* Route palette (dark) */
+    --route-1: 213 80% 60%;
+    --route-2: 160 50% 48%;
+    --route-3: 27 80% 55%;
+    --route-4: 263 55% 65%;
+    --route-5: 350 65% 60%;
+
+    /* Booking status (dark) */
+    --booking-done-bg: 145 30% 14%;
+    --booking-done-text: 145 40% 65%;
+    --booking-done-border: 145 25% 22%;
+    --booking-pending-bg: 36 30% 14%;
+    --booking-pending-text: 36 40% 65%;
+    --booking-pending-border: 36 25% 22%;
   }
 }
 
@@ -110,5 +169,66 @@
   }
   .animate-page-flip {
     animation: page-flip-in 0.25s ease-out both;
+  }
+
+  @keyframes journal-fade-in {
+    0% {
+      opacity: 0;
+      transform: translateY(6px) scale(0.98);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+  .animate-journal-in {
+    animation: journal-fade-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .grain-overlay {
+    position: relative;
+  }
+  .grain-overlay::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: inherit;
+    opacity: 0.035;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 128px 128px;
+    mix-blend-mode: multiply;
+  }
+  .dark .grain-overlay::before {
+    opacity: 0.06;
+    mix-blend-mode: soft-light;
+  }
+
+  .polaroid-img {
+    border: 3px solid white;
+    box-shadow:
+      0 1px 3px rgba(0, 0, 0, 0.08),
+      0 0 0 1px rgba(0, 0, 0, 0.03);
+  }
+  .polaroid-img:nth-child(odd) {
+    transform: rotate(1deg);
+  }
+  .polaroid-img:nth-child(even) {
+    transform: rotate(-0.5deg);
+  }
+
+  .journal-note {
+    border-left: 2px solid hsl(var(--primary) / 0.3);
+    font-style: italic;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-journal-in {
+      animation: none;
+    }
+    .polaroid-img:nth-child(odd),
+    .polaroid-img:nth-child(even) {
+      transform: none;
+    }
   }
 }

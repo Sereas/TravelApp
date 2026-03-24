@@ -15,8 +15,8 @@ export function SiteHeader() {
             className="h-8 w-8"
           />
           <span className="text-lg font-bold tracking-tight">
-            <span className="text-content-primary">Shtab</span>
-            <span className="text-brand-green">Travel</span>
+            <span className="text-foreground">Shtab</span>
+            <span className="text-brand">Travel</span>
           </span>
         </Link>
         <UserNav />

@@ -260,8 +260,8 @@ export function PhotoUploadDialog({
           className={cn(
             "flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed px-4 py-6 text-center transition-colors",
             dragOver
-              ? "border-brand-green bg-brand-green-light"
-              : "border-warm-border hover:border-brand-green hover:bg-brand-green-light/50"
+              ? "border-brand bg-brand-muted"
+              : "border-border hover:border-brand hover:bg-brand-muted/50"
           )}
           onClick={() => fileInputRef.current?.click()}
           onKeyDown={(e) => {
@@ -278,14 +278,14 @@ export function PhotoUploadDialog({
           onDrop={handleDrop}
           data-testid="drop-zone"
         >
-          <Upload size={24} className="text-content-muted" />
-          <p className="text-sm text-content-muted">
+          <Upload size={24} className="text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">
             Drop an image here, click to browse, or{" "}
-            <span className="font-medium text-content-primary">
+            <span className="font-medium text-foreground">
               paste from clipboard
             </span>
           </p>
-          <p className="text-[11px] text-content-muted/60">
+          <p className="text-[11px] text-muted-foreground/60">
             JPEG, PNG, or WebP &middot; Max 5 MB &middot; Auto-resized for fast
             loading
           </p>

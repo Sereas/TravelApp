@@ -163,12 +163,12 @@ export function AddLocationForm({
 
         <form onSubmit={handleSubmit}>
           {/* Hero: Google Maps link */}
-          <div className="mx-5 rounded-xl bg-brand-green-light/40 px-4 py-3">
+          <div className="mx-5 rounded-xl bg-brand-muted/40 px-4 py-3">
             <div className="mb-2 flex items-center gap-2">
-              <Link2 size={14} className="text-brand-green" />
+              <Link2 size={14} className="text-brand" />
               <Label
                 htmlFor="add-location-google-link"
-                className="text-sm font-semibold text-content-primary"
+                className="text-sm font-semibold text-foreground"
               >
                 Google Maps link
               </Label>
@@ -186,14 +186,14 @@ export function AddLocationForm({
               onBlur={() => void handleGoogleLinkBlur()}
               autoFocus
               autoComplete="off"
-              className="h-9 rounded-lg border-brand-green/30 bg-white text-sm focus-visible:ring-brand-green"
+              className="h-9 rounded-lg border-brand/30 bg-white text-sm focus-visible:ring-brand"
             />
-            <p className="mt-1.5 text-[11px] leading-relaxed text-brand-green-dark/70">
+            <p className="mt-1.5 text-[11px] leading-relaxed text-brand-strong/70">
               Auto-fills details &amp; enables map pin. You can also fill in
               fields manually below.
             </p>
             {previewLoading && (
-              <p className="mt-1 text-xs text-brand-green">Fetching details…</p>
+              <p className="mt-1 text-xs text-brand">Fetching details…</p>
             )}
             {duplicateName && (
               <p className="mt-1 text-xs font-medium text-amber-600">
@@ -339,13 +339,13 @@ export function AddLocationForm({
                 </Label>
                 {scheduleDayId ? (
                   <div className="flex items-center gap-1.5">
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-green-light px-2.5 py-1 text-xs font-medium text-brand-green-dark">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-muted px-2.5 py-1 text-xs font-medium text-brand-strong">
                       <CalendarPlus size={12} />
                       {availableDays.find((d) => d.id === scheduleDayId)?.label}
                     </span>
                     <button
                       type="button"
-                      className="rounded-full p-0.5 text-content-muted transition-colors hover:bg-warm-border hover:text-content-primary"
+                      className="rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-border hover:text-foreground"
                       onClick={() => setScheduleDayId("")}
                       aria-label="Clear day selection"
                     >
@@ -357,7 +357,7 @@ export function AddLocationForm({
                     <PopoverTrigger asChild>
                       <button
                         type="button"
-                        className="flex h-8 w-full items-center justify-between rounded-lg border border-dashed border-warm-border bg-surface-card px-2.5 text-sm text-content-muted transition-colors hover:border-brand-green/40 hover:bg-brand-green-light/30"
+                        className="flex h-8 w-full items-center justify-between rounded-lg border border-dashed border-border bg-card px-2.5 text-sm text-muted-foreground transition-colors hover:border-brand/40 hover:bg-brand-muted/30"
                         aria-label="Schedule to day"
                       >
                         <span className="text-xs">Don&apos;t schedule yet</span>
@@ -374,12 +374,12 @@ export function AddLocationForm({
                           <button
                             key={day.id}
                             type="button"
-                            className="flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm font-medium text-content-primary transition-colors hover:bg-brand-green-light"
+                            className="flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm font-medium text-foreground transition-colors hover:bg-brand-muted"
                             onClick={() => setScheduleDayId(day.id)}
                           >
                             <CalendarPlus
                               size={13}
-                              className="shrink-0 text-brand-green"
+                              className="shrink-0 text-brand"
                             />
                             {day.label}
                           </button>
@@ -393,13 +393,13 @@ export function AddLocationForm({
           </div>
 
           {/* Footer */}
-          <div className="mt-4 flex items-center justify-end gap-2 border-t border-warm-border px-5 py-3">
+          <div className="mt-4 flex items-center justify-end gap-2 border-t border-border px-5 py-3">
             <Button
               type="button"
               variant="ghost"
               size="sm"
               onClick={onCancel}
-              className="rounded-full px-4 text-content-muted"
+              className="rounded-full px-4 text-muted-foreground"
             >
               Cancel
             </Button>
@@ -407,7 +407,7 @@ export function AddLocationForm({
               type="submit"
               disabled={saving}
               size="sm"
-              className="rounded-full bg-brand-terracotta px-5 font-semibold text-white hover:bg-brand-terracotta-dark"
+              className="rounded-full bg-primary px-5 font-semibold text-white hover:bg-primary-strong"
             >
               {saving ? "Adding…" : "Add Location"}
             </Button>

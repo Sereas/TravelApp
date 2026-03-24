@@ -247,13 +247,13 @@ export function EditLocationRow({
           </div>
 
           {/* Footer */}
-          <div className="mt-4 flex items-center justify-end gap-2 border-t border-warm-border px-5 py-3">
+          <div className="mt-4 flex items-center justify-end gap-2 border-t border-border px-5 py-3">
             <Button
               type="button"
               variant="ghost"
               size="sm"
               onClick={onCancel}
-              className="rounded-full px-4 text-content-muted"
+              className="rounded-full px-4 text-muted-foreground"
             >
               Cancel
             </Button>
@@ -261,7 +261,7 @@ export function EditLocationRow({
               type="submit"
               disabled={saving}
               size="sm"
-              className="rounded-full bg-brand-terracotta px-5 font-semibold text-white hover:bg-brand-terracotta-dark"
+              className="rounded-full bg-primary px-5 font-semibold text-white hover:bg-primary-strong"
             >
               {saving ? "Saving…" : "Save Changes"}
             </Button>

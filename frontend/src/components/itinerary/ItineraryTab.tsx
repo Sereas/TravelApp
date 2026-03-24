@@ -149,9 +149,11 @@ export function ItineraryTab({
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-semibold">Planner</h2>
-                <p className="text-sm text-content-muted">
-                  Work from unscheduled places into daily plans.
+                <h2 className="font-serif text-2xl font-bold tracking-tight text-foreground">
+                  Planner
+                </h2>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  Your day-by-day travel journal
                 </p>
               </div>
               {trip.start_date && trip.end_date ? (
@@ -213,7 +215,7 @@ export function ItineraryTab({
                       id={`itinerary-day-${day.id}`}
                       className={cn(
                         "rounded-3xl transition-shadow",
-                        selectedDayId === day.id && "ring-2 ring-brand-green/20"
+                        selectedDayId === day.id && "ring-2 ring-brand/20"
                       )}
                       onClickCapture={() => setSelectedDayId(day.id)}
                     >

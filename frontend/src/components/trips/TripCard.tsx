@@ -52,7 +52,7 @@ export function TripCard({
 
   return (
     <div
-      className={`group overflow-hidden rounded-xl border border-warm-border bg-surface-card shadow-sm transition-all duration-200${
+      className={`group overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-all duration-200${
         onClick ? " cursor-pointer hover:-translate-y-0.5 hover:shadow-md" : ""
       }`}
       onClick={() => onClick?.(id)}
@@ -74,10 +74,10 @@ export function TripCard({
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-brand-green-light to-surface-page">
+          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-brand-muted to-background">
             <PlaceholderIcon
               size={40}
-              className="text-brand-green opacity-20"
+              className="text-brand opacity-20"
               aria-hidden="true"
             />
           </div>
@@ -86,10 +86,10 @@ export function TripCard({
 
       {/* Content */}
       <div className="p-4">
-        <h3 className="text-[15px] font-semibold leading-snug tracking-tight text-content-primary">
+        <h3 className="text-[15px] font-semibold leading-snug tracking-tight text-foreground">
           {name}
         </h3>
-        <div className="mt-1.5 flex items-center gap-1.5 text-xs text-content-muted">
+        <div className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
           <Calendar size={12} className="shrink-0" />
           <span className={hasDates ? "" : "italic"}>{dateDisplay}</span>
         </div>

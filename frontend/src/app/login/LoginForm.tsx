@@ -131,10 +131,10 @@ export function LoginForm() {
       <div className="w-full max-w-sm">
         {/* Header */}
         <div className="mb-8 text-center">
-          <h1 className="font-serif text-3xl font-bold text-content-primary">
+          <h1 className="font-serif text-3xl font-bold text-foreground">
             {isLogin ? "Welcome back" : "Create an account"}
           </h1>
-          <p className="mt-2 text-sm text-content-muted">
+          <p className="mt-2 text-sm text-muted-foreground">
             {isLogin
               ? "Sign in to plan your next trip"
               : "Sign up to start planning trips"}
@@ -145,21 +145,21 @@ export function LoginForm() {
         {error && <ErrorBanner message={error} />}
 
         {passwordUpdated && (
-          <div className="mb-4 rounded-lg border border-brand-green/20 bg-brand-green-light px-4 py-3 text-sm text-brand-green-dark">
+          <div className="mb-4 rounded-lg border border-brand/20 bg-brand-muted px-4 py-3 text-sm text-brand-strong">
             Your password has been updated successfully. You can sign in with
             your new password.
           </div>
         )}
 
         {resetSent && (
-          <div className="mb-4 rounded-lg border border-brand-green/20 bg-brand-green-light px-4 py-3 text-sm text-content-muted">
+          <div className="mb-4 rounded-lg border border-brand/20 bg-brand-muted px-4 py-3 text-sm text-muted-foreground">
             Password reset link sent to <strong>{email}</strong>. Check your
             inbox.
           </div>
         )}
 
         {confirmationSent && (
-          <div className="mb-4 rounded-lg border border-brand-green/20 bg-brand-green-light px-4 py-3 text-sm text-content-muted">
+          <div className="mb-4 rounded-lg border border-brand/20 bg-brand-muted px-4 py-3 text-sm text-muted-foreground">
             Confirmation email sent to <strong>{email}</strong>. Check your
             inbox and click the link to activate your account.
           </div>
@@ -169,7 +169,7 @@ export function LoginForm() {
           <>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-content-primary">
+                <Label htmlFor="email" className="text-foreground">
                   Email
                 </Label>
                 <Input
@@ -180,12 +180,12 @@ export function LoginForm() {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   autoComplete="email"
-                  className="rounded-lg border-warm-border bg-surface-card focus-visible:ring-brand-green"
+                  className="rounded-lg border-border bg-card focus-visible:ring-brand"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password" className="text-content-primary">
+                <Label htmlFor="password" className="text-foreground">
                   Password
                 </Label>
                 <Input
@@ -197,16 +197,13 @@ export function LoginForm() {
                   required
                   minLength={6}
                   autoComplete={isLogin ? "current-password" : "new-password"}
-                  className="rounded-lg border-warm-border bg-surface-card focus-visible:ring-brand-green"
+                  className="rounded-lg border-border bg-card focus-visible:ring-brand"
                 />
               </div>
 
               {!isLogin && (
                 <div className="space-y-2">
-                  <Label
-                    htmlFor="confirm-password"
-                    className="text-content-primary"
-                  >
+                  <Label htmlFor="confirm-password" className="text-foreground">
                     Confirm password
                   </Label>
                   <Input
@@ -218,14 +215,14 @@ export function LoginForm() {
                     required
                     minLength={6}
                     autoComplete="new-password"
-                    className="rounded-lg border-warm-border bg-surface-card focus-visible:ring-brand-green"
+                    className="rounded-lg border-border bg-card focus-visible:ring-brand"
                   />
                 </div>
               )}
 
               <button
                 type="submit"
-                className="w-full cursor-pointer rounded-full bg-brand-terracotta px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-brand-terracotta-dark hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-terracotta focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                className="w-full cursor-pointer rounded-full bg-primary px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-primary-strong hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={loading}
               >
                 {loading
@@ -243,7 +240,7 @@ export function LoginForm() {
                 <button
                   type="button"
                   onClick={handleForgotPassword}
-                  className="cursor-pointer text-sm text-content-muted underline underline-offset-4 transition-colors duration-150 hover:text-brand-green"
+                  className="cursor-pointer text-sm text-muted-foreground underline underline-offset-4 transition-colors duration-150 hover:text-brand"
                 >
                   Forgot your password?
                 </button>
@@ -252,10 +249,10 @@ export function LoginForm() {
 
             <div className="relative my-6">
               <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-warm-border" />
+                <span className="w-full border-t border-border" />
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-surface-page px-2 text-content-muted">
+                <span className="bg-background px-2 text-muted-foreground">
                   Or continue with
                 </span>
               </div>
@@ -264,7 +261,7 @@ export function LoginForm() {
             <button
               type="button"
               onClick={handleGoogleLogin}
-              className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-warm-border bg-surface-card px-4 py-2.5 text-sm font-medium text-content-primary shadow-sm transition-all duration-200 hover:bg-brand-green-light hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green focus-visible:ring-offset-2"
+              className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground shadow-sm transition-all duration-200 hover:bg-brand-muted hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
             >
               <svg className="h-4 w-4" viewBox="0 0 24 24">
                 <path
@@ -289,14 +286,14 @@ export function LoginForm() {
           </>
         )}
 
-        <div className="mt-6 text-center text-sm text-content-muted">
+        <div className="mt-6 text-center text-sm text-muted-foreground">
           {isLogin ? (
             <>
               Don&apos;t have an account?{" "}
               <button
                 type="button"
                 onClick={() => switchMode("signup")}
-                className="cursor-pointer font-medium text-brand-green underline underline-offset-4 transition-colors duration-150 hover:text-brand-green-dark"
+                className="cursor-pointer font-medium text-brand underline underline-offset-4 transition-colors duration-150 hover:text-brand-strong"
               >
                 Create one
               </button>
@@ -307,7 +304,7 @@ export function LoginForm() {
               <button
                 type="button"
                 onClick={() => switchMode("login")}
-                className="cursor-pointer font-medium text-brand-green underline underline-offset-4 transition-colors duration-150 hover:text-brand-green-dark"
+                className="cursor-pointer font-medium text-brand underline underline-offset-4 transition-colors duration-150 hover:text-brand-strong"
               >
                 Sign in
               </button>

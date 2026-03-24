@@ -113,6 +113,7 @@ export function ItineraryDayHeader({
   return (
     <div className="flex items-start gap-3">
       <div className="min-w-0 flex-1">
+        <div className="h-0.5 w-16 rounded-full bg-gradient-to-r from-primary/40 to-transparent mb-2" />
         <div className="flex items-center gap-1.5">
           {editingDate ? (
             <input
@@ -146,7 +147,7 @@ export function ItineraryDayHeader({
             />
           ) : (
             <>
-              <h3 className="text-xl font-semibold tracking-tight text-content-primary">
+              <h3 className="font-serif text-2xl font-bold tracking-tight text-foreground">
                 {dayLabel}
               </h3>
               <button
@@ -162,7 +163,7 @@ export function ItineraryDayHeader({
         </div>
 
         {currentOption && (
-          <div className="mt-1.5 flex items-center gap-1.5 text-sm text-content-muted">
+          <div className="mt-1.5 flex items-center gap-1.5 text-sm text-muted-foreground">
             <AutosaveInput
               id={`sc-${currentOption.id}`}
               placeholder="Start city"
@@ -176,7 +177,10 @@ export function ItineraryDayHeader({
               }}
               className="w-28 text-sm"
             />
-            <ArrowRight size={12} className="shrink-0 text-content-muted/40" />
+            <ArrowRight
+              size={12}
+              className="shrink-0 text-muted-foreground/40"
+            />
             <AutosaveInput
               id={`ec-${currentOption.id}`}
               placeholder="End city"

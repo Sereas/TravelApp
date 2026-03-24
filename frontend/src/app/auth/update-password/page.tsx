@@ -102,7 +102,7 @@ export default function UpdatePasswordPage() {
   if (sessionReady === null) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <p className="text-sm text-content-muted">Loading…</p>
+        <p className="text-sm text-muted-foreground">Loading…</p>
       </div>
     );
   }
@@ -112,16 +112,16 @@ export default function UpdatePasswordPage() {
     return (
       <div className="flex min-h-[60vh] items-center justify-center px-4">
         <div className="w-full max-w-sm text-center">
-          <h1 className="font-serif text-3xl font-bold text-content-primary">
+          <h1 className="font-serif text-3xl font-bold text-foreground">
             Invalid or expired link
           </h1>
-          <p className="mt-3 text-sm text-content-muted">
+          <p className="mt-3 text-sm text-muted-foreground">
             This password reset link is invalid or has expired. Request a new
             one from the login page.
           </p>
           <Link
             href="/login"
-            className="mt-6 inline-block cursor-pointer rounded-full bg-brand-terracotta px-8 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-brand-terracotta-dark hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-terracotta focus-visible:ring-offset-2"
+            className="mt-6 inline-block cursor-pointer rounded-full bg-primary px-8 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-primary-strong hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
           >
             Back to login
           </Link>
@@ -135,7 +135,7 @@ export default function UpdatePasswordPage() {
     return (
       <div className="flex min-h-[60vh] items-center justify-center px-4">
         <div className="w-full max-w-sm text-center">
-          <div className="rounded-lg border border-brand-green/20 bg-brand-green-light px-4 py-3 text-sm text-brand-green-dark">
+          <div className="rounded-lg border border-brand/20 bg-brand-muted px-4 py-3 text-sm text-brand-strong">
             Your password has been updated successfully. Redirecting to login…
           </div>
         </div>
@@ -148,10 +148,10 @@ export default function UpdatePasswordPage() {
     <div className="flex min-h-[60vh] items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <h1 className="font-serif text-3xl font-bold text-content-primary">
+          <h1 className="font-serif text-3xl font-bold text-foreground">
             Set new password
           </h1>
-          <p className="mt-2 text-sm text-content-muted">
+          <p className="mt-2 text-sm text-muted-foreground">
             Enter your new password below.
           </p>
         </div>
@@ -160,7 +160,7 @@ export default function UpdatePasswordPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="password" className="text-content-primary">
+            <Label htmlFor="password" className="text-foreground">
               New password
             </Label>
             <Input
@@ -172,11 +172,11 @@ export default function UpdatePasswordPage() {
               required
               minLength={MIN_PASSWORD_LENGTH}
               autoComplete="new-password"
-              className="rounded-lg border-warm-border bg-surface-card focus-visible:ring-brand-green"
+              className="rounded-lg border-border bg-card focus-visible:ring-brand"
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="confirm-password" className="text-content-primary">
+            <Label htmlFor="confirm-password" className="text-foreground">
               Confirm password
             </Label>
             <Input
@@ -188,22 +188,22 @@ export default function UpdatePasswordPage() {
               required
               minLength={MIN_PASSWORD_LENGTH}
               autoComplete="new-password"
-              className="rounded-lg border-warm-border bg-surface-card focus-visible:ring-brand-green"
+              className="rounded-lg border-border bg-card focus-visible:ring-brand"
             />
           </div>
           <button
             type="submit"
-            className="w-full cursor-pointer rounded-full bg-brand-terracotta px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-brand-terracotta-dark hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-terracotta focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full cursor-pointer rounded-full bg-primary px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-primary-strong hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={loading}
           >
             {loading ? "Updating…" : "Update password"}
           </button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-content-muted">
+        <p className="mt-6 text-center text-sm text-muted-foreground">
           <Link
             href="/login"
-            className="cursor-pointer text-brand-green underline underline-offset-4 transition-colors duration-150 hover:text-brand-green-dark"
+            className="cursor-pointer text-brand underline underline-offset-4 transition-colors duration-150 hover:text-brand-strong"
           >
             Back to login
           </Link>

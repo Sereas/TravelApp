@@ -94,8 +94,8 @@ export function EditTripForm({
   }
 
   const inputClass =
-    "h-8 w-full rounded-lg border border-warm-border bg-surface-card px-2.5 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-green";
-  const labelClass = "text-xs font-medium text-content-muted";
+    "h-8 w-full rounded-lg border border-border bg-card px-2.5 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand";
+  const labelClass = "text-xs font-medium text-muted-foreground";
 
   return (
     <Dialog open onOpenChange={(open) => !open && onCancel()}>
@@ -157,7 +157,7 @@ export function EditTripForm({
           </div>
 
           {/* Footer */}
-          <div className="mt-4 flex items-center border-t border-warm-border px-5 py-3">
+          <div className="mt-4 flex items-center border-t border-border px-5 py-3">
             {onDelete && (
               <ConfirmDialog
                 trigger={
@@ -184,7 +184,7 @@ export function EditTripForm({
                 variant="ghost"
                 size="sm"
                 onClick={onCancel}
-                className="rounded-full px-4 text-content-muted"
+                className="rounded-full px-4 text-muted-foreground"
               >
                 Cancel
               </Button>
@@ -192,7 +192,7 @@ export function EditTripForm({
                 type="submit"
                 disabled={saving}
                 size="sm"
-                className="rounded-full bg-brand-terracotta px-5 font-semibold text-white hover:bg-brand-terracotta-dark"
+                className="rounded-full bg-primary px-5 font-semibold text-white hover:bg-primary-strong"
               >
                 {saving ? "Saving…" : "Save Changes"}
               </Button>

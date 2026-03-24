@@ -10,61 +10,86 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
+        border: "hsl(var(--border) / <alpha-value>)",
+        input: "hsl(var(--input) / <alpha-value>)",
+        ring: "hsl(var(--ring) / <alpha-value>)",
+        background: "hsl(var(--background) / <alpha-value>)",
+        foreground: "hsl(var(--foreground) / <alpha-value>)",
         primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
+          DEFAULT: "hsl(var(--primary) / <alpha-value>)",
+          foreground: "hsl(var(--primary-foreground) / <alpha-value>)",
+          strong: "hsl(var(--primary-strong) / <alpha-value>)",
         },
         secondary: {
-          DEFAULT: "hsl(var(--secondary))",
-          foreground: "hsl(var(--secondary-foreground))",
+          DEFAULT: "hsl(var(--secondary) / <alpha-value>)",
+          foreground: "hsl(var(--secondary-foreground) / <alpha-value>)",
         },
         destructive: {
-          DEFAULT: "hsl(var(--destructive))",
-          foreground: "hsl(var(--destructive-foreground))",
+          DEFAULT: "hsl(var(--destructive) / <alpha-value>)",
+          foreground: "hsl(var(--destructive-foreground) / <alpha-value>)",
         },
         muted: {
-          DEFAULT: "hsl(var(--muted))",
-          foreground: "hsl(var(--muted-foreground))",
+          DEFAULT: "hsl(var(--muted) / <alpha-value>)",
+          foreground: "hsl(var(--muted-foreground) / <alpha-value>)",
         },
         accent: {
-          DEFAULT: "hsl(var(--accent))",
-          foreground: "hsl(var(--accent-foreground))",
+          DEFAULT: "hsl(var(--accent) / <alpha-value>)",
+          foreground: "hsl(var(--accent-foreground) / <alpha-value>)",
         },
         popover: {
-          DEFAULT: "hsl(var(--popover))",
-          foreground: "hsl(var(--popover-foreground))",
+          DEFAULT: "hsl(var(--popover) / <alpha-value>)",
+          foreground: "hsl(var(--popover-foreground) / <alpha-value>)",
         },
         card: {
-          DEFAULT: "hsl(var(--card))",
-          foreground: "hsl(var(--card-foreground))",
+          DEFAULT: "hsl(var(--card) / <alpha-value>)",
+          foreground: "hsl(var(--card-foreground) / <alpha-value>)",
         },
         brand: {
-          green: {
-            DEFAULT: "#2D6A4F",
-            light: "#E8F0EC",
-            dark: "#1E4A36",
+          DEFAULT: "hsl(var(--brand) / <alpha-value>)",
+          foreground: "hsl(var(--brand-foreground) / <alpha-value>)",
+          muted: "hsl(var(--brand-muted) / <alpha-value>)",
+          strong: "hsl(var(--brand-strong) / <alpha-value>)",
+        },
+        time: {
+          morning: {
+            bg: "hsl(var(--time-morning-bg) / <alpha-value>)",
+            text: "hsl(var(--time-morning-text) / <alpha-value>)",
+            border: "hsl(var(--time-morning-border) / <alpha-value>)",
           },
-          terracotta: {
-            DEFAULT: "#C17858",
-            light: "#F0DDD5",
-            dark: "#8B5A3E",
+          afternoon: {
+            bg: "hsl(var(--time-afternoon-bg) / <alpha-value>)",
+            text: "hsl(var(--time-afternoon-text) / <alpha-value>)",
+            border: "hsl(var(--time-afternoon-border) / <alpha-value>)",
+          },
+          evening: {
+            bg: "hsl(var(--time-evening-bg) / <alpha-value>)",
+            text: "hsl(var(--time-evening-text) / <alpha-value>)",
+            border: "hsl(var(--time-evening-border) / <alpha-value>)",
+          },
+          night: {
+            bg: "hsl(var(--time-night-bg) / <alpha-value>)",
+            text: "hsl(var(--time-night-text) / <alpha-value>)",
+            border: "hsl(var(--time-night-border) / <alpha-value>)",
           },
         },
-        surface: {
-          page: "#F2EFE7",
-          card: "#FFFFFF",
+        route: {
+          1: "hsl(var(--route-1) / <alpha-value>)",
+          2: "hsl(var(--route-2) / <alpha-value>)",
+          3: "hsl(var(--route-3) / <alpha-value>)",
+          4: "hsl(var(--route-4) / <alpha-value>)",
+          5: "hsl(var(--route-5) / <alpha-value>)",
         },
-        content: {
-          primary: "#1C1F1A",
-          muted: "#6B7062",
-        },
-        warm: {
-          border: "#E8E5DD",
+        booking: {
+          done: {
+            bg: "hsl(var(--booking-done-bg) / <alpha-value>)",
+            text: "hsl(var(--booking-done-text) / <alpha-value>)",
+            border: "hsl(var(--booking-done-border) / <alpha-value>)",
+          },
+          pending: {
+            bg: "hsl(var(--booking-pending-bg) / <alpha-value>)",
+            text: "hsl(var(--booking-pending-text) / <alpha-value>)",
+            border: "hsl(var(--booking-pending-border) / <alpha-value>)",
+          },
         },
       },
       fontFamily: {

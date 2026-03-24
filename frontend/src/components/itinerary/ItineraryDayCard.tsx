@@ -28,7 +28,19 @@ import { AddLocationsToOptionDialog } from "@/components/itinerary/AddLocationsT
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { Sunrise, Sun, Sunset, Moon, MapPin, Plus } from "lucide-react";
+import {
+  Sunrise,
+  Sun,
+  Sunset,
+  Moon,
+  MapPin,
+  Plus,
+  Footprints,
+  Car,
+  TrainFront,
+  X,
+  ListOrdered,
+} from "lucide-react";
 
 const TIME_META: Record<
   string,
@@ -101,6 +113,12 @@ const ROUTE_COLORS = [
     dot: "bg-rose-400",
     hex: "#fb7185",
   },
+];
+
+const PICK_TRANSPORT = [
+  { key: "walk" as const, label: "Walk", icon: Footprints },
+  { key: "drive" as const, label: "Drive", icon: Car },
+  { key: "transit" as const, label: "Transit", icon: TrainFront },
 ];
 
 /** Format a duration in seconds to human-readable string. */
@@ -380,7 +398,7 @@ export function ItineraryDayCard({
     return () => document.removeEventListener("mousedown", h, true);
   }, [tpOpen]);
 
-  const [showMap, setShowMap] = useState(false);
+  const [showMap, setShowMap] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const sorted = useMemo(
@@ -587,6 +605,29 @@ export function ItineraryDayCard({
         <CardContent className="pt-0">
           {currentOption && (
             <div key={currentOption.id} className="animate-page-flip">
+              {/* Add locations */}
+              <div className="mb-3">
+                <AddLocationsToOptionDialog
+                  trigger={
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 gap-1 text-xs"
+                    >
+                      <Plus size={12} />
+                      Add locations
+                    </Button>
+                  }
+                  allLocations={tripLocations}
+                  alreadyAddedIds={alreadyAdded}
+                  startingCity={currentOption.starting_city}
+                  endingCity={currentOption.ending_city}
+                  onConfirm={(ids) =>
+                    onAddLocations(day.id, currentOption.id, ids)
+                  }
+                />
+              </div>
+
               <ItineraryDayTimeline
                 sorted={sorted}
                 locRouteMap={locRouteMap}
@@ -643,15 +684,8 @@ export function ItineraryDayCard({
                 }))}
                 routes={routes}
                 isPickMode={isPickMode}
-                editingRouteId={editingRouteId}
-                pickIds={pickIds}
-                pickTransport={pickTransport}
-                savingRoute={savingRoute}
                 calculatingRouteId={calculatingRouteId}
                 routeMetricsError={routeMetricsError}
-                onSetPickTransport={setPickTransport}
-                onSaveRoute={handleSaveRoute}
-                onCancelPick={handleCancelPick}
                 onRetryRouteMetrics={onRetryRouteMetrics}
                 onEditRoute={handleEditRoute}
                 onDeleteRoute={handleDeleteRoute}
@@ -663,64 +697,37 @@ export function ItineraryDayCard({
                 }}
               />
 
-              {/* Actions row — two groups */}
-              <div className="mt-4 flex items-center gap-3 border-t border-border/70 pt-3">
-                {/* Left: locations */}
-                <AddLocationsToOptionDialog
-                  trigger={
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 gap-1 text-xs"
-                    >
-                      <Plus size={12} />
-                      Add locations
-                    </Button>
-                  }
-                  allLocations={tripLocations}
-                  alreadyAddedIds={alreadyAdded}
-                  startingCity={currentOption.starting_city}
-                  endingCity={currentOption.ending_city}
-                  onConfirm={(ids) =>
-                    onAddLocations(day.id, currentOption.id, ids)
-                  }
-                />
-
-                {sorted.length >= 2 && <div className="h-4 w-px bg-border" />}
-
-                <div className="flex-1" />
-
-                {/* Right: map */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={cn(
-                    "h-7 gap-1 text-xs",
-                    showMap ? "text-primary" : "text-muted-foreground"
-                  )}
-                  onClick={() => setShowMap((v) => !v)}
-                >
-                  <MapPin size={12} />
-                  Map
-                </Button>
-              </div>
-
-              {/* Map panel */}
-              {showMap && (
-                <div className="mt-2 rounded-lg border border-border bg-muted/20 p-4">
-                  {mapLocations.length === 0 ? (
-                    <div className="flex flex-col items-center gap-2 py-6 text-center text-muted-foreground">
-                      <MapPin size={28} className="opacity-30" />
-                      <p className="text-sm">
-                        Map will appear when locations with coordinates are
-                        added.
-                      </p>
+              {/* Map — visible by default at bottom */}
+              {mapLocations.length > 0 && (
+                <div className="mt-4">
+                  {showMap ? (
+                    <div className="rounded-lg border border-border bg-muted/20 p-4">
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="font-serif text-xs font-semibold text-foreground">
+                          Map
+                        </span>
+                        <button
+                          type="button"
+                          className="text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+                          onClick={() => setShowMap(false)}
+                        >
+                          Hide
+                        </button>
+                      </div>
+                      <ItineraryDayMap
+                        locations={mapLocations}
+                        routes={mapRoutes}
+                      />
                     </div>
                   ) : (
-                    <ItineraryDayMap
-                      locations={mapLocations}
-                      routes={mapRoutes}
-                    />
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
+                      onClick={() => setShowMap(true)}
+                    >
+                      <MapPin size={12} />
+                      Show map
+                    </button>
                   )}
                 </div>
               )}
@@ -731,6 +738,117 @@ export function ItineraryDayCard({
           )}
         </CardContent>
       </Card>
+
+      {/* Sticky bottom pick-mode toolbar — portaled so it floats above everything */}
+      {isPickMode &&
+        currentOption &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div className="fixed inset-x-0 bottom-0 z-50 border-t bg-background shadow-[0_-4px_20px_rgba(0,0,0,0.08)]">
+            <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-2.5">
+              {/* Left group: mode label + transport */}
+              <div className="flex shrink-0 items-center gap-2 rounded-lg bg-brand-muted/50 px-2.5 py-1.5 dark:bg-brand-muted/20">
+                <span className="text-xs font-semibold text-brand">
+                  {editingRouteId ? "Edit" : "Route"}
+                </span>
+                {PICK_TRANSPORT.map((mode) => {
+                  const MIcon = mode.icon;
+                  return (
+                    <button
+                      key={mode.key}
+                      type="button"
+                      className={cn(
+                        "rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors",
+                        pickTransport === mode.key
+                          ? "bg-brand text-brand-foreground shadow-sm"
+                          : "text-brand/60 hover:bg-brand/10 hover:text-brand"
+                      )}
+                      onClick={() => setPickTransport(mode.key)}
+                    >
+                      <MIcon size={11} className="mr-0.5 inline" />
+                      {mode.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Center: picked stops sequence */}
+              <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-lg border border-border bg-card px-2.5 py-1.5 scrollbar-hide">
+                {pickIds.length === 0 ? (
+                  <span className="text-xs text-muted-foreground/50">
+                    Click stops to add…
+                  </span>
+                ) : (
+                  pickIds.map((id, i) => {
+                    const name =
+                      sorted.find((l) => l.location_id === id)?.location.name ??
+                      "?";
+                    return (
+                      <span
+                        key={id}
+                        className="inline-flex shrink-0 items-center"
+                      >
+                        {i > 0 && (
+                          <span className="mx-1 text-[10px] text-muted-foreground/30">
+                            →
+                          </span>
+                        )}
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-foreground">
+                          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-brand/15 text-[9px] font-bold text-brand">
+                            {i + 1}
+                          </span>
+                          <span className="max-w-[100px] truncate">{name}</span>
+                          <button
+                            type="button"
+                            className="rounded-full p-0.5 text-muted-foreground/40 transition-colors hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() =>
+                              setPickIds((cur) =>
+                                cur.filter((pid) => pid !== id)
+                              )
+                            }
+                            aria-label={`Remove ${name}`}
+                          >
+                            <X size={9} />
+                          </button>
+                        </span>
+                      </span>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Right group: actions */}
+              <div className="flex shrink-0 items-center gap-1.5">
+                {sorted.length >= 2 && pickIds.length < sorted.length && (
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                    onClick={() => setPickIds(sorted.map((l) => l.location_id))}
+                  >
+                    <ListOrdered size={10} />
+                    All
+                  </button>
+                )}
+                <Button
+                  size="sm"
+                  className="h-7 text-xs"
+                  disabled={pickIds.length < 2 || savingRoute}
+                  onClick={handleSaveRoute}
+                >
+                  {savingRoute ? "Saving…" : `Save (${pickIds.length})`}
+                </Button>
+                <button
+                  type="button"
+                  className="px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                  onClick={handleCancelPick}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
     </>
   );
 }

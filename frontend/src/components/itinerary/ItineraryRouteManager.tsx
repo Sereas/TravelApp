@@ -1,13 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import { type ItineraryDay, type ItineraryOption } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/feedback/LoadingSpinner";
 import { cn } from "@/lib/utils";
 import {
   AlertCircle,
-  ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Footprints,
+  MapPin,
   Pencil,
   Plus,
   Trash2,
@@ -23,34 +26,34 @@ const TRANSPORT = [
 
 const ROUTE_COLORS = [
   {
-    bar: "border-l-blue-400",
-    bg: "bg-blue-50",
-    text: "text-blue-700",
-    hex: "#60a5fa",
+    bar: "border-l-route-1",
+    bg: "bg-route-1/10",
+    text: "text-route-1",
+    hex: "hsl(213, 94%, 68%)",
   },
   {
-    bar: "border-l-emerald-400",
-    bg: "bg-emerald-50",
-    text: "text-emerald-700",
-    hex: "#34d399",
+    bar: "border-l-route-2",
+    bg: "bg-route-2/10",
+    text: "text-route-2",
+    hex: "hsl(160, 64%, 52%)",
   },
   {
-    bar: "border-l-orange-400",
-    bg: "bg-orange-50",
-    text: "text-orange-700",
-    hex: "#fb923c",
+    bar: "border-l-route-3",
+    bg: "bg-route-3/10",
+    text: "text-route-3",
+    hex: "hsl(27, 96%, 61%)",
   },
   {
-    bar: "border-l-violet-400",
-    bg: "bg-violet-50",
-    text: "text-violet-700",
-    hex: "#a78bfa",
+    bar: "border-l-route-4",
+    bg: "bg-route-4/10",
+    text: "text-route-4",
+    hex: "hsl(263, 70%, 72%)",
   },
   {
-    bar: "border-l-rose-400",
-    bg: "bg-rose-50",
-    text: "text-rose-700",
-    hex: "#fb7185",
+    bar: "border-l-route-5",
+    bg: "bg-route-5/10",
+    text: "text-route-5",
+    hex: "hsl(350, 80%, 65%)",
   },
 ] as const;
 
@@ -69,13 +72,17 @@ function formatRouteTotalDuration(route: {
   return formatDuration(route.duration_seconds);
 }
 
+function formatDistance(meters: number | null | undefined): string {
+  if (meters == null) return "— km";
+  const km = meters / 1000;
+  const decimals = km >= 10 ? 0 : 1;
+  return `${km.toFixed(decimals)} km`;
+}
+
 function formatRouteTotalDistance(route: {
   distance_meters?: number | null;
 }): string {
-  if (route.distance_meters == null) return "— km";
-  const km = route.distance_meters / 1000;
-  const decimals = km >= 10 ? 0 : 1;
-  return `${km.toFixed(decimals)} km`;
+  return formatDistance(route.distance_meters);
 }
 
 interface ItineraryRouteManagerProps {
@@ -87,15 +94,8 @@ interface ItineraryRouteManagerProps {
   }>;
   routes: ItineraryOption["routes"];
   isPickMode: boolean;
-  editingRouteId: string | null;
-  pickIds: string[];
-  pickTransport: "walk" | "drive" | "transit";
-  savingRoute: boolean;
   calculatingRouteId: string | null;
   routeMetricsError: Record<string, string>;
-  onSetPickTransport: (mode: "walk" | "drive" | "transit") => void;
-  onSaveRoute: () => void;
-  onCancelPick: () => void;
   onRetryRouteMetrics: (
     dayId: string,
     optionId: string,
@@ -112,29 +112,24 @@ export function ItineraryRouteManager({
   sortedLocations,
   routes,
   isPickMode,
-  editingRouteId,
-  pickIds,
-  pickTransport,
-  savingRoute,
   calculatingRouteId,
   routeMetricsError,
-  onSetPickTransport,
-  onSaveRoute,
-  onCancelPick,
   onRetryRouteMetrics,
   onEditRoute,
   onDeleteRoute,
   onBeginCreateRoute,
 }: ItineraryRouteManagerProps) {
+  const [expandedRouteId, setExpandedRouteId] = useState<string | null>(null);
+
   return (
-    <section className="mt-5 rounded-2xl border border-warm-border/70 bg-muted/20 px-3 py-3">
+    <section className="mt-5 rounded-2xl border border-border/70 bg-muted/20 px-3 py-3">
       <div className="mb-2 flex items-center justify-between gap-3">
         <div>
-          <div className="text-xs font-semibold uppercase tracking-wide text-content-muted">
-            Mobility
+          <div className="font-serif text-sm font-semibold text-foreground">
+            Journey
           </div>
-          <p className="mt-0.5 text-xs text-content-muted">
-            Keep routes lightweight. The stop sequence remains the primary plan.
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Routes between your stops
           </p>
         </div>
         {sortedLocations.length >= 2 && !isPickMode && (
@@ -151,48 +146,8 @@ export function ItineraryRouteManager({
       </div>
 
       {isPickMode && (
-        <div className="flex items-center gap-2 rounded-xl border border-dashed border-primary/30 bg-primary/5 px-3 py-2">
-          <span className="text-xs font-medium text-primary">
-            {editingRouteId
-              ? "Edit route — click to add/remove stops"
-              : "Click locations in order"}
-          </span>
-          <div className="flex-1" />
-          {TRANSPORT.map((mode) => {
-            const Icon = mode.icon;
-            return (
-              <button
-                key={mode.key}
-                type="button"
-                className={cn(
-                  "rounded-md px-2 py-0.5 text-[10px] font-medium",
-                  pickTransport === mode.key
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground hover:bg-accent"
-                )}
-                onClick={() => onSetPickTransport(mode.key)}
-              >
-                <Icon size={11} className="mr-0.5 inline" />
-                {mode.label}
-              </button>
-            );
-          })}
-          <Button
-            size="sm"
-            className="h-6 text-[11px]"
-            disabled={pickIds.length < 2 || savingRoute}
-            onClick={onSaveRoute}
-          >
-            {savingRoute ? "Saving…" : `Save (${pickIds.length})`}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 text-[11px]"
-            onClick={onCancelPick}
-          >
-            Cancel
-          </Button>
+        <div className="rounded-xl border border-dashed border-primary/30 bg-primary/5 px-3 py-2 text-xs text-primary/70">
+          Click stops above to add them to the route.
         </div>
       )}
 
@@ -203,105 +158,186 @@ export function ItineraryRouteManager({
             const Icon =
               TRANSPORT.find((mode) => mode.key === route.transport_mode)
                 ?.icon ?? Footprints;
-            const names = route.location_ids
-              .map(
-                (locationId) =>
-                  sortedLocations.find(
-                    (location) => location.location_id === locationId
-                  )?.location.name ?? "?"
-              )
-              .join(" → ");
             const isCalculating = calculatingRouteId === route.route_id;
             const metricsError = routeMetricsError[route.route_id];
+            const isExpanded = expandedRouteId === route.route_id;
+            const hasSegments = route.segments && route.segments.length > 0;
+            const stopNames = route.location_ids.map(
+              (locationId) =>
+                sortedLocations.find(
+                  (location) => location.location_id === locationId
+                )?.location.name ?? "?"
+            );
 
             return (
-              <div
-                key={route.route_id}
-                className={cn(
-                  "flex items-center gap-2 rounded-xl border border-white/80 border-l-[3px] px-2.5 py-2 text-xs shadow-sm",
-                  color.bar,
-                  color.bg
-                )}
-              >
-                <Icon size={12} className={cn("shrink-0", color.text)} />
-                <span
+              <div key={route.route_id} className="space-y-0">
+                {/* Summary row */}
+                <div
                   className={cn(
-                    "min-w-0 flex-1 truncate font-medium",
-                    color.text
+                    "flex items-center gap-2 border border-white/80 border-l-[3px] px-2.5 py-2 text-xs shadow-sm",
+                    isExpanded
+                      ? "rounded-t-lg rounded-tr-2xl"
+                      : "rounded-lg rounded-r-2xl",
+                    color.bar,
+                    color.bg
                   )}
-                  title={names}
                 >
-                  {names}
-                </span>
-                <ChevronRight
-                  size={12}
-                  className="shrink-0 text-muted-foreground/40"
-                />
-                {isCalculating && (
-                  <span className="flex shrink-0 items-center gap-1 text-muted-foreground">
-                    <LoadingSpinner size="sm" className="shrink-0" />
-                    <span>Calculating…</span>
-                  </span>
-                )}
-                {!isCalculating && metricsError && (
-                  <span className="flex shrink-0 items-center gap-1.5">
-                    <span className="flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">
-                      <AlertCircle size={11} />
-                      <span
-                        className="max-w-[140px] truncate"
-                        title={metricsError}
-                      >
-                        Metrics unavailable
-                      </span>
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-5 px-1.5 text-[10px]"
-                      onClick={() =>
-                        onRetryRouteMetrics(
-                          day.id,
-                          currentOption.id,
-                          route.route_id
-                        )
-                      }
-                    >
-                      Retry
-                    </Button>
-                  </span>
-                )}
-                {!isCalculating && !metricsError && (
-                  <span className="text-muted-foreground">
-                    {formatRouteTotalDuration(route)} ·{" "}
-                    {formatRouteTotalDistance(route)}
-                    {route.route_status === "error" && (
-                      <span
-                        className="ml-1 text-amber-600"
-                        title="Some segments could not be calculated"
-                      >
-                        (partial)
-                      </span>
+                  <Icon size={12} className={cn("shrink-0", color.text)} />
+                  <button
+                    type="button"
+                    className={cn(
+                      "min-w-0 flex-1 truncate text-left font-medium",
+                      color.text
                     )}
-                  </span>
+                    title={stopNames.join(" → ")}
+                    onClick={() =>
+                      setExpandedRouteId(isExpanded ? null : route.route_id)
+                    }
+                  >
+                    {stopNames.join(" → ")}
+                  </button>
+                  {isCalculating && (
+                    <span className="flex shrink-0 items-center gap-1 text-muted-foreground">
+                      <LoadingSpinner size="sm" className="shrink-0" />
+                      <span>Calculating…</span>
+                    </span>
+                  )}
+                  {!isCalculating && metricsError && (
+                    <span className="flex shrink-0 items-center gap-1.5">
+                      <span className="flex items-center gap-1 rounded bg-booking-pending-bg px-1.5 py-0.5 text-booking-pending-text">
+                        <AlertCircle size={11} />
+                        <span
+                          className="max-w-[140px] truncate"
+                          title={metricsError}
+                        >
+                          Metrics unavailable
+                        </span>
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-5 px-1.5 text-[10px]"
+                        onClick={() =>
+                          onRetryRouteMetrics(
+                            day.id,
+                            currentOption.id,
+                            route.route_id
+                          )
+                        }
+                      >
+                        Retry
+                      </Button>
+                    </span>
+                  )}
+                  {!isCalculating && !metricsError && (
+                    <span className="shrink-0 text-muted-foreground">
+                      {formatRouteTotalDuration(route)} ·{" "}
+                      {formatRouteTotalDistance(route)}
+                      {route.route_status === "error" && (
+                        <span
+                          className="ml-1 text-booking-pending-text"
+                          title="Some segments could not be calculated"
+                        >
+                          (partial)
+                        </span>
+                      )}
+                    </span>
+                  )}
+                  {hasSegments && !isCalculating && (
+                    <button
+                      type="button"
+                      className="shrink-0 text-muted-foreground/50 transition-colors hover:text-foreground"
+                      onClick={() =>
+                        setExpandedRouteId(isExpanded ? null : route.route_id)
+                      }
+                      aria-label={isExpanded ? "Collapse" : "Expand segments"}
+                    >
+                      {isExpanded ? (
+                        <ChevronUp size={13} />
+                      ) : (
+                        <ChevronDown size={13} />
+                      )}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="shrink-0 text-muted-foreground hover:text-primary disabled:opacity-50"
+                    onClick={() => onEditRoute(route)}
+                    aria-label="Edit route"
+                    disabled={isCalculating}
+                  >
+                    <Pencil size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    className="shrink-0 text-muted-foreground hover:text-destructive disabled:opacity-50"
+                    onClick={() => onDeleteRoute(route.route_id)}
+                    aria-label="Delete route"
+                    disabled={isCalculating}
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+
+                {/* Expanded segment details */}
+                {isExpanded && hasSegments && (
+                  <div
+                    className={cn(
+                      "rounded-b-lg rounded-br-2xl border border-t-0 border-white/80 border-l-[3px] px-3 pb-2.5 pt-1",
+                      color.bar,
+                      color.bg,
+                      "bg-opacity-50"
+                    )}
+                  >
+                    {stopNames.map((name, i) => {
+                      const segment = route.segments?.[i];
+                      const isLast = i === stopNames.length - 1;
+
+                      return (
+                        <div key={i}>
+                          {/* Stop */}
+                          <div className="flex items-center gap-2 py-1">
+                            <MapPin
+                              size={10}
+                              className={cn("shrink-0", color.text)}
+                            />
+                            <span className="truncate text-xs font-medium text-foreground">
+                              {name}
+                            </span>
+                          </div>
+
+                          {/* Segment connector */}
+                          {!isLast && segment && (
+                            <div className="ml-[4px] flex items-center gap-2 border-l border-dashed py-0.5 pl-3.5">
+                              <Icon
+                                size={9}
+                                className="shrink-0 text-muted-foreground/50"
+                              />
+                              <span className="text-[11px] text-muted-foreground">
+                                {segment.duration_seconds != null
+                                  ? formatDuration(segment.duration_seconds)
+                                  : "—"}
+                                {" · "}
+                                {formatDistance(segment.distance_meters)}
+                              </span>
+                            </div>
+                          )}
+                          {!isLast && !segment && (
+                            <div className="ml-[4px] flex items-center gap-2 border-l border-dashed py-0.5 pl-3.5">
+                              <Icon
+                                size={9}
+                                className="shrink-0 text-muted-foreground/50"
+                              />
+                              <span className="text-[11px] text-muted-foreground/50">
+                                — min · — km
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
-                <button
-                  type="button"
-                  className="shrink-0 text-muted-foreground hover:text-primary disabled:opacity-50"
-                  onClick={() => onEditRoute(route)}
-                  aria-label="Edit route"
-                  disabled={isCalculating}
-                >
-                  <Pencil size={12} />
-                </button>
-                <button
-                  type="button"
-                  className="shrink-0 text-muted-foreground hover:text-destructive disabled:opacity-50"
-                  onClick={() => onDeleteRoute(route.route_id)}
-                  aria-label="Delete route"
-                  disabled={isCalculating}
-                >
-                  <Trash2 size={12} />
-                </button>
               </div>
             );
           })}
@@ -309,8 +345,12 @@ export function ItineraryRouteManager({
       )}
 
       {routes.length === 0 && !isPickMode && (
-        <div className="rounded-xl border border-dashed border-warm-border bg-white/70 px-3 py-3 text-xs text-content-muted">
-          No routes yet. Add one only when travel time between stops matters.
+        <div className="rounded-xl border border-dashed border-border bg-white/70 px-3 py-3 text-xs text-muted-foreground dark:bg-card/70">
+          <span className="inline-flex items-center gap-2">
+            <span className="inline-block h-px w-4 bg-muted-foreground/20" />
+            No routes yet
+            <span className="inline-block h-px w-4 bg-muted-foreground/20" />
+          </span>
         </div>
       )}
     </section>
