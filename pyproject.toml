@@ -10,6 +10,7 @@ dependencies = [
 [tool.ruff]
 target-version = "py312"
 line-length = 100
+extend-exclude = [".claude"]
 
 [tool.ruff.lint]
 select = [
