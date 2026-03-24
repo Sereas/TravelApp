@@ -1286,8 +1286,8 @@ describe("TripDetailPage", () => {
 
     await screen.findByText("Mon, Jun 1");
 
-    await userEvent.click(screen.getByRole("button", { name: /edit cities/i }));
-    const startInput = screen.getByDisplayValue("Paris");
+    // City inputs are always visible — no toggle needed
+    const startInput = await screen.findByDisplayValue("Paris");
     const endInput = screen.getByDisplayValue("Lyon");
 
     expect(startInput).toBeInTheDocument();
@@ -1312,7 +1312,7 @@ describe("TripDetailPage", () => {
 
   // --- Alternative plan management ---
 
-  it("shows plan dropdown trigger in card header", async () => {
+  it("shows plan dropdown in card header", async () => {
     mockGetTrip.mockResolvedValue(sampleTrip);
     mockListLocations.mockResolvedValue([]);
     mockGetItinerary.mockResolvedValue({
@@ -1340,7 +1340,7 @@ describe("TripDetailPage", () => {
     await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
 
     expect(
-      await screen.findByRole("button", { name: /switch day plan/i })
+      await screen.findByRole("button", { name: /^main plan$/i })
     ).toBeInTheDocument();
   });
 
@@ -1372,7 +1372,7 @@ describe("TripDetailPage", () => {
       option_index: 2,
       starting_city: null,
       ending_city: null,
-      created_by: null,
+      created_by: "Beach route",
       created_at: null,
     });
     render(<TripDetailPage />);
@@ -1380,21 +1380,23 @@ describe("TripDetailPage", () => {
     await screen.findByText("Paris Summer");
     await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
 
-    // Open the plan dropdown
     await userEvent.click(
-      await screen.findByRole("button", { name: /switch day plan/i })
+      await screen.findByRole("button", { name: /^main plan$/i })
     );
-    // Click "Add plan" to reveal the name input
-    await userEvent.click(screen.getByRole("button", { name: /add plan/i }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /add plan/i })
+    );
     // Type a name and submit
     await userEvent.type(
-      screen.getByPlaceholderText(/plan name/i),
+      screen.getByPlaceholderText(/new plan name/i),
       "Beach route"
     );
-    await userEvent.click(screen.getByRole("button", { name: /^add$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^create$/i }));
 
     await waitFor(() => {
-      expect(mockCreateOption).toHaveBeenCalledWith("trip-1", "day-1");
+      expect(mockCreateOption).toHaveBeenCalledWith("trip-1", "day-1", {
+        created_by: "Beach route",
+      });
     });
     // Optimistic update — no second fetchItinerary call on success.
     expect(mockGetItinerary).toHaveBeenCalledTimes(1);
@@ -1490,20 +1492,23 @@ describe("TripDetailPage", () => {
     await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
     await screen.findByText("Mon, Jun 1");
 
-    // Open the plan dropdown
+    await userEvent.click(screen.getByRole("button", { name: /^main plan$/i }));
+    await userEvent.click(screen.getByRole("option", { name: /plan 1/i }));
+
     await userEvent.click(
-      screen.getByRole("button", { name: /switch day plan/i })
+      screen.getByRole("button", { name: /plan settings: plan 1/i })
     );
 
-    // Delete button appears for non-main plan (opt-2, option_index: 2)
-    const deleteBtn = screen.getByRole("button", { name: /delete plan/i });
+    const deleteBtn = screen.getByRole("button", { name: /^delete$/i });
     expect(deleteBtn).toBeInTheDocument();
 
     await userEvent.click(deleteBtn);
     expect(screen.getByText("Delete this plan?")).toBeInTheDocument();
 
-    const confirmBtns = screen.getAllByRole("button", { name: /delete/i });
-    await userEvent.click(confirmBtns[confirmBtns.length - 1]);
+    const dialog = screen.getByRole("dialog");
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: /^delete$/i })
+    );
 
     await waitFor(() => {
       expect(mockDeleteOption).toHaveBeenCalledWith("trip-1", "day-1", "opt-2");

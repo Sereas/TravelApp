@@ -110,14 +110,15 @@ async def create_option(
     next_index = 1
     if max_result.data and len(max_result.data) > 0:
         next_index = int(max_result.data[0].get("option_index", 0)) + 1
+    data = body if body is not None else CreateOptionBody()
     row: dict[str, object] = {"day_id": str(day_id), "option_index": next_index}
-    if body:
-        if body.starting_city is not None:
-            row["starting_city"] = body.starting_city
-        if body.ending_city is not None:
-            row["ending_city"] = body.ending_city
-        if body.created_by is not None:
-            row["created_by"] = body.created_by
+    if data.starting_city is not None:
+        row["starting_city"] = data.starting_city
+    if data.ending_city is not None:
+        row["ending_city"] = data.ending_city
+    if data.created_by is not None:
+        row["created_by"] = data.created_by
+    # postgrest-py insert() uses Prefer: return=representation by default (full inserted row).
     result = supabase.table("day_options").insert(row).execute()
     if not result.data or len(result.data) == 0:
         logger.error("option_insert_failed", day_id=str(day_id))
@@ -126,12 +127,24 @@ async def create_option(
             detail="Failed to create option; please try again",
         )
     option = result.data[0]
+    persisted = option.get("created_by")
     logger.info(
         "option_created",
         option_id=str(option["option_id"]),
         day_id=str(day_id),
         option_index=next_index,
+        label_requested=data.created_by,
+        label_in_insert_row=row.get("created_by"),
+        label_from_db_after_insert=persisted,
     )
+    if data.created_by is not None and persisted != data.created_by:
+        logger.warning(
+            "option_created_by_mismatch",
+            option_id=str(option["option_id"]),
+            day_id=str(day_id),
+            sent_to_db=data.created_by,
+            returned_by_postgrest=persisted,
+        )
     return _option_row_to_response(option)
 
 

@@ -646,14 +646,17 @@ def mock_supabase_trips_and_days():
             self._is_delete = False
 
         def select(self, *args):
+            # Preserve insert row for insert().select().execute() chain (matches PostgREST).
+            preserved_insert = self._insert_row
             self._day_id = None
             self._option_id = None
             self._order_col = None
             self._order_desc = False
             self._limit_n = None
-            self._insert_row = None
-            self._update_data = None
-            self._is_delete = False
+            if preserved_insert is None:
+                self._update_data = None
+                self._is_delete = False
+            self._insert_row = preserved_insert
             return self
 
         def eq(self, key, value):

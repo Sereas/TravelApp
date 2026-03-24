@@ -70,7 +70,6 @@ describe("ItineraryDayRail", () => {
     expect(screen.getByText("Lyon")).toBeInTheDocument();
     expect(screen.getByText("Nice")).toBeInTheDocument();
     expect(screen.queryByText(/Day 1/i)).not.toBeInTheDocument();
-    expect(screen.queryByText("City pending")).not.toBeInTheDocument();
   });
 
   it("calls selection handler when a day chip is clicked", async () => {
@@ -95,7 +94,7 @@ describe("ItineraryDayRail", () => {
     expect(onSelectDay).toHaveBeenCalledWith("day-1");
   });
 
-  it("marks empty days distinctly", () => {
+  it("marks empty days with subtle styling instead of a badge", () => {
     render(
       <ItineraryDayRail
         days={[
@@ -110,8 +109,130 @@ describe("ItineraryDayRail", () => {
       />
     );
 
-    expect(screen.getByText("Empty")).toBeInTheDocument();
-    expect(screen.getByText("Ready to plan")).toBeInTheDocument();
-    expect(screen.getByText("Route details not set")).toBeInTheDocument();
+    expect(screen.getByText("Jun 1")).toBeInTheDocument();
+    expect(screen.getByText("No cities set")).toBeInTheDocument();
+    // No "Empty" pill or "Ready to plan" text
+    expect(screen.queryByText("Empty")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ready to plan")).not.toBeInTheDocument();
+  });
+
+  it("shows place count for planned days", () => {
+    render(
+      <ItineraryDayRail
+        days={[
+          {
+            id: "day-1",
+            date: "2026-06-01",
+            sort_order: 0,
+            options: [
+              {
+                id: "opt-1",
+                option_index: 1,
+                starting_city: "Paris",
+                ending_city: "Paris",
+                created_by: null,
+                locations: [
+                  {
+                    location_id: "loc-1",
+                    sort_order: 0,
+                    time_period: "morning",
+                    location: {
+                      id: "loc-1",
+                      name: "A",
+                      city: null,
+                      address: null,
+                      google_link: null,
+                      category: null,
+                      note: null,
+                      working_hours: null,
+                      requires_booking: null,
+                      image_url: null,
+                      user_image_url: null,
+                      attribution_name: null,
+                      attribution_uri: null,
+                    },
+                  },
+                  {
+                    location_id: "loc-2",
+                    sort_order: 1,
+                    time_period: "afternoon",
+                    location: {
+                      id: "loc-2",
+                      name: "B",
+                      city: null,
+                      address: null,
+                      google_link: null,
+                      category: null,
+                      note: null,
+                      working_hours: null,
+                      requires_booking: null,
+                      image_url: null,
+                      user_image_url: null,
+                      attribution_name: null,
+                      attribution_uri: null,
+                    },
+                  },
+                ],
+                routes: [],
+              },
+            ],
+          },
+        ]}
+        selectedOptionsByDay={{
+          "day-1": {
+            id: "opt-1",
+            option_index: 1,
+            starting_city: "Paris",
+            ending_city: "Paris",
+            created_by: null,
+            locations: [
+              {
+                location_id: "loc-1",
+                sort_order: 0,
+                time_period: "morning",
+                location: {
+                  id: "loc-1",
+                  name: "A",
+                  city: null,
+                  address: null,
+                  google_link: null,
+                  category: null,
+                  note: null,
+                  working_hours: null,
+                  requires_booking: null,
+                  image_url: null,
+                  user_image_url: null,
+                  attribution_name: null,
+                  attribution_uri: null,
+                },
+              },
+              {
+                location_id: "loc-2",
+                sort_order: 1,
+                time_period: "afternoon",
+                location: {
+                  id: "loc-2",
+                  name: "B",
+                  city: null,
+                  address: null,
+                  google_link: null,
+                  category: null,
+                  note: null,
+                  working_hours: null,
+                  requires_booking: null,
+                  image_url: null,
+                  user_image_url: null,
+                  attribution_name: null,
+                  attribution_uri: null,
+                },
+              },
+            ],
+            routes: [],
+          },
+        }}
+      />
+    );
+
+    expect(screen.getByText("2 places")).toBeInTheDocument();
   });
 });

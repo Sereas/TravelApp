@@ -88,6 +88,35 @@ def test_create_option_returns_201_assigns_option_index(
         app.dependency_overrides.clear()
 
 
+def test_create_option_persists_created_by_label(
+    client: TestClient,
+    mock_user_id,
+    mock_supabase_trips_and_days,
+):
+    trip_id, day_id, mock_sb, _, _ = _setup_own_trip_and_day(
+        mock_supabase_trips_and_days, mock_user_id
+    )
+
+    async def override_user():
+        return mock_user_id
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        r = client.post(
+            f"/api/v1/trips/{trip_id}/days/{day_id}/options",
+            json={"created_by": "Backup"},
+        )
+        assert r.status_code == 201
+        data = r.json()
+        assert data["created_by"] == "Backup"
+        assert any(
+            o.get("created_by") == "Backup" for o in mock_sb._options_store
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_list_options_returns_200_ordered(
     client: TestClient,
     mock_user_id,

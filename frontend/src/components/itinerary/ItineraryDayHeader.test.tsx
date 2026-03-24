@@ -32,7 +32,7 @@ describe("ItineraryDayHeader", () => {
     expect(screen.getByDisplayValue("2026-06-01")).toBeInTheDocument();
   });
 
-  it("saves starting city changes on blur", async () => {
+  it("saves starting city changes on blur (city inputs always visible)", async () => {
     const onSaveOptionDetails = vi.fn();
 
     render(
@@ -63,7 +63,7 @@ describe("ItineraryDayHeader", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("button", { name: /edit cities/i }));
+    // City inputs are always visible — no toggle needed
     const input = screen.getByDisplayValue("Paris");
     await userEvent.clear(input);
     await userEvent.type(input, "Marseille");

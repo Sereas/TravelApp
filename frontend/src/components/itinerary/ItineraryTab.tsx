@@ -13,7 +13,6 @@ import { Button } from "@/components/ui/button";
 import type { Location, Trip } from "@/lib/api";
 import type { useItineraryState } from "@/features/itinerary/useItineraryState";
 import { cn } from "@/lib/utils";
-import type { InspectorLocation } from "@/components/itinerary/ItineraryInspectorPanel";
 
 type ItineraryState = ReturnType<typeof useItineraryState>;
 
@@ -62,9 +61,6 @@ export function ItineraryTab({
   } = itineraryState;
 
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
-  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(
-    null
-  );
 
   useEffect(() => {
     if (!itinerary?.days.length) {
@@ -83,66 +79,6 @@ export function ItineraryTab({
     () => itinerary?.days.find((day) => day.id === selectedDayId) ?? null,
     [itinerary, selectedDayId]
   );
-
-  const selectedLocation = useMemo<InspectorLocation | null>(() => {
-    if (!selectedLocationId || !itinerary) {
-      const unscheduled = locations.find(
-        (location) => location.id === selectedLocationId
-      );
-      return unscheduled
-        ? {
-            dayId: null,
-            optionId: null,
-            locationId: unscheduled.id,
-            location: unscheduled,
-            dayLabel: null,
-            optionIndex: null,
-            timePeriod: null,
-            scheduled: false,
-          }
-        : null;
-    }
-
-    for (const day of itinerary.days) {
-      for (const option of day.options) {
-        for (const optionLocation of option.locations) {
-          if (optionLocation.location_id !== selectedLocationId) continue;
-          const fullLocation =
-            locations.find((location) => location.id === selectedLocationId) ??
-            optionLocation.location;
-          const dayLabel = day.date
-            ? format(new Date(day.date + "T00:00:00"), "EEE, MMM d")
-            : `Day ${day.sort_order + 1}`;
-          return {
-            dayId: day.id,
-            optionId: option.id,
-            locationId: optionLocation.location_id,
-            location: fullLocation,
-            dayLabel,
-            optionIndex: option.option_index,
-            timePeriod: optionLocation.time_period,
-            scheduled: true,
-          };
-        }
-      }
-    }
-
-    const unscheduled = locations.find(
-      (location) => location.id === selectedLocationId
-    );
-    return unscheduled
-      ? {
-          dayId: null,
-          optionId: null,
-          locationId: unscheduled.id,
-          location: unscheduled,
-          dayLabel: null,
-          optionIndex: null,
-          timePeriod: null,
-          scheduled: false,
-        }
-      : null;
-  }, [itinerary, locations, selectedLocationId]);
 
   const selectedOptionsByDay = useMemo(() => {
     if (!itinerary) return {};
@@ -264,10 +200,7 @@ export function ItineraryTab({
               days={itinerary.days}
               selectedOptionsByDay={selectedOptionsByDay}
               selectedDayId={selectedDayId}
-              onSelectDay={(dayId) => {
-                setSelectedDayId(dayId);
-                setSelectedLocationId(null);
-              }}
+              onSelectDay={setSelectedDayId}
             />
 
             <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
@@ -306,9 +239,8 @@ export function ItineraryTab({
                         onRoutesChanged={fetchItinerary}
                         onRouteCreated={handleRouteCreated}
                         onRetryRouteMetrics={handleRetryRouteMetrics}
-                        onInspectLocation={(dayId, locationId) => {
+                        onInspectLocation={(dayId) => {
                           setSelectedDayId(dayId);
-                          setSelectedLocationId(locationId);
                         }}
                       />
                     </div>
@@ -316,29 +248,18 @@ export function ItineraryTab({
                 })}
               </div>
 
-              <div className="space-y-4 xl:sticky xl:top-4 xl:self-start">
+              <div className="space-y-4 xl:sticky xl:top-[4.5rem] xl:self-start">
                 <ItineraryInspectorPanel
                   day={selectedDay}
                   currentOption={
                     selectedDay ? getSelectedOption(selectedDay) : undefined
                   }
-                  selectedLocation={selectedLocation}
-                  unscheduledCount={
-                    locations.filter(
-                      (location) => !itineraryLocationMap.has(location.id)
-                    ).length
-                  }
-                  onUpdateTimePeriod={handleUpdateLocationTimePeriod}
                 />
                 <UnscheduledLocationsPanel
                   locations={locations}
                   itineraryLocationMap={itineraryLocationMap}
-                  availableDays={availableDays}
+                  currentDayId={selectedDayId ?? itinerary.days[0]?.id ?? null}
                   onScheduleToDay={handleScheduleLocationToDay}
-                  selectedLocationId={selectedLocationId}
-                  onInspectLocation={(locationId) =>
-                    setSelectedLocationId(locationId)
-                  }
                 />
               </div>
             </div>

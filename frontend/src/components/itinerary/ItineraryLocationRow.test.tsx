@@ -98,8 +98,9 @@ describe("ItineraryLocationRow", () => {
 
     expect(screen.getByText(/address:/i)).toBeInTheDocument();
     expect(screen.getByText(/champ de mars/i)).toBeInTheDocument();
-    expect(screen.getByText(/note:/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/go at sunset/i)).toHaveLength(2);
+    expect(screen.getByText(/hours:/i)).toBeInTheDocument();
+    // Note is shown fully in collapsed view, not duplicated in expanded
+    expect(screen.getAllByText(/go at sunset/i)).toHaveLength(1);
   });
 
   it("renders a location image when one is available", () => {

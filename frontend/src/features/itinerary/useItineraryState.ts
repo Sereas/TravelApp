@@ -297,11 +297,23 @@ export function useItineraryState({
   );
 
   const handleCreateAlternative = useCallback(
-    async (dayId: string) => {
+    async (dayId: string, name?: string) => {
       setItineraryActionError(null);
       setCreateOptionLoading(dayId);
+      const label = name?.trim() || undefined;
       try {
-        const newOption = await api.itinerary.createOption(tripId, dayId);
+        let newOption = await api.itinerary.createOption(tripId, dayId, {
+          created_by: label ?? null,
+        });
+        // If PostgREST omitted created_by in the insert payload, persist the label explicitly.
+        if (label && !newOption.created_by) {
+          newOption = await api.itinerary.updateOption(
+            tripId,
+            dayId,
+            newOption.id,
+            { created_by: label }
+          );
+        }
         setItinerary((prev) => {
           if (!prev) return prev;
           return {
@@ -317,7 +329,7 @@ export function useItineraryState({
                         option_index: newOption.option_index,
                         starting_city: newOption.starting_city,
                         ending_city: newOption.ending_city,
-                        created_by: newOption.created_by,
+                        created_by: newOption.created_by ?? label ?? null,
                         created_at: newOption.created_at,
                         locations: [],
                         routes: [],
@@ -328,11 +340,13 @@ export function useItineraryState({
             ),
           };
         });
+        return newOption.id;
       } catch (err) {
         setItineraryActionError(
           err instanceof Error ? err.message : "Failed to create alternative"
         );
         await fetchItinerary();
+        return null;
       } finally {
         setCreateOptionLoading(null);
       }

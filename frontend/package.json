@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:perf": "playwright test",
+    "test:e2e:itinerary": "playwright test --config=playwright.itinerary.config.ts",
     "test:all": "vitest run && playwright test"
   },
   "dependencies": {

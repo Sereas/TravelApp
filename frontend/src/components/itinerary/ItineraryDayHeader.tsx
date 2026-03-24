@@ -65,17 +65,6 @@ function formatDate(dateStr: string): string {
   });
 }
 
-function formatCitySummary(option: ItineraryOption | undefined): string | null {
-  const start = option?.starting_city?.trim() || null;
-  const end = option?.ending_city?.trim() || null;
-
-  if (start && end) {
-    if (start.toLowerCase() === end.toLowerCase()) return start;
-    return `${start} → ${end}`;
-  }
-  return start || end;
-}
-
 interface ItineraryDayHeaderProps {
   day: ItineraryDay;
   currentOption: ItineraryOption | undefined;
@@ -88,7 +77,10 @@ interface ItineraryDayHeaderProps {
     optionId: string | undefined
   ) => void;
   onSelectOption: (dayId: string, optionId: string) => void;
-  onCreateAlternative: (dayId: string) => void;
+  onCreateAlternative: (
+    dayId: string,
+    name?: string
+  ) => Promise<string | null> | void;
   onDeleteOption: (dayId: string, optionId: string) => void;
   onSaveOptionDetails: (
     dayId: string,
@@ -116,13 +108,11 @@ export function ItineraryDayHeader({
   const dayLabel = day.date
     ? formatDate(day.date)
     : `Day ${day.sort_order + 1}`;
-  const citySummary = formatCitySummary(currentOption);
   const [editingDate, setEditingDate] = useState(false);
-  const [editingCities, setEditingCities] = useState(false);
 
   return (
     <div className="flex items-start gap-3">
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           {editingDate ? (
             <input
@@ -171,62 +161,38 @@ export function ItineraryDayHeader({
           )}
         </div>
 
-        {citySummary ? (
-          <div className="mt-1 text-sm font-medium text-content-muted">
-            {citySummary}
-          </div>
-        ) : null}
-
         {currentOption && (
-          <div className="mt-2">
-            <button
-              type="button"
-              className="text-xs font-medium text-content-muted underline-offset-2 hover:text-content-primary hover:underline"
-              onClick={() => setEditingCities((value) => !value)}
-            >
-              {editingCities ? "Hide city editing" : "Edit cities"}
-            </button>
-            {editingCities ? (
-              <div className="mt-2 flex shrink-0 items-center gap-1 rounded-md border border-border/60 bg-muted/40 px-2 py-1 text-xs text-muted-foreground">
-                <span className="shrink-0 text-[10px] uppercase tracking-wide opacity-50">
-                  route
-                </span>
-                <AutosaveInput
-                  id={`sc-${currentOption.id}`}
-                  placeholder="start city"
-                  initialValue={currentOption.starting_city ?? ""}
-                  onSave={async (value) => {
-                    const nextValue = value || null;
-                    if (nextValue === (currentOption.starting_city ?? null))
-                      return;
-                    onSaveOptionDetails(day.id, currentOption.id, {
-                      starting_city: nextValue,
-                    });
-                  }}
-                  className="w-24 text-xs"
-                />
-                <ArrowRight size={10} className="shrink-0 opacity-30" />
-                <AutosaveInput
-                  id={`ec-${currentOption.id}`}
-                  placeholder="end city"
-                  initialValue={currentOption.ending_city ?? ""}
-                  onSave={async (value) => {
-                    const nextValue = value || null;
-                    if (nextValue === (currentOption.ending_city ?? null))
-                      return;
-                    onSaveOptionDetails(day.id, currentOption.id, {
-                      ending_city: nextValue,
-                    });
-                  }}
-                  className="w-24 text-xs"
-                />
-              </div>
-            ) : null}
+          <div className="mt-1.5 flex items-center gap-1.5 text-sm text-content-muted">
+            <AutosaveInput
+              id={`sc-${currentOption.id}`}
+              placeholder="Start city"
+              initialValue={currentOption.starting_city ?? ""}
+              onSave={async (value) => {
+                const nextValue = value || null;
+                if (nextValue === (currentOption.starting_city ?? null)) return;
+                onSaveOptionDetails(day.id, currentOption.id, {
+                  starting_city: nextValue,
+                });
+              }}
+              className="w-28 text-sm"
+            />
+            <ArrowRight size={12} className="shrink-0 text-content-muted/40" />
+            <AutosaveInput
+              id={`ec-${currentOption.id}`}
+              placeholder="End city"
+              initialValue={currentOption.ending_city ?? ""}
+              onSave={async (value) => {
+                const nextValue = value || null;
+                if (nextValue === (currentOption.ending_city ?? null)) return;
+                onSaveOptionDetails(day.id, currentOption.id, {
+                  ending_city: nextValue,
+                });
+              }}
+              className="w-28 text-sm"
+            />
           </div>
         )}
       </div>
-
-      <div className="flex-1" />
 
       <ItineraryPlanSwitcher
         day={day}

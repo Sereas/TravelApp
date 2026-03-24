@@ -142,7 +142,10 @@ export interface ItineraryDayCardProps {
     optionId: string | undefined
   ) => void;
   onSelectOption: (dayId: string, optionId: string) => void;
-  onCreateAlternative: (dayId: string) => void;
+  onCreateAlternative: (
+    dayId: string,
+    name?: string
+  ) => Promise<string | null> | void;
   onDeleteOption: (dayId: string, optionId: string) => void;
   onSaveOptionDetails: (
     dayId: string,
@@ -583,7 +586,7 @@ export function ItineraryDayCard({
 
         <CardContent className="pt-0">
           {currentOption && (
-            <>
+            <div key={currentOption.id} className="animate-page-flip">
               <ItineraryDayTimeline
                 sorted={sorted}
                 locRouteMap={locRouteMap}
@@ -721,7 +724,7 @@ export function ItineraryDayCard({
                   )}
                 </div>
               )}
-            </>
+            </div>
           )}
           {!currentOption && (
             <p className="text-sm text-muted-foreground">No locations</p>

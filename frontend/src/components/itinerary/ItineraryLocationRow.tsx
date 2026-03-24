@@ -340,7 +340,7 @@ export function ItineraryLocationRow({
                 ) : null}
               </div>
               {optionLocation.location.note ? (
-                <div className="mt-1 overflow-hidden border-l-2 border-brand-green/30 pl-2 text-xs leading-5 text-content-muted/90 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
+                <div className="mt-1 whitespace-pre-wrap border-l-2 border-brand-green/30 pl-2 text-xs leading-5 text-content-muted/90">
                   {optionLocation.location.note}
                 </div>
               ) : null}
@@ -414,44 +414,32 @@ export function ItineraryLocationRow({
           )}
         </div>
 
-        {expanded && (
-          <div className="mb-1 ml-1 mr-4 space-y-1 rounded-b-lg bg-accent/15 px-3 py-2 text-xs">
-            {optionLocation.location.address && (
-              <div>
-                <span className="text-muted-foreground">Address:</span>{" "}
-                {optionLocation.location.address}
-              </div>
-            )}
-            {optionLocation.location.category && (
-              <div>
-                <span className="text-muted-foreground">Category:</span>{" "}
-                {optionLocation.location.category}
-              </div>
-            )}
-            {optionLocation.location.note && (
-              <div>
-                <span className="text-muted-foreground">Note:</span>{" "}
-                <span className="whitespace-pre-wrap">
-                  {optionLocation.location.note}
-                </span>
-              </div>
-            )}
-            {optionLocation.location.working_hours && (
-              <div>
-                <span className="text-muted-foreground">Hours:</span>{" "}
-                <span className="whitespace-pre-wrap">
-                  {formatHoursLines(optionLocation.location.working_hours).map(
-                    (line, index) => (
+        {expanded &&
+          (optionLocation.location.address ||
+            optionLocation.location.working_hours) && (
+            <div className="mb-1 ml-1 mr-4 space-y-1 rounded-b-lg bg-accent/15 px-3 py-2 text-xs">
+              {optionLocation.location.address && (
+                <div>
+                  <span className="text-muted-foreground">Address:</span>{" "}
+                  {optionLocation.location.address}
+                </div>
+              )}
+              {optionLocation.location.working_hours && (
+                <div>
+                  <span className="text-muted-foreground">Hours:</span>{" "}
+                  <span className="whitespace-pre-wrap">
+                    {formatHoursLines(
+                      optionLocation.location.working_hours
+                    ).map((line, index) => (
                       <span key={index} className="block">
                         {line}
                       </span>
-                    )
-                  )}
-                </span>
-              </div>
-            )}
-          </div>
-        )}
+                    ))}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
 
         {routeInfos.map((info) => {
           const isLastLeg = info.idx === info.route.location_ids.length - 1;
