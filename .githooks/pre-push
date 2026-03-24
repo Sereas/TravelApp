@@ -1,57 +1,19 @@
-#!/usr/bin/env bash
-# Pre-push hook — mirrors the GitHub Actions CI pipeline.
-# Blocks the push if any check fails.
-set -euo pipefail
+#!/bin/sh
+set -eu
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-BOLD='\033[1m'
-RESET='\033[0m'
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
 
-pass() { echo -e "${GREEN}✓${RESET} $1"; }
-fail() { echo -e "${RED}✗ $1${RESET}"; exit 1; }
-header() { echo -e "\n${BOLD}── $1${RESET}"; }
-
-REPO_ROOT="$(git rev-parse --show-toplevel)"
-cd "$REPO_ROOT"
-
-# ── 1. Python lint ────────────────────────────────────────────────────────────
-header "Python lint (ruff)"
-if command -v ruff &>/dev/null; then
-  ruff check . || fail "ruff check failed"
-  ruff format --check . || fail "ruff format check failed"
-  pass "ruff"
-elif [ -f ".venv/bin/ruff" ]; then
-  .venv/bin/ruff check . || fail "ruff check failed"
-  .venv/bin/ruff format --check . || fail "ruff format check failed"
-  pass "ruff"
-else
-  echo "  ruff not found — skipping Python lint"
+if [ "${SKIP_SUPABASE_SCHEMA_CHECK:-0}" = "1" ]; then
+  exit 0
 fi
 
-# ── 2. Backend tests (pytest) ─────────────────────────────────────────────────
-header "Backend tests (pytest)"
-if [ -f ".venv/bin/python" ]; then
-  .venv/bin/python -m pytest -q || fail "pytest failed"
-  pass "pytest"
-elif command -v python &>/dev/null; then
-  python -m pytest -q || fail "pytest failed"
-  pass "pytest"
-else
-  echo "  python not found — skipping backend tests"
+python_bin="$repo_root/.venv/bin/python"
+if [ ! -x "$python_bin" ]; then
+  python_bin="python3"
 fi
 
-# ── 3. Frontend checks ────────────────────────────────────────────────────────
-if [ -d "frontend" ] && [ -f "frontend/package.json" ]; then
-  header "Frontend (typecheck + lint + tests)"
-  cd frontend
-  npm run typecheck || fail "frontend typecheck failed"
-  pass "typecheck"
-  npm run lint || fail "frontend lint failed"
-  pass "lint"
-  npm run test || fail "frontend tests failed"
-  pass "tests"
-  cd "$REPO_ROOT"
-fi
-
-echo -e "\n${GREEN}${BOLD}All checks passed — pushing.${RESET}\n"
+echo "Running Supabase schema sync check..."
+"$python_bin" supabase/check_remote_schema.py
+echo "Running schema-dependent file check..."
+"$python_bin" supabase/check_schema_dependents.py

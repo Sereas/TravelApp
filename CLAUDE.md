@@ -60,7 +60,7 @@ docker-compose --profile dev up   # Dev with hot-reload
 
 ### Backend (`backend/app/`)
 
-- **`main.py`** — FastAPI app; registers all routers under `/api/v1/`
+- **`main.py`** — FastAPI app; registers all routers under `/api/v1/`; includes `RequestLoggingMiddleware` for request timing
 - **`core/config.py`** — Settings loaded from env via `get_settings()` (lru_cached)
 - **`dependencies.py`** — `get_current_user_id()` FastAPI dependency; validates Supabase JWT (ES256 JWKS → HS256 fallback); extracts `user_id: UUID`
 - **`db/supabase.py`** — `get_supabase_client()` dependency; backend always uses `SUPABASE_SERVICE_ROLE_KEY` (bypasses Supabase RLS — ownership is enforced manually in Python)
@@ -100,7 +100,10 @@ Route metrics are computed lazily: segments are only calculated when the user vi
 ### Frontend (`frontend/src/`)
 
 - **`lib/api.ts`** — Single typed `api` object with all backend calls. Gets Supabase access token from the browser session and injects it as `Authorization: Bearer` on every request.
-- **`app/trips/[id]/page.tsx`** — The main trip detail page. Holds all itinerary + locations state locally with `useState`. Performs optimistic updates for time_period changes and location reordering; falls back to server refetch on error.
+- **`app/trips/[id]/page.tsx`** — The main trip detail page. Manages trip-level and locations-tab state; delegates itinerary state and rendering to `ItineraryTab` + `useItineraryState`.
+- **`features/itinerary/useItineraryState.ts`** — Central hook for all itinerary state management: fetching the itinerary tree, optimistic updates (time_period, reorder, option details), and server sync with rollback on error.
+- **`components/itinerary/ItineraryTab.tsx`** — Orchestrates the itinerary tab: wires `useItineraryState` to the component tree.
+- **`components/itinerary/`** — Modular itinerary components: `ItineraryDayCard`, `ItineraryDayHeader`, `ItineraryDayRail`, `ItineraryDayTimeline`, `ItineraryLocationRow`, `ItineraryPlanSwitcher`, `ItineraryInspectorPanel`, `ItineraryRouteManager`, `UnscheduledLocationsPanel`.
 - **`middleware.ts`** — Next.js middleware that runs `updateSession` on every request to keep the Supabase session cookie fresh.
 - **`lib/supabase/`** — Three Supabase client factories: `client.ts` (browser), `server.ts` (Server Components), `middleware.ts` (middleware).
 - **`components/`** — Organized by domain: `itinerary/`, `locations/`, `trips/`, `layout/`, `feedback/`, `ui/` (shadcn primitives).
@@ -118,6 +121,8 @@ Route metrics are computed lazily: segments are only calculated when the user vi
 **Backend:** pytest with fully mocked Supabase clients in `conftest.py`. No real DB or network calls in unit tests. `mock_supabase_trips_and_days` is the most comprehensive fixture, simulating the full trips/days/options/locations/option_locations table hierarchy including RPC responses.
 
 **Frontend:** Vitest + React Testing Library (jsdom). Test files co-located with components (`*.test.tsx`).
+
+**Performance:** Playwright-based frontend perf tests in `tests/perf/frontend/` (trip load timing); Python backend load tests in `tests/perf/` (`workspace_perf.py`, `run_trip_load.py`). Playwright config at `frontend/playwright.config.ts`.
 
 ## Database Performance Rules
 
@@ -176,4 +181,4 @@ These rules are non-negotiable for every new endpoint or DB interaction.
 - **Aggregated read:** `get_itinerary_routes` SQL — `LEFT JOIN LATERAL`, `STABLE`
 - **Ownership baked into read:** `get_itinerary_tree(p_trip_id, p_user_id)` — `EXISTS` inline
 - **Lazy 404:** `itinerary_tree.py::get_itinerary` — skip ownership RT if RPC returns data
-- **Optimistic frontend update:** `handleSaveOptionDetails` in `page.tsx` — patch local state, no refetch
+- **Optimistic frontend update:** `handleSaveOptionDetails` in `useItineraryState.ts` — patch local state, no refetch
