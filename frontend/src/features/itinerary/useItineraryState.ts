@@ -118,7 +118,10 @@ export function useItineraryState({
         const selected = day.options.find((option) => option.id === selectedId);
         if (selected) return selected;
       }
-      return day.options.find((option) => option.option_index === 1) ?? day.options[0];
+      return (
+        day.options.find((option) => option.option_index === 1) ??
+        day.options[0]
+      );
     },
     [selectedOptionByDay]
   );
@@ -252,7 +255,9 @@ export function useItineraryState({
                 ? {
                     ...day,
                     options: day.options.map((option) =>
-                      option.id === optionId ? { ...option, ...updates } : option
+                      option.id === optionId
+                        ? { ...option, ...updates }
+                        : option
                     ),
                   }
                 : day
@@ -269,7 +274,11 @@ export function useItineraryState({
   );
 
   const handleUpdateDayDate = useCallback(
-    async (dayId: string, date: string | null, optionId: string | undefined) => {
+    async (
+      dayId: string,
+      date: string | null,
+      optionId: string | undefined
+    ) => {
       setItineraryActionError(null);
       try {
         if (date && optionId) {
@@ -359,7 +368,9 @@ export function useItineraryState({
         ?.options.find((option) => option.id === optionId);
       const maxSortOrder =
         currentOption && currentOption.locations.length > 0
-          ? Math.max(...currentOption.locations.map((location) => location.sort_order))
+          ? Math.max(
+              ...currentOption.locations.map((location) => location.sort_order)
+            )
           : -1;
       const startOrder = maxSortOrder + 1;
       const items = locationIds.map((locationId, index) => ({
@@ -514,7 +525,13 @@ export function useItineraryState({
         );
         setItinerary((prev) =>
           prev
-            ? patchRouteInItinerary(prev, dayId, optionId, routeId, withSegments)
+            ? patchRouteInItinerary(
+                prev,
+                dayId,
+                optionId,
+                routeId,
+                withSegments
+              )
             : prev
         );
       } catch (err) {
@@ -549,7 +566,13 @@ export function useItineraryState({
         );
         setItinerary((prev) =>
           prev
-            ? patchRouteInItinerary(prev, dayId, optionId, routeId, withSegments)
+            ? patchRouteInItinerary(
+                prev,
+                dayId,
+                optionId,
+                routeId,
+                withSegments
+              )
             : prev
         );
       } catch (err) {
@@ -568,7 +591,11 @@ export function useItineraryState({
   );
 
   const handleReorderOptionLocations = useCallback(
-    async (dayId: string, optionId: string, newOrderedLocationIds: string[]) => {
+    async (
+      dayId: string,
+      optionId: string,
+      newOrderedLocationIds: string[]
+    ) => {
       if (!itinerary) return;
       const day = itinerary.days.find((currentDay) => currentDay.id === dayId);
       const option = day?.options.find(
@@ -627,7 +654,9 @@ export function useItineraryState({
       const day = itinerary.days.find((currentDay) => currentDay.id === dayId);
       if (!day) return;
 
-      const location = locations.find((currentLocation) => currentLocation.id === locationId);
+      const location = locations.find(
+        (currentLocation) => currentLocation.id === locationId
+      );
       if (location) {
         setItinerary((prev) => {
           if (!prev) return prev;
@@ -679,7 +708,9 @@ export function useItineraryState({
 
       try {
         let optionId: string;
-        const mainOption = day.options.find((option) => option.option_index === 1);
+        const mainOption = day.options.find(
+          (option) => option.option_index === 1
+        );
         if (mainOption) {
           optionId = mainOption.id;
         } else {
@@ -688,7 +719,8 @@ export function useItineraryState({
         }
 
         const existingCount =
-          day.options.find((option) => option.id === optionId)?.locations.length ?? 0;
+          day.options.find((option) => option.id === optionId)?.locations
+            .length ?? 0;
 
         await api.itinerary.addLocationToOption(tripId, dayId, optionId, {
           location_id: locationId,
@@ -708,7 +740,10 @@ export function useItineraryState({
   );
 
   const syncLocationSummary = useCallback(
-    (locationId: string, updater: (location: Location) => Partial<Location>) => {
+    (
+      locationId: string,
+      updater: (location: Location) => Partial<Location>
+    ) => {
       const source = locations.find((location) => location.id === locationId);
       if (!source) return;
       const patch = updater(source);

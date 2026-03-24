@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import ast
 import re
-import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -74,8 +73,13 @@ MANUAL_FILE_RULES: dict[str, dict[str, object]] = {
     "backend/app/services/route_calculation.py": {
         "tables": {
             "option_routes": {
-                "route_id", "option_id", "label", "transport_mode",
-                "sort_order", "duration_seconds", "distance_meters",
+                "route_id",
+                "option_id",
+                "label",
+                "transport_mode",
+                "sort_order",
+                "duration_seconds",
+                "distance_meters",
             },
             "route_stops": {"location_id", "stop_order"},
         },
@@ -233,10 +237,7 @@ def extract_file_references(path: Path) -> FileReferences:
     for match in TABLE_SELECT_RE.finditer(source):
         table = match.group("table")
         arg = match.group("arg")
-        if arg.startswith(("'", '"')):
-            select_raw = arg[1:-1]
-        else:
-            select_raw = constants.get(arg, "")
+        select_raw = arg[1:-1] if arg.startswith(("'", '"')) else constants.get(arg, "")
         if select_raw:
             refs.tables.setdefault(table, set()).update(parse_select_columns(select_raw))
         else:
@@ -306,7 +307,8 @@ def check_dependents() -> None:
             missing_columns = sorted(col for col in columns if col not in actual_columns)
             if missing_columns:
                 failures.append(
-                    f"{rel}: table `{table}` is missing columns {', '.join('`'+c+'`' for c in missing_columns)}"
+                    f"{rel}: table `{table}` is missing columns "
+                    f"{', '.join('`' + c + '`' for c in missing_columns)}"
                 )
 
         for fn in sorted(refs.functions):
@@ -317,13 +319,15 @@ def check_dependents() -> None:
             actual_columns = schema.function_return_columns.get(fn)
             if actual_columns is None:
                 failures.append(
-                    f"{rel}: expects return columns from `{fn}`, but that function is not a parsed RETURNS TABLE in supabase/schema.sql"
+                    f"{rel}: expects return columns from `{fn}`, but that function is not"
+                    " a parsed RETURNS TABLE in supabase/schema.sql"
                 )
                 continue
             missing_columns = sorted(col for col in columns if col not in actual_columns)
             if missing_columns:
                 failures.append(
-                    f"{rel}: function `{fn}` is missing return columns {', '.join('`'+c+'`' for c in missing_columns)}"
+                    f"{rel}: function `{fn}` is missing return columns "
+                    f"{', '.join('`' + c + '`' for c in missing_columns)}"
                 )
 
     if failures:

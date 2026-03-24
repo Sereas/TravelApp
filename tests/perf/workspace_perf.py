@@ -17,8 +17,8 @@ from uuid import uuid4
 import jwt
 import requests
 from dotenv import load_dotenv
-from supabase import create_client
 
+from supabase import create_client
 
 API_PREFIX = "/api/v1"
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -51,11 +51,12 @@ OPTIONS_SELECT = (
 )
 OPTION_LOCATIONS_SELECT = "option_id, location_id, sort_order, time_period"
 ROUTES_SELECT = (
-    "route_id, option_id, transport_mode, label, duration_seconds, distance_meters, "
-    "sort_order"
+    "route_id, option_id, transport_mode, label, duration_seconds, distance_meters, sort_order"
 )
 ROUTE_STOPS_SELECT = "route_id, location_id, stop_order"
-ROUTE_SEGMENTS_SELECT = "id, route_id, segment_order, from_location_id, to_location_id, segment_cache_id"
+ROUTE_SEGMENTS_SELECT = (
+    "id, route_id, segment_order, from_location_id, to_location_id, segment_cache_id"
+)
 
 
 @dataclass
@@ -244,7 +245,8 @@ def _backend_markdown(payload: dict[str, Any]) -> str:
         benchmark = result["benchmark"]
         lines.append(
             f"| {result['label']} | {result['avg_ms']} | {benchmark['target_ms']} | "
-            f"{benchmark['max_ms']} | {result['benchmark_status']} | {result['response_bytes']} | {notes} |"
+            f"{benchmark['max_ms']} | {result['benchmark_status']} | "
+            f"{result['response_bytes']} | {notes} |"
         )
     lines.append("")
     return "\n".join(lines)
@@ -273,7 +275,10 @@ def run_backend_report(
 
     endpoints = [
         EndpointRun(label="GET /trips/{id}", path=f"{API_PREFIX}/trips/{trip_id}"),
-        EndpointRun(label="GET /trips/{id}/locations", path=f"{API_PREFIX}/trips/{trip_id}/locations"),
+        EndpointRun(
+            label="GET /trips/{id}/locations",
+            path=f"{API_PREFIX}/trips/{trip_id}/locations",
+        ),
         EndpointRun(
             label="GET /trips/{id}/itinerary",
             path=f"{API_PREFIX}/trips/{trip_id}/itinerary",
@@ -291,7 +296,9 @@ def run_backend_report(
         "benchmarks": BACKEND_BENCHMARKS,
         "results": results,
     }
-    payload["report_files"] = _write_report_files("backend_perf", payload, _backend_markdown(payload))
+    payload["report_files"] = _write_report_files(
+        "backend_perf", payload, _backend_markdown(payload)
+    )
     return payload
 
 
@@ -330,7 +337,13 @@ def ensure_perf_ui_user(email: str, password: str) -> dict[str, str]:
     return {"user_id": str(user.id), "email": email}
 
 
-def _fetch_all(table, select_cols: str, *, eq: tuple[str, str] | None = None, in_filter: tuple[str, list[str]] | None = None) -> list[dict[str, Any]]:
+def _fetch_all(
+    table,
+    select_cols: str,
+    *,
+    eq: tuple[str, str] | None = None,
+    in_filter: tuple[str, list[str]] | None = None,
+) -> list[dict[str, Any]]:
     query = table.select(select_cols)
     if eq:
         query = query.eq(eq[0], eq[1])
@@ -451,107 +464,131 @@ def clone_workspace_to_perf_user(*, source_user_id: str, perf_user_id: str) -> d
     _insert_rows(
         supabase,
         "trips",
-        [{
-            "trip_id": trip_map[str(row["trip_id"])],
-            "user_id": perf_user_id,
-            "trip_name": row.get("trip_name"),
-            "start_date": row.get("start_date"),
-            "end_date": row.get("end_date"),
-            "created_at": row.get("created_at"),
-        } for row in source_trips]
+        [
+            {
+                "trip_id": trip_map[str(row["trip_id"])],
+                "user_id": perf_user_id,
+                "trip_name": row.get("trip_name"),
+                "start_date": row.get("start_date"),
+                "end_date": row.get("end_date"),
+                "created_at": row.get("created_at"),
+            }
+            for row in source_trips
+        ],
     )
     _insert_rows(
         supabase,
         "locations",
-        [{
-            "location_id": location_map[str(row["location_id"])],
-            "trip_id": trip_map[str(row["trip_id"])],
-            "name": row.get("name"),
-            "address": row.get("address"),
-            "google_link": row.get("google_link"),
-            "note": row.get("note"),
-            "latitude": row.get("latitude"),
-            "longitude": row.get("longitude"),
-            "added_by_user_id": perf_user_id,
-            "added_by_email": row.get("added_by_email"),
-            "city": row.get("city"),
-            "working_hours": row.get("working_hours"),
-            "requires_booking": row.get("requires_booking"),
-            "category": row.get("category"),
-            "google_place_id": row.get("google_place_id"),
-            "google_source_type": row.get("google_source_type"),
-            "google_raw": row.get("google_raw"),
-            "created_at": row.get("created_at"),
-            "user_image_url": row.get("user_image_url"),
-        } for row in source_locations]
+        [
+            {
+                "location_id": location_map[str(row["location_id"])],
+                "trip_id": trip_map[str(row["trip_id"])],
+                "name": row.get("name"),
+                "address": row.get("address"),
+                "google_link": row.get("google_link"),
+                "note": row.get("note"),
+                "latitude": row.get("latitude"),
+                "longitude": row.get("longitude"),
+                "added_by_user_id": perf_user_id,
+                "added_by_email": row.get("added_by_email"),
+                "city": row.get("city"),
+                "working_hours": row.get("working_hours"),
+                "requires_booking": row.get("requires_booking"),
+                "category": row.get("category"),
+                "google_place_id": row.get("google_place_id"),
+                "google_source_type": row.get("google_source_type"),
+                "google_raw": row.get("google_raw"),
+                "created_at": row.get("created_at"),
+                "user_image_url": row.get("user_image_url"),
+            }
+            for row in source_locations
+        ],
     )
     _insert_rows(
         supabase,
         "trip_days",
-        [{
-            "day_id": day_map[str(row["day_id"])],
-            "trip_id": trip_map[str(row["trip_id"])],
-            "date": row.get("date"),
-            "sort_order": row.get("sort_order"),
-            "created_at": row.get("created_at"),
-        } for row in source_days]
+        [
+            {
+                "day_id": day_map[str(row["day_id"])],
+                "trip_id": trip_map[str(row["trip_id"])],
+                "date": row.get("date"),
+                "sort_order": row.get("sort_order"),
+                "created_at": row.get("created_at"),
+            }
+            for row in source_days
+        ],
     )
     _insert_rows(
         supabase,
         "day_options",
-        [{
-            "option_id": option_map[str(row["option_id"])],
-            "day_id": day_map[str(row["day_id"])],
-            "option_index": row.get("option_index"),
-            "starting_city": row.get("starting_city"),
-            "ending_city": row.get("ending_city"),
-            "created_by": row.get("created_by"),
-            "created_at": row.get("created_at"),
-        } for row in source_options]
+        [
+            {
+                "option_id": option_map[str(row["option_id"])],
+                "day_id": day_map[str(row["day_id"])],
+                "option_index": row.get("option_index"),
+                "starting_city": row.get("starting_city"),
+                "ending_city": row.get("ending_city"),
+                "created_by": row.get("created_by"),
+                "created_at": row.get("created_at"),
+            }
+            for row in source_options
+        ],
     )
     _insert_rows(
         supabase,
         "option_locations",
-        [{
-            "option_id": option_map[str(row["option_id"])],
-            "location_id": location_map[str(row["location_id"])],
-            "sort_order": row.get("sort_order"),
-            "time_period": row.get("time_period"),
-        } for row in source_option_locations]
+        [
+            {
+                "option_id": option_map[str(row["option_id"])],
+                "location_id": location_map[str(row["location_id"])],
+                "sort_order": row.get("sort_order"),
+                "time_period": row.get("time_period"),
+            }
+            for row in source_option_locations
+        ],
     )
     _insert_rows(
         supabase,
         "option_routes",
-        [{
-            "route_id": route_map[str(row["route_id"])],
-            "option_id": option_map[str(row["option_id"])],
-            "transport_mode": row.get("transport_mode"),
-            "label": row.get("label"),
-            "duration_seconds": row.get("duration_seconds"),
-            "distance_meters": row.get("distance_meters"),
-            "sort_order": row.get("sort_order"),
-        } for row in source_routes]
+        [
+            {
+                "route_id": route_map[str(row["route_id"])],
+                "option_id": option_map[str(row["option_id"])],
+                "transport_mode": row.get("transport_mode"),
+                "label": row.get("label"),
+                "duration_seconds": row.get("duration_seconds"),
+                "distance_meters": row.get("distance_meters"),
+                "sort_order": row.get("sort_order"),
+            }
+            for row in source_routes
+        ],
     )
     _insert_rows(
         supabase,
         "route_stops",
-        [{
-            "route_id": route_map[str(row["route_id"])],
-            "location_id": location_map[str(row["location_id"])],
-            "stop_order": row.get("stop_order"),
-        } for row in source_route_stops]
+        [
+            {
+                "route_id": route_map[str(row["route_id"])],
+                "location_id": location_map[str(row["location_id"])],
+                "stop_order": row.get("stop_order"),
+            }
+            for row in source_route_stops
+        ],
     )
     _insert_rows(
         supabase,
         "route_segments",
-        [{
-            "id": route_segment_map[str(row["id"])],
-            "route_id": route_map[str(row["route_id"])],
-            "segment_order": row.get("segment_order"),
-            "from_location_id": location_map[str(row["from_location_id"])],
-            "to_location_id": location_map[str(row["to_location_id"])],
-            "segment_cache_id": row.get("segment_cache_id"),
-        } for row in source_route_segments]
+        [
+            {
+                "id": route_segment_map[str(row["id"])],
+                "route_id": route_map[str(row["route_id"])],
+                "segment_order": row.get("segment_order"),
+                "from_location_id": location_map[str(row["from_location_id"])],
+                "to_location_id": location_map[str(row["to_location_id"])],
+                "segment_cache_id": row.get("segment_cache_id"),
+            }
+            for row in source_route_segments
+        ],
     )
 
     representative_trip_id = trip_map[str(source_trips[0]["trip_id"])]

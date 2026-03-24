@@ -32,7 +32,9 @@ const day = {
   ],
 };
 
-function renderSwitcher(overrides: Partial<React.ComponentProps<typeof ItineraryPlanSwitcher>> = {}) {
+function renderSwitcher(
+  overrides: Partial<React.ComponentProps<typeof ItineraryPlanSwitcher>> = {}
+) {
   const props = {
     day,
     currentOption: day.options[0],
@@ -61,9 +63,7 @@ describe("ItineraryPlanSwitcher", () => {
     await userEvent.click(
       screen.getByRole("button", { name: /switch day plan/i })
     );
-    await userEvent.click(
-      screen.getByRole("button", { name: /rainy plan/i })
-    );
+    await userEvent.click(screen.getByRole("button", { name: /rainy plan/i }));
 
     expect(props.onSelectOption).toHaveBeenCalledWith("day-1", "opt-2");
   });
@@ -88,7 +88,10 @@ describe("ItineraryPlanSwitcher", () => {
       screen.getByRole("button", { name: /switch day plan/i })
     );
     await userEvent.click(screen.getByRole("button", { name: /add plan/i }));
-    await userEvent.type(screen.getByPlaceholderText(/plan name/i), "Food plan");
+    await userEvent.type(
+      screen.getByPlaceholderText(/plan name/i),
+      "Food plan"
+    );
     await userEvent.click(screen.getByRole("button", { name: /^add$/i }));
 
     expect(onCreateAlternative).toHaveBeenCalledWith("day-1");

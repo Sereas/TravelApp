@@ -33,7 +33,9 @@ function UnscheduledLocationRow({
   selected: boolean;
   onInspectLocation?: (locationId: string) => void;
 }) {
-  const [selectedDayId, setSelectedDayId] = useState(availableDays[0]?.id ?? "");
+  const [selectedDayId, setSelectedDayId] = useState(
+    availableDays[0]?.id ?? ""
+  );
 
   useEffect(() => {
     setSelectedDayId((current) => current || availableDays[0]?.id || "");

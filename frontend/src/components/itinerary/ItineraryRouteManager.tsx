@@ -201,13 +201,14 @@ export function ItineraryRouteManager({
           {routes.map((route, index) => {
             const color = ROUTE_COLORS[index % ROUTE_COLORS.length];
             const Icon =
-              TRANSPORT.find((mode) => mode.key === route.transport_mode)?.icon ??
-              Footprints;
+              TRANSPORT.find((mode) => mode.key === route.transport_mode)
+                ?.icon ?? Footprints;
             const names = route.location_ids
               .map(
                 (locationId) =>
-                  sortedLocations.find((location) => location.location_id === locationId)
-                    ?.location.name ?? "?"
+                  sortedLocations.find(
+                    (location) => location.location_id === locationId
+                  )?.location.name ?? "?"
               )
               .join(" → ");
             const isCalculating = calculatingRouteId === route.route_id;
@@ -224,12 +225,18 @@ export function ItineraryRouteManager({
               >
                 <Icon size={12} className={cn("shrink-0", color.text)} />
                 <span
-                  className={cn("min-w-0 flex-1 truncate font-medium", color.text)}
+                  className={cn(
+                    "min-w-0 flex-1 truncate font-medium",
+                    color.text
+                  )}
                   title={names}
                 >
                   {names}
                 </span>
-                <ChevronRight size={12} className="shrink-0 text-muted-foreground/40" />
+                <ChevronRight
+                  size={12}
+                  className="shrink-0 text-muted-foreground/40"
+                />
                 {isCalculating && (
                   <span className="flex shrink-0 items-center gap-1 text-muted-foreground">
                     <LoadingSpinner size="sm" className="shrink-0" />
@@ -240,7 +247,10 @@ export function ItineraryRouteManager({
                   <span className="flex shrink-0 items-center gap-1.5">
                     <span className="flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">
                       <AlertCircle size={11} />
-                      <span className="max-w-[140px] truncate" title={metricsError}>
+                      <span
+                        className="max-w-[140px] truncate"
+                        title={metricsError}
+                      >
                         Metrics unavailable
                       </span>
                     </span>
@@ -249,7 +259,11 @@ export function ItineraryRouteManager({
                       size="sm"
                       className="h-5 px-1.5 text-[10px]"
                       onClick={() =>
-                        onRetryRouteMetrics(day.id, currentOption.id, route.route_id)
+                        onRetryRouteMetrics(
+                          day.id,
+                          currentOption.id,
+                          route.route_id
+                        )
                       }
                     >
                       Retry

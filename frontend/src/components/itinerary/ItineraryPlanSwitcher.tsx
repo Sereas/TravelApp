@@ -51,7 +51,10 @@ export function ItineraryPlanSwitcher({
     if (!open) return;
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target as Node;
-      if (triggerRef.current?.contains(target) || dropdownRef.current?.contains(target)) {
+      if (
+        triggerRef.current?.contains(target) ||
+        dropdownRef.current?.contains(target)
+      ) {
         return;
       }
       if ((target as Element).closest?.('[role="dialog"]')) return;
@@ -76,7 +79,13 @@ export function ItineraryPlanSwitcher({
       onSelectOption(day.id, newest.id);
     }
     setPendingAltName(null);
-  }, [day.id, day.options, onSaveOptionDetails, onSelectOption, pendingAltName]);
+  }, [
+    day.id,
+    day.options,
+    onSaveOptionDetails,
+    onSelectOption,
+    pendingAltName,
+  ]);
 
   function handleAddPlan() {
     const name = newPlanName.trim();
@@ -115,7 +124,8 @@ export function ItineraryPlanSwitcher({
           {day.options.map((option) => {
             const label = optionLabel(option);
             const isActive = option.id === currentOption?.id;
-            const canDelete = day.options.length > 1 && option.option_index !== 1;
+            const canDelete =
+              day.options.length > 1 && option.option_index !== 1;
 
             return (
               <div
@@ -130,7 +140,9 @@ export function ItineraryPlanSwitcher({
                     className="flex-1 border-b border-primary bg-transparent py-0.5 text-xs outline-none"
                     onBlur={(event) => {
                       const value = event.target.value.trim() || null;
-                      onSaveOptionDetails(day.id, option.id, { created_by: value });
+                      onSaveOptionDetails(day.id, option.id, {
+                        created_by: value,
+                      });
                       setRenamingOptionId(null);
                     }}
                     onKeyDown={(event) => {

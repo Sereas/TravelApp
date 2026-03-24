@@ -62,7 +62,9 @@ export function ItineraryTab({
   } = itineraryState;
 
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
-  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
+  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     if (!itinerary?.days.length) {
@@ -84,7 +86,9 @@ export function ItineraryTab({
 
   const selectedLocation = useMemo<InspectorLocation | null>(() => {
     if (!selectedLocationId || !itinerary) {
-      const unscheduled = locations.find((location) => location.id === selectedLocationId);
+      const unscheduled = locations.find(
+        (location) => location.id === selectedLocationId
+      );
       return unscheduled
         ? {
             dayId: null,
@@ -123,7 +127,9 @@ export function ItineraryTab({
       }
     }
 
-    const unscheduled = locations.find((location) => location.id === selectedLocationId);
+    const unscheduled = locations.find(
+      (location) => location.id === selectedLocationId
+    );
     return unscheduled
       ? {
           dayId: null,
@@ -185,7 +191,9 @@ export function ItineraryTab({
                 onClick={handleGenerateDays}
                 disabled={addDayLoading || generateDaysLoading}
               >
-                {generateDaysLoading ? "Generating…" : "Generate days from dates"}
+                {generateDaysLoading
+                  ? "Generating…"
+                  : "Generate days from dates"}
               </Button>
             ) : (
               <Button
@@ -263,7 +271,6 @@ export function ItineraryTab({
             />
 
             <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-
               <div className="space-y-4">
                 {visibleDays.map((day) => {
                   const currentOption = getSelectedOption(day);
@@ -312,11 +319,14 @@ export function ItineraryTab({
               <div className="space-y-4 xl:sticky xl:top-4 xl:self-start">
                 <ItineraryInspectorPanel
                   day={selectedDay}
-                  currentOption={selectedDay ? getSelectedOption(selectedDay) : undefined}
+                  currentOption={
+                    selectedDay ? getSelectedOption(selectedDay) : undefined
+                  }
                   selectedLocation={selectedLocation}
                   unscheduledCount={
-                    locations.filter((location) => !itineraryLocationMap.has(location.id))
-                      .length
+                    locations.filter(
+                      (location) => !itineraryLocationMap.has(location.id)
+                    ).length
                   }
                   onUpdateTimePeriod={handleUpdateLocationTimePeriod}
                 />
@@ -326,7 +336,9 @@ export function ItineraryTab({
                   availableDays={availableDays}
                   onScheduleToDay={handleScheduleLocationToDay}
                   selectedLocationId={selectedLocationId}
-                  onInspectLocation={(locationId) => setSelectedLocationId(locationId)}
+                  onInspectLocation={(locationId) =>
+                    setSelectedLocationId(locationId)
+                  }
                 />
               </div>
             </div>

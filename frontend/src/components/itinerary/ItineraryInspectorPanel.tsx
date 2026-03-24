@@ -1,6 +1,11 @@
 "use client";
 
-import type { ItineraryDay, ItineraryOption, Location, LocationSummary } from "@/lib/api";
+import type {
+  ItineraryDay,
+  ItineraryOption,
+  Location,
+  LocationSummary,
+} from "@/lib/api";
 import { CalendarDays, Compass, MapPin, Route, Sparkles } from "lucide-react";
 
 export type InspectorLocation = {
@@ -69,11 +74,15 @@ export function ItineraryInspectorPanel({
           </div>
           <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
             <div className="rounded-lg bg-brand-green-light/40 px-2 py-2">
-              <div className="font-semibold text-content-primary">{day.options.length}</div>
+              <div className="font-semibold text-content-primary">
+                {day.options.length}
+              </div>
               <div className="text-content-muted">plans</div>
             </div>
             <div className="rounded-lg bg-brand-green-light/40 px-2 py-2">
-              <div className="font-semibold text-content-primary">{totalStops}</div>
+              <div className="font-semibold text-content-primary">
+                {totalStops}
+              </div>
               <div className="text-content-muted">stops</div>
             </div>
             <div className="rounded-lg bg-brand-green-light/40 px-2 py-2">
@@ -123,7 +132,9 @@ export function ItineraryInspectorPanel({
               <div className="flex items-center gap-2">
                 <CalendarDays size={14} />
                 {selectedLocation.dayLabel}
-                {selectedLocation.optionIndex ? ` · Plan ${selectedLocation.optionIndex}` : ""}
+                {selectedLocation.optionIndex
+                  ? ` · Plan ${selectedLocation.optionIndex}`
+                  : ""}
                 {formatTimePeriod(selectedLocation.timePeriod)
                   ? ` · ${formatTimePeriod(selectedLocation.timePeriod)}`
                   : ""}
@@ -174,7 +185,8 @@ export function ItineraryInspectorPanel({
                 </div>
               </div>
             ) : null}
-            {"google_link" in selectedLocation.location && selectedLocation.location.google_link ? (
+            {"google_link" in selectedLocation.location &&
+            selectedLocation.location.google_link ? (
               <a
                 href={selectedLocation.location.google_link}
                 target="_blank"
@@ -188,7 +200,8 @@ export function ItineraryInspectorPanel({
         </div>
       ) : (
         <div className="mt-4 rounded-xl border border-dashed border-warm-border px-4 py-5 text-sm text-content-muted">
-          Expand a stop or pick an unscheduled place to inspect its details here.
+          Expand a stop or pick an unscheduled place to inspect its details
+          here.
         </div>
       )}
 

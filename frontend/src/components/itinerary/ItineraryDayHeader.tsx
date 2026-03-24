@@ -113,7 +113,9 @@ export function ItineraryDayHeader({
   onDeleteOption,
   onSaveOptionDetails,
 }: ItineraryDayHeaderProps) {
-  const dayLabel = day.date ? formatDate(day.date) : `Day ${day.sort_order + 1}`;
+  const dayLabel = day.date
+    ? formatDate(day.date)
+    : `Day ${day.sort_order + 1}`;
   const citySummary = formatCitySummary(currentOption);
   const [editingDate, setEditingDate] = useState(false);
   const [editingCities, setEditingCities] = useState(false);
@@ -129,7 +131,9 @@ export function ItineraryDayHeader({
                 if (!el) return;
                 el.focus();
                 try {
-                  (el as HTMLInputElement & { showPicker?: () => void }).showPicker?.();
+                  (
+                    el as HTMLInputElement & { showPicker?: () => void }
+                  ).showPicker?.();
                 } catch {
                   /* showPicker not supported */
                 }
@@ -193,7 +197,8 @@ export function ItineraryDayHeader({
                   initialValue={currentOption.starting_city ?? ""}
                   onSave={async (value) => {
                     const nextValue = value || null;
-                    if (nextValue === (currentOption.starting_city ?? null)) return;
+                    if (nextValue === (currentOption.starting_city ?? null))
+                      return;
                     onSaveOptionDetails(day.id, currentOption.id, {
                       starting_city: nextValue,
                     });
@@ -207,7 +212,8 @@ export function ItineraryDayHeader({
                   initialValue={currentOption.ending_city ?? ""}
                   onSave={async (value) => {
                     const nextValue = value || null;
-                    if (nextValue === (currentOption.ending_city ?? null)) return;
+                    if (nextValue === (currentOption.ending_city ?? null))
+                      return;
                     onSaveOptionDetails(day.id, currentOption.id, {
                       ending_city: nextValue,
                     });

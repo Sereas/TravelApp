@@ -28,14 +28,7 @@ import { AddLocationsToOptionDialog } from "@/components/itinerary/AddLocationsT
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import {
-  Sunrise,
-  Sun,
-  Sunset,
-  Moon,
-  MapPin,
-  Plus,
-} from "lucide-react";
+import { Sunrise, Sun, Sunset, Moon, MapPin, Plus } from "lucide-react";
 
 const TIME_META: Record<
   string,

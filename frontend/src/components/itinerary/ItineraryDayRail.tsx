@@ -111,7 +111,8 @@ export function ItineraryDayRail({
               <div className="mt-2 flex items-center gap-1.5 text-[11px] text-content-muted">
                 {isPlanned ? <Layers3 size={12} /> : <Sparkles size={12} />}
                 <span>
-                  {day.options.length} {day.options.length === 1 ? "plan" : "plans"}
+                  {day.options.length}{" "}
+                  {day.options.length === 1 ? "plan" : "plans"}
                 </span>
                 {!isPlanned ? (
                   <>

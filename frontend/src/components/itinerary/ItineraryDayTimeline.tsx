@@ -46,7 +46,11 @@ interface ItineraryDayTimelineProps {
   onToggleExpanded: (locationId: string) => void;
   onInspectLocation: (locationId: string) => void;
   onToggleTimePicker: (locationId: string) => void;
-  onRemoveLocation: (dayId: string, optionId: string, locationId: string) => void;
+  onRemoveLocation: (
+    dayId: string,
+    optionId: string,
+    locationId: string
+  ) => void;
   onDropAtEnd: (e: React.DragEvent) => void;
 }
 
@@ -155,7 +159,8 @@ export function ItineraryDayTimeline({
                 {section.displayLabel}
               </div>
               <span className="text-xs text-content-muted">
-                {section.items.length} {section.items.length === 1 ? "stop" : "stops"}
+                {section.items.length}{" "}
+                {section.items.length === 1 ? "stop" : "stops"}
               </span>
             </div>
 
@@ -167,8 +172,10 @@ export function ItineraryDayTimeline({
                 const expanded = expandedId === optionLocation.location_id;
                 const isDrag = dragId === optionLocation.location_id;
                 const isDrop = dropId === optionLocation.location_id && !isDrag;
-                const routeInfos = locRouteMap.get(optionLocation.location_id) ?? [];
-                const picking = isPickMode && pickIds.includes(optionLocation.location_id);
+                const routeInfos =
+                  locRouteMap.get(optionLocation.location_id) ?? [];
+                const picking =
+                  isPickMode && pickIds.includes(optionLocation.location_id);
                 const pickSeq = pickIds.indexOf(optionLocation.location_id) + 1;
 
                 const prevOl = sorted[index - 1];
@@ -179,7 +186,8 @@ export function ItineraryDayTimeline({
                   for (const info of routeInfos) {
                     if (
                       info.idx > 0 &&
-                      info.route.location_ids[info.idx - 1] === prevOl.location_id
+                      info.route.location_ids[info.idx - 1] ===
+                        prevOl.location_id
                     ) {
                       topConnectorHex = info.color.hex;
                       break;

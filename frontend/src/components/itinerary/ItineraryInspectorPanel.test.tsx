@@ -94,7 +94,9 @@ describe("ItineraryInspectorPanel", () => {
     expect(screen.getByText("Louvre Museum")).toBeInTheDocument();
     expect(screen.getByText(/Plan 1/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Morning" })).toBeInTheDocument();
-    expect(screen.getByText(/2 saved places are still outside the schedule/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/2 saved places are still outside the schedule/)
+    ).toBeInTheDocument();
   });
 
   it("renders empty guidance when nothing is selected", () => {
@@ -114,7 +116,9 @@ describe("ItineraryInspectorPanel", () => {
     expect(
       screen.getByText(/Expand a stop or pick an unscheduled place/i)
     ).toBeInTheDocument();
-    expect(screen.getByText(/All saved places are assigned to a day/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/All saved places are assigned to a day/i)
+    ).toBeInTheDocument();
   });
 
   it("updates time of day from the inspector for scheduled stops", async () => {

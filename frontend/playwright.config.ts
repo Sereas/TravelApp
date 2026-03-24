@@ -3,7 +3,13 @@ import fs from "node:fs";
 import path from "node:path";
 
 function loadPerfEnv() {
-  const envPath = path.resolve(__dirname, "..", "tests", "perf", ".env.perf.local");
+  const envPath = path.resolve(
+    __dirname,
+    "..",
+    "tests",
+    "perf",
+    ".env.perf.local"
+  );
   if (!fs.existsSync(envPath)) return;
   for (const rawLine of fs.readFileSync(envPath, "utf8").split(/\r?\n/)) {
     const line = rawLine.trim();

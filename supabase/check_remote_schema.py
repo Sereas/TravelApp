@@ -5,7 +5,6 @@ import argparse
 import difflib
 import shutil
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
@@ -75,7 +74,9 @@ def _get_db_url() -> str:
     ref = supabase_url.split("//")[1].split(".")[0]
 
     # Region is needed for the pooler host. Allow override via env, default to ap-south-1.
-    region = os.environ.get("SUPABASE_DB_REGION") or env_vars.get("SUPABASE_DB_REGION", "ap-south-1")
+    region = os.environ.get("SUPABASE_DB_REGION") or env_vars.get(
+        "SUPABASE_DB_REGION", "ap-south-1"
+    )
     from urllib.parse import quote
 
     return (
@@ -179,7 +180,9 @@ def check_snapshot() -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Verify that the linked remote Supabase public schema matches supabase/schema.sql."
+        description=(
+            "Verify that the linked remote Supabase public schema matches supabase/schema.sql."
+        )
     )
     parser.add_argument(
         "--update",

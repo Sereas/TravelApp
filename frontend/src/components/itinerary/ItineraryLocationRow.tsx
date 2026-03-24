@@ -163,7 +163,11 @@ interface ItineraryLocationRowProps {
   onToggleExpanded: (locationId: string) => void;
   onToggleTimePicker: (locationId: string) => void;
   onInspectLocation?: (locationId: string) => void;
-  onRemoveLocation: (dayId: string, optionId: string, locationId: string) => void;
+  onRemoveLocation: (
+    dayId: string,
+    optionId: string,
+    locationId: string
+  ) => void;
 }
 
 export function ItineraryLocationRow({
@@ -224,7 +228,9 @@ export function ItineraryLocationRow({
           <div
             className="flex cursor-grab items-center justify-center text-muted-foreground/40 hover:text-foreground active:cursor-grabbing"
             draggable
-            onDragStart={(event) => onDragStart(optionLocation.location_id, event)}
+            onDragStart={(event) =>
+              onDragStart(optionLocation.location_id, event)
+            }
             onDragEnd={onDragEnd}
             aria-label={`Drag ${optionLocation.location.name}`}
           >
@@ -323,7 +329,9 @@ export function ItineraryLocationRow({
               </div>
               <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground/70">
                 {optionLocation.location.city ? (
-                  <span className="truncate">{optionLocation.location.city}</span>
+                  <span className="truncate">
+                    {optionLocation.location.city}
+                  </span>
                 ) : null}
                 {optionLocation.location.category ? (
                   <span className="rounded-full bg-brand-green-light/40 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-content-muted">
@@ -394,7 +402,11 @@ export function ItineraryLocationRow({
               aria-label={`Remove ${optionLocation.location.name}`}
               onClick={(event) => {
                 event.stopPropagation();
-                onRemoveLocation(dayId, currentOptionId, optionLocation.location_id);
+                onRemoveLocation(
+                  dayId,
+                  currentOptionId,
+                  optionLocation.location_id
+                );
               }}
             >
               <X size={13} />
@@ -458,7 +470,11 @@ export function ItineraryLocationRow({
                 className="h-3 w-0.5 shrink-0 rounded-full"
                 style={{ backgroundColor: info.color.hex }}
               />
-              <Icon size={10} className="shrink-0" style={{ color: info.color.hex }} />
+              <Icon
+                size={10}
+                className="shrink-0"
+                style={{ color: info.color.hex }}
+              />
               <span>
                 {isCalculatingLeg ? (
                   <>

@@ -26,7 +26,9 @@ describe("ItineraryDayHeader", () => {
     );
 
     expect(screen.getByText("Mon, Jun 1")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /edit day date/i }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /edit day date/i })
+    );
     expect(screen.getByDisplayValue("2026-06-01")).toBeInTheDocument();
   });
 

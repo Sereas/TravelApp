@@ -166,11 +166,21 @@ describe("ItineraryDayTimeline", () => {
       />
     );
 
-    const morningSection = screen.getByRole("region", { name: /morning stops/i });
-    const eveningSection = screen.getByRole("region", { name: /evening stops/i });
+    const morningSection = screen.getByRole("region", {
+      name: /morning stops/i,
+    });
+    const eveningSection = screen.getByRole("region", {
+      name: /evening stops/i,
+    });
 
-    expect(within(morningSection).getByText("Cafe de Flore")).toBeInTheDocument();
-    expect(within(eveningSection).getByText("Seine Cruise")).toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: /afternoon stops/i })).not.toBeInTheDocument();
+    expect(
+      within(morningSection).getByText("Cafe de Flore")
+    ).toBeInTheDocument();
+    expect(
+      within(eveningSection).getByText("Seine Cruise")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: /afternoon stops/i })
+    ).not.toBeInTheDocument();
   });
 });

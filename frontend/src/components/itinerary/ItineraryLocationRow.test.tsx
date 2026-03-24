@@ -24,7 +24,9 @@ const optionLocation = {
   },
 };
 
-function renderRow(overrides: Partial<React.ComponentProps<typeof ItineraryLocationRow>> = {}) {
+function renderRow(
+  overrides: Partial<React.ComponentProps<typeof ItineraryLocationRow>> = {}
+) {
   const props = {
     optionLocation,
     expanded: false,
@@ -72,15 +74,23 @@ describe("ItineraryLocationRow", () => {
     );
     expect(props.onToggleExpanded).toHaveBeenCalledWith("loc-1");
 
-    await userEvent.click(screen.getByRole("button", { name: /time: morning/i }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /time: morning/i })
+    );
     expect(props.onToggleTimePicker).toHaveBeenCalledWith("loc-1");
   });
 
   it("removes a location from the current option", async () => {
     const { props } = renderRow();
 
-    await userEvent.click(screen.getByRole("button", { name: /remove eiffel tower/i }));
-    expect(props.onRemoveLocation).toHaveBeenCalledWith("day-1", "opt-1", "loc-1");
+    await userEvent.click(
+      screen.getByRole("button", { name: /remove eiffel tower/i })
+    );
+    expect(props.onRemoveLocation).toHaveBeenCalledWith(
+      "day-1",
+      "opt-1",
+      "loc-1"
+    );
   });
 
   it("shows extra details when expanded", () => {
