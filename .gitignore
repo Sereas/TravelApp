@@ -71,3 +71,4 @@ node_modules/
 
 # MCP tool state
 .playwright-mcp/
+supabase/.temp/

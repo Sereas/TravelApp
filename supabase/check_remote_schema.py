@@ -20,6 +20,8 @@ def normalize_sql(text: str) -> str:
         "RESET ",
         "SELECT pg_catalog.set_config",
         "\\connect ",
+        "\\restrict ",
+        "\\unrestrict ",
     )
     kept_lines: list[str] = []
     previous_blank = False
@@ -45,17 +47,73 @@ def normalize_sql(text: str) -> str:
     return normalized + "\n"
 
 
-def ensure_supabase_cli() -> None:
-    if shutil.which("supabase"):
-        return
-    raise SystemExit(
-        "Supabase CLI is not installed or not on PATH. "
-        "Install it, link this repo to your Supabase project, then rerun this check."
+def _get_db_url() -> str:
+    """Build a Postgres connection URL from the Supabase project ref and DB password."""
+    import os
+
+    dotenv_path = REPO_ROOT / ".env"
+    env_vars: dict[str, str] = {}
+    if dotenv_path.exists():
+        for line in dotenv_path.read_text().splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, _, v = line.partition("=")
+                env_vars[k.strip()] = v.strip()
+
+    supabase_url = os.environ.get("SUPABASE_URL") or env_vars.get("SUPABASE_URL", "")
+    db_password = os.environ.get("SUPABASE_DB_PASSWORD") or env_vars.get("SUPABASE_DB_PASSWORD", "")
+
+    if not supabase_url:
+        raise SystemExit("SUPABASE_URL not set in .env or environment.")
+    if not db_password:
+        raise SystemExit(
+            "SUPABASE_DB_PASSWORD not set in .env or environment.\n"
+            "Add it to your .env file. Find it in Supabase Dashboard → Settings → Database."
+        )
+
+    # Extract project ref from URL: https://<ref>.supabase.co
+    ref = supabase_url.split("//")[1].split(".")[0]
+
+    # Region is needed for the pooler host. Allow override via env, default to ap-south-1.
+    region = os.environ.get("SUPABASE_DB_REGION") or env_vars.get("SUPABASE_DB_REGION", "ap-south-1")
+    from urllib.parse import quote
+
+    return (
+        f"postgresql://postgres.{ref}:{quote(db_password, safe='')}"
+        f"@aws-1-{region}.pooler.supabase.com:5432/postgres"
     )
 
 
 def dump_remote_schema() -> str:
-    ensure_supabase_cli()
+    """Dump the public schema using pg_dump (local binary) or supabase CLI."""
+    # Try pg_dump directly first (no Docker needed)
+    # Prefer Homebrew libpq (usually newer) over system pg_dump
+    _homebrew_pg_dump = Path("/opt/homebrew/opt/libpq/bin/pg_dump")
+    pg_dump = str(_homebrew_pg_dump) if _homebrew_pg_dump.exists() else shutil.which("pg_dump")
+    if pg_dump:
+        db_url = _get_db_url()
+        with tempfile.NamedTemporaryFile(suffix=".sql", delete=False) as tmp:
+            tmp_path = tmp.name
+        try:
+            result = subprocess.run(
+                [pg_dump, db_url, "--schema=public", "--schema-only", f"--file={tmp_path}"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode != 0:
+                details = (result.stderr or result.stdout).strip()
+                raise SystemExit(f"pg_dump failed.\n{details}")
+            return Path(tmp_path).read_text()
+        finally:
+            Path(tmp_path).unlink(missing_ok=True)
+
+    # Fall back to supabase CLI (requires Docker)
+    if not shutil.which("supabase"):
+        raise SystemExit(
+            "Neither pg_dump nor supabase CLI found on PATH.\n"
+            "Install PostgreSQL client tools or the Supabase CLI."
+        )
 
     with tempfile.NamedTemporaryFile(suffix=".sql") as tmp:
         cmd = [

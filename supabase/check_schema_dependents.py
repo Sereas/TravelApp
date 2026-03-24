@@ -38,8 +38,6 @@ MANUAL_FILE_RULES: dict[str, dict[str, object]] = {
                 "loc_requires_booking",
                 "loc_photo_url",
                 "loc_user_image_url",
-                "loc_attribution_name",
-                "loc_attribution_uri",
             },
         },
     },
@@ -70,9 +68,16 @@ MANUAL_FILE_RULES: dict[str, dict[str, object]] = {
                 "loc_requires_booking",
                 "loc_photo_url",
                 "loc_user_image_url",
-                "loc_attribution_name",
-                "loc_attribution_uri",
             },
+        },
+    },
+    "backend/app/services/route_calculation.py": {
+        "tables": {
+            "option_routes": {
+                "route_id", "option_id", "label", "transport_mode",
+                "sort_order", "duration_seconds", "distance_meters",
+            },
+            "route_stops": {"location_id", "stop_order"},
         },
     },
     "backend/app/services/place_photos.py": {
@@ -100,9 +105,9 @@ FUNCTION_RE = re.compile(
     re.IGNORECASE,
 )
 FUNCTION_RETURNS_TABLE_RE = re.compile(
-    r"CREATE(?: OR REPLACE)? FUNCTION\s+public\.(?P<name>\w+)\s*\(.*?\)\s*"
-    r"RETURNS TABLE\s*\((?P<body>.*?)\)\s*LANGUAGE",
-    re.DOTALL | re.IGNORECASE,
+    r"^CREATE(?: OR REPLACE)? FUNCTION\s+public\.(?P<name>\w+)\s*\(.*?\)"
+    r"\s+RETURNS TABLE\s*\((?P<body>[^)]+)\)$",
+    re.MULTILINE | re.IGNORECASE,
 )
 TABLE_SELECT_RE = re.compile(
     r'table\("(?P<table>\w+)"\)(?P<chain>[\s\S]{0,500}?)\.select\((?P<arg>"[^"]*"|\'[^\']*\'|[A-Za-z_][A-Za-z0-9_]*)\)',
@@ -150,15 +155,18 @@ def parse_schema(sql: str) -> SchemaIndex:
     for match in FUNCTION_RETURNS_TABLE_RE.finditer(sql):
         fn = match.group("name")
         cols: set[str] = set()
-        for raw_line in match.group("body").splitlines():
-            line = raw_line.strip().rstrip(",")
-            if not line:
+        # Return columns may be on one line (comma-separated) or multiple lines
+        for part in match.group("body").split(","):
+            token = part.strip().rstrip(",")
+            if not token:
                 continue
-            name = line.split()[0].strip('"')
+            name = token.split()[0].strip('"')
             if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
                 cols.add(name)
         if cols:
-            index.function_return_columns[fn] = cols
+            # Union with existing cols (handles function overloads)
+            existing = index.function_return_columns.get(fn, set())
+            index.function_return_columns[fn] = existing | cols
 
     return index
 
@@ -246,7 +254,7 @@ def extract_file_references(path: Path) -> FileReferences:
         rel = str(path)
     manual = MANUAL_FILE_RULES.get(rel, {})
     for table, cols in manual.get("tables", {}).items():
-        refs.tables.setdefault(table, set()).update(cols)
+        refs.tables[table] = set(cols)  # manual rules replace auto-detected columns
     refs.functions.update(manual.get("functions", set()))
     for fn, cols in manual.get("function_return_columns", {}).items():
         refs.function_return_columns.setdefault(fn, set()).update(cols)
