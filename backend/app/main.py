@@ -44,6 +44,10 @@ app.add_middleware(
         "X-Itinerary-Rpc-Ms",
         "X-Itinerary-Build-Ms",
         "X-Itinerary-Rows",
+        "X-Locations-Ownership-Ms",
+        "X-Locations-Query-Ms",
+        "X-Locations-Photo-Ms",
+        "X-Locations-Rows",
     ],
 )
 app.add_middleware(RequestLoggingMiddleware)

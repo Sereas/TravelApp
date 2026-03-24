@@ -22,6 +22,10 @@ htmlcov/
 .tox/
 .hypothesis/
 *.cover
+frontend/.next/
+frontend/tsconfig.tsbuildinfo
+frontend/test-results/
+**/__pycache__/
 
 # Type checking
 .mypy_cache/
@@ -46,6 +50,7 @@ logs/
 .idea/
 .vscode/
 .cursor/
+.claude/settings.local.json
 *.swp
 *.swo
 *~
@@ -57,15 +62,12 @@ docs/
 .DS_Store
 Thumbs.db
 
-# Performance reports
-perf/
-
-# Local scripts (may contain credentials)
-scripts/
+# Performance outputs
+tests/perf/artifacts/
+tests/perf/.env.perf.local
 
 # Node
 node_modules/
 
 # MCP tool state
 .playwright-mcp/
-

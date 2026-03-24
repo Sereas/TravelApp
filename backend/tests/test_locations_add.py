@@ -557,6 +557,10 @@ def test_list_locations_own_trip_with_locations_returns_200(
         )
         r = client.get(f"/api/v1/trips/{trip_id}/locations")
         assert r.status_code == 200
+        assert "X-Locations-Ownership-Ms" in r.headers
+        assert "X-Locations-Query-Ms" in r.headers
+        assert "X-Locations-Photo-Ms" in r.headers
+        assert r.headers["X-Locations-Rows"] == "2"
         data = r.json()
         assert isinstance(data, list)
         assert len(data) == 2

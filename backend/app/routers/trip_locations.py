@@ -1,10 +1,11 @@
 """Trip locations API: add, list, batch-add, update locations for a trip."""
 
 import contextlib
+import time
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, status
 
 from backend.app.clients.google_places import GooglePlacesDisabledError, get_google_places_client
 from backend.app.db.supabase import get_supabase_client
@@ -196,6 +197,7 @@ async def add_location(
     response_model=list[LocationResponse],
 )
 async def list_locations(
+    response: Response,
     trip_id: UUID,
     user_id: UUID = Depends(get_current_user_id),
     supabase=Depends(get_supabase_client),
@@ -206,12 +208,19 @@ async def list_locations(
     Returns 200 with array of locations; empty array if trip has no locations.
     google_raw is NOT included in list responses (payload size).
     """
+    t0 = time.perf_counter()
     _ensure_resource_chain(supabase, trip_id, user_id)
+    ownership_ms = round((time.perf_counter() - t0) * 1000, 1)
+
+    t1 = time.perf_counter()
     result = (
         supabase.table("locations").select(_LOCATIONS_SELECT).eq("trip_id", str(trip_id)).execute()
     )
     items = result.data if result.data else []
+    query_ms = round((time.perf_counter() - t1) * 1000, 1)
+
     # Batch-fetch photo URLs for all locations with a google_place_id (single query)
+    t2 = time.perf_counter()
     place_ids = [loc["google_place_id"] for loc in items if loc.get("google_place_id")]
     photo_map: dict[str, dict] = {}
     if place_ids:
@@ -227,6 +236,12 @@ async def list_locations(
         loc["image_url"] = photo_row["photo_url"] if photo_row else None
         loc["attribution_name"] = photo_row.get("attribution_name") if photo_row else None
         loc["attribution_uri"] = photo_row.get("attribution_uri") if photo_row else None
+    photo_ms = round((time.perf_counter() - t2) * 1000, 1)
+
+    response.headers["X-Locations-Ownership-Ms"] = str(ownership_ms)
+    response.headers["X-Locations-Query-Ms"] = str(query_ms)
+    response.headers["X-Locations-Photo-Ms"] = str(photo_ms)
+    response.headers["X-Locations-Rows"] = str(len(items))
     logger.info("locations_listed", trip_id=str(trip_id), count=len(items))
     return [_loc_to_response(loc) for loc in items]
 
