@@ -110,9 +110,7 @@ def test_create_option_persists_created_by_label(
         assert r.status_code == 201
         data = r.json()
         assert data["created_by"] == "Backup"
-        assert any(
-            o.get("created_by") == "Backup" for o in mock_sb._options_store
-        )
+        assert any(o.get("created_by") == "Backup" for o in mock_sb._options_store)
     finally:
         app.dependency_overrides.clear()
 
