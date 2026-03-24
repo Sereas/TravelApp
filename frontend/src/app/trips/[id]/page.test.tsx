@@ -1079,7 +1079,8 @@ describe("TripDetailPage", () => {
       expect(mockGenerateDays).toHaveBeenCalledWith("trip-1");
     });
     expect(await screen.findByText("Mon, Jun 1")).toBeInTheDocument();
-    expect(screen.getByText("Tue, Jun 2")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /jun 2/i }));
+    expect(await screen.findByText("Tue, Jun 2")).toBeInTheDocument();
   });
 
   it("shows error message when generate days returns 409", async () => {
@@ -1285,6 +1286,7 @@ describe("TripDetailPage", () => {
 
     await screen.findByText("Mon, Jun 1");
 
+    await userEvent.click(screen.getByRole("button", { name: /edit cities/i }));
     const startInput = screen.getByDisplayValue("Paris");
     const endInput = screen.getByDisplayValue("Lyon");
 

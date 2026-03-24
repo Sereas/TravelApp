@@ -1,17 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import {
-  api,
-  type Trip,
-  type Location,
-  type ItineraryResponse,
-  type ItineraryDay,
-  type ItineraryOption,
-  type RouteResponse,
-  type RouteWithSegmentsResponse,
-} from "@/lib/api";
+import { api, type Trip, type Location } from "@/lib/api";
 import { LocationCard } from "@/components/locations/LocationCard";
 import { AddLocationForm } from "@/components/locations/AddLocationForm";
 import { EditLocationRow } from "@/components/locations/EditLocationRow";
@@ -23,7 +14,7 @@ import {
   DateChangeDialog,
   type DateChangeResult,
 } from "@/components/trips/DateChangeDialog";
-import { ItineraryDayCard } from "@/components/itinerary/ItineraryDayCard";
+import { ItineraryTab } from "@/components/itinerary/ItineraryTab";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { LoadingSpinner } from "@/components/feedback/LoadingSpinner";
 import { ErrorBanner } from "@/components/feedback/ErrorBanner";
@@ -45,13 +36,13 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { useItineraryState } from "@/features/itinerary/useItineraryState";
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr + "T00:00:00");
@@ -101,27 +92,20 @@ export default function TripDetailPage() {
   const [activeTab, setActiveTab] = useState<"locations" | "itinerary">(
     "locations"
   );
-  const [itinerary, setItinerary] = useState<ItineraryResponse | null>(null);
-  const [itineraryLoading, setItineraryLoading] = useState(false);
-  const [itineraryError, setItineraryError] = useState<string | null>(null);
-  const [addDayLoading, setAddDayLoading] = useState(false);
-  const [generateDaysLoading, setGenerateDaysLoading] = useState(false);
-  const [itineraryActionError, setItineraryActionError] = useState<
-    string | null
-  >(null);
-  const [updatingDayId, setUpdatingDayId] = useState<string | null>(null);
-  const [selectedOptionByDay, setSelectedOptionByDay] = useState<
-    Record<string, string>
-  >({});
-  const [createOptionLoading, setCreateOptionLoading] = useState<string | null>(
-    null
-  );
-  const [calculatingRouteId, setCalculatingRouteId] = useState<string | null>(
-    null
-  );
-  const [routeMetricsError, setRouteMetricsError] = useState<
-    Record<string, string>
-  >({});
+  const itineraryState = useItineraryState({
+    tripId,
+    enabled: !!trip,
+    locations,
+  });
+  const {
+    itinerary,
+    availableDays,
+    itineraryLocationMap,
+    fetchItinerary,
+    getOrphanedDays,
+    handleScheduleLocationToDay,
+    syncLocationSummary,
+  } = itineraryState;
 
   async function fetchData() {
     setError(null);
@@ -152,532 +136,6 @@ export default function TripDetailPage() {
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tripId]);
-
-  // Prefetch itinerary as soon as we have the trip so the Itinerary tab is ready when opened.
-  useEffect(() => {
-    if (trip && tripId) {
-      fetchItinerary();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trip?.id, tripId]);
-
-  async function fetchItinerary() {
-    setItineraryError(null);
-    // Only show loading spinner if we have no data yet (first load).
-    if (!itinerary) setItineraryLoading(true);
-    try {
-      const data = await api.itinerary.get(tripId);
-      setItinerary(data);
-    } catch (err) {
-      setItineraryError(
-        err instanceof Error ? err.message : "Failed to load itinerary"
-      );
-    } finally {
-      setItineraryLoading(false);
-    }
-  }
-
-  // Refetch itinerary when switching to tab if we don't have data (e.g. prefetch failed or was skipped).
-  useEffect(() => {
-    if (
-      activeTab === "itinerary" &&
-      trip &&
-      itinerary === null &&
-      !itineraryLoading
-    ) {
-      fetchItinerary();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, tripId]);
-
-  async function handleAddDay() {
-    setItineraryActionError(null);
-    setAddDayLoading(true);
-    try {
-      await api.itinerary.createDay(tripId);
-      await fetchItinerary();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to add day";
-      setItineraryActionError(message);
-    } finally {
-      setAddDayLoading(false);
-    }
-  }
-
-  async function handleGenerateDays() {
-    setItineraryActionError(null);
-    setGenerateDaysLoading(true);
-    try {
-      await api.itinerary.generateDays(tripId);
-      await fetchItinerary();
-    } catch (err) {
-      if (
-        err &&
-        typeof err === "object" &&
-        "status" in err &&
-        (err as { status: number }).status === 409
-      ) {
-        setItineraryActionError(
-          "Trip already has days. Cannot generate from dates."
-        );
-      } else {
-        const message =
-          err instanceof Error ? err.message : "Failed to generate days";
-        setItineraryActionError(message);
-      }
-    } finally {
-      setGenerateDaysLoading(false);
-    }
-  }
-
-  async function handleSaveOptionDetails(
-    dayId: string,
-    optionId: string,
-    updates: {
-      starting_city?: string | null;
-      ending_city?: string | null;
-      created_by?: string | null;
-    }
-  ) {
-    if (
-      !("starting_city" in updates) &&
-      !("ending_city" in updates) &&
-      !("created_by" in updates)
-    ) {
-      return;
-    }
-    setItineraryActionError(null);
-    setUpdatingDayId(dayId);
-    try {
-      await api.itinerary.updateOption(tripId, dayId, optionId, updates);
-      setItinerary((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          days: prev.days.map((d) =>
-            d.id === dayId
-              ? {
-                  ...d,
-                  options: d.options.map((o) =>
-                    o.id === optionId ? { ...o, ...updates } : o
-                  ),
-                }
-              : d
-          ),
-        };
-      });
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to update option details";
-      setItineraryActionError(message);
-    } finally {
-      setUpdatingDayId(null);
-    }
-  }
-
-  async function handleUpdateDayDate(
-    dayId: string,
-    date: string | null,
-    optionId: string | undefined
-  ) {
-    setItineraryActionError(null);
-    try {
-      if (date && optionId) {
-        await api.itinerary.reassignDayDate(tripId, dayId, date, optionId);
-      } else {
-        await api.itinerary.updateDay(tripId, dayId, { date });
-      }
-      // Full refetch to get correct option state after potential swap
-      await fetchItinerary();
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to update day date";
-      setItineraryActionError(message);
-    }
-  }
-
-  async function handleCreateAlternative(dayId: string) {
-    setItineraryActionError(null);
-    setCreateOptionLoading(dayId);
-    try {
-      const newOption = await api.itinerary.createOption(tripId, dayId);
-      setItinerary((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          days: prev.days.map((d) =>
-            d.id === dayId
-              ? {
-                  ...d,
-                  options: [
-                    ...d.options,
-                    {
-                      id: newOption.id,
-                      option_index: newOption.option_index,
-                      starting_city: newOption.starting_city,
-                      ending_city: newOption.ending_city,
-                      created_by: newOption.created_by,
-                      locations: [],
-                      routes: [],
-                    },
-                  ],
-                }
-              : d
-          ),
-        };
-      });
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to create alternative";
-      setItineraryActionError(message);
-      await fetchItinerary();
-    } finally {
-      setCreateOptionLoading(null);
-    }
-  }
-
-  function getSelectedOption(day: ItineraryDay): ItineraryOption | undefined {
-    const selId = selectedOptionByDay[day.id];
-    if (selId) {
-      const found = day.options.find((o) => o.id === selId);
-      if (found) return found;
-    }
-    return day.options.find((o) => o.option_index === 1) ?? day.options[0];
-  }
-
-  async function handleDeleteOption(dayId: string, optionId: string) {
-    setItineraryActionError(null);
-    try {
-      await api.itinerary.deleteOption(tripId, dayId, optionId);
-      setSelectedOptionByDay((prev) => {
-        const next = { ...prev };
-        delete next[dayId];
-        return next;
-      });
-      await fetchItinerary();
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to delete alternative";
-      setItineraryActionError(message);
-    }
-  }
-
-  async function handleAddLocationsToOption(
-    dayId: string,
-    optionId: string,
-    locationIds: string[]
-  ) {
-    setItineraryActionError(null);
-    const currentOption = itinerary?.days
-      .find((d) => d.id === dayId)
-      ?.options.find((o) => o.id === optionId);
-    // Append new locations after the current highest sort_order, not just by count.
-    const maxSortOrder =
-      currentOption && currentOption.locations.length > 0
-        ? Math.max(...currentOption.locations.map((l) => l.sort_order))
-        : -1;
-    const startOrder = maxSortOrder + 1;
-
-    const items = locationIds.map((lid, i) => ({
-      location_id: lid,
-      sort_order: startOrder + i,
-      time_period: "morning" as const,
-    }));
-
-    try {
-      await api.itinerary.batchAddLocationsToOption(
-        tripId,
-        dayId,
-        optionId,
-        items
-      );
-      await fetchItinerary();
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to add locations";
-      setItineraryActionError(message);
-      throw err;
-    }
-  }
-
-  async function handleRemoveLocationFromOption(
-    dayId: string,
-    optionId: string,
-    locationId: string
-  ) {
-    setItineraryActionError(null);
-    // Optimistically update locations and routes for this option so UI reacts immediately.
-    setItinerary((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        days: prev.days.map((d) =>
-          d.id === dayId
-            ? {
-                ...d,
-                options: d.options.map((o) => {
-                  if (o.id !== optionId) return o;
-                  // Remove location from option locations
-                  const nextLocations = o.locations.filter(
-                    (l) => l.location_id !== locationId
-                  );
-                  // Update routes: drop this location from each route; delete routes with < 2 stops
-                  const nextRoutes =
-                    o.routes?.length > 0
-                      ? (o.routes
-                          .map((r) => {
-                            const remainingIds = r.location_ids.filter(
-                              (id) => id !== locationId
-                            );
-                            if (remainingIds.length < 2) {
-                              return null;
-                            }
-                            return { ...r, location_ids: remainingIds };
-                          })
-                          .filter(Boolean) as typeof o.routes)
-                      : o.routes;
-                  return {
-                    ...o,
-                    locations: nextLocations,
-                    routes: nextRoutes,
-                  };
-                }),
-              }
-            : d
-        ),
-      };
-    });
-    try {
-      await api.itinerary.removeLocationFromOption(
-        tripId,
-        dayId,
-        optionId,
-        locationId
-      );
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to remove location";
-      setItineraryActionError(message);
-      // Backend rejected the change; refresh from server to correct optimistic state.
-      await fetchItinerary();
-    }
-  }
-
-  async function handleUpdateLocationTimePeriod(
-    dayId: string,
-    optionId: string,
-    locationId: string,
-    timePeriod: string
-  ) {
-    setItineraryActionError(null);
-    // Optimistic UI update for snappier interaction
-    setItinerary((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        days: prev.days.map((d) =>
-          d.id === dayId
-            ? {
-                ...d,
-                options: d.options.map((o) =>
-                  o.id === optionId
-                    ? {
-                        ...o,
-                        locations: o.locations.map((l) =>
-                          l.location_id === locationId
-                            ? { ...l, time_period: timePeriod }
-                            : l
-                        ),
-                      }
-                    : o
-                ),
-              }
-            : d
-        ),
-      };
-    });
-    try {
-      await api.itinerary.updateOptionLocation(
-        tripId,
-        dayId,
-        optionId,
-        locationId,
-        { time_period: timePeriod }
-      );
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to update time of day";
-      setItineraryActionError(message);
-      // Refresh from server to avoid stale/incorrect optimistic state
-      await fetchItinerary();
-    }
-  }
-
-  async function handleRouteCreated(
-    dayId: string,
-    optionId: string,
-    routeResponse: RouteResponse
-  ) {
-    const routeId = routeResponse.route_id;
-    setRouteMetricsError((prev) => {
-      const next = { ...prev };
-      delete next[routeId];
-      return next;
-    });
-    setCalculatingRouteId(routeId);
-    await fetchItinerary();
-    try {
-      const withSegments = await api.itinerary.getRouteWithSegments(
-        tripId,
-        dayId,
-        optionId,
-        routeId
-      );
-      setItinerary((prev) => {
-        if (!prev) return prev;
-        return patchRouteInItinerary(
-          prev,
-          dayId,
-          optionId,
-          routeId,
-          withSegments
-        );
-      });
-    } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : "Could not calculate distance and duration";
-      setRouteMetricsError((prev) => ({ ...prev, [routeId]: message }));
-    } finally {
-      setCalculatingRouteId(null);
-    }
-  }
-
-  function patchRouteInItinerary(
-    prev: ItineraryResponse,
-    dayId: string,
-    optionId: string,
-    routeId: string,
-    data: RouteWithSegmentsResponse
-  ): ItineraryResponse {
-    return {
-      ...prev,
-      days: prev.days.map((d) => {
-        if (d.id !== dayId) return d;
-        return {
-          ...d,
-          options: d.options.map((o) => {
-            if (o.id !== optionId) return o;
-            return {
-              ...o,
-              routes: o.routes.map((r) =>
-                r.route_id === routeId
-                  ? {
-                      ...r,
-                      duration_seconds: data.duration_seconds,
-                      distance_meters: data.distance_meters,
-                      route_status: data.route_status,
-                      segments: data.segments.map((s) => ({
-                        segment_order: s.segment_order,
-                        duration_seconds: s.duration_seconds,
-                        distance_meters: s.distance_meters,
-                        encoded_polyline: s.encoded_polyline,
-                      })),
-                    }
-                  : r
-              ),
-            };
-          }),
-        };
-      }),
-    };
-  }
-
-  async function handleRetryRouteMetrics(
-    dayId: string,
-    optionId: string,
-    routeId: string
-  ) {
-    setRouteMetricsError((prev) => {
-      const next = { ...prev };
-      delete next[routeId];
-      return next;
-    });
-    setCalculatingRouteId(routeId);
-    try {
-      const withSegments = await api.itinerary.getRouteWithSegments(
-        tripId,
-        dayId,
-        optionId,
-        routeId
-      );
-      setItinerary((prev) => {
-        if (!prev) return prev;
-        return patchRouteInItinerary(
-          prev,
-          dayId,
-          optionId,
-          routeId,
-          withSegments
-        );
-      });
-    } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : "Could not calculate distance and duration";
-      setRouteMetricsError((prev) => ({ ...prev, [routeId]: message }));
-    } finally {
-      setCalculatingRouteId(null);
-    }
-  }
-
-  async function handleReorderOptionLocations(
-    dayId: string,
-    optionId: string,
-    newOrderedLocationIds: string[]
-  ) {
-    if (!itinerary) return;
-    const day = itinerary.days.find((d) => d.id === dayId);
-    const option = day?.options.find((o) => o.id === optionId);
-    if (!option) return;
-    const idToLoc = new Map(option.locations.map((l) => [l.location_id, l]));
-    const reordered = newOrderedLocationIds
-      .map((id, idx) => {
-        const loc = idToLoc.get(id);
-        return loc ? { ...loc, sort_order: idx } : null;
-      })
-      .filter(Boolean) as typeof option.locations;
-    if (reordered.length !== newOrderedLocationIds.length) return;
-    setItineraryActionError(null);
-    setItinerary((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        days: prev.days.map((d) =>
-          d.id !== dayId
-            ? d
-            : {
-                ...d,
-                options: d.options.map((o) =>
-                  o.id !== optionId ? o : { ...o, locations: reordered }
-                ),
-              }
-        ),
-      };
-    });
-    try {
-      await api.itinerary.reorderOptionLocations(tripId, dayId, optionId, {
-        location_ids: newOrderedLocationIds,
-      });
-    } catch (err) {
-      setItineraryActionError(
-        err instanceof Error ? err.message : "Failed to reorder locations"
-      );
-      await fetchItinerary();
-    }
-  }
 
   const categoryOptions = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -730,45 +188,6 @@ export default function TripDetailPage() {
     return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
   }, [filteredLocations, groupByCity, groupByPerson]);
 
-  // Map location IDs → day labels for "in itinerary" indicator on location cards.
-  const itineraryLocationMap = useMemo(() => {
-    const map = new Map<string, string[]>();
-    if (!itinerary) return map;
-    for (const day of itinerary.days) {
-      const dayLabel = day.date
-        ? new Date(day.date + "T00:00:00").toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-          })
-        : `Day ${day.sort_order + 1}`;
-      for (const option of day.options) {
-        for (const ol of option.locations) {
-          const existing = map.get(ol.location_id);
-          if (existing) {
-            if (!existing.includes(dayLabel)) existing.push(dayLabel);
-          } else {
-            map.set(ol.location_id, [dayLabel]);
-          }
-        }
-      }
-    }
-    return map;
-  }, [itinerary]);
-
-  // Build day choices for "Schedule to day" selectors.
-  const availableDays = useMemo(() => {
-    if (!itinerary) return [];
-    return itinerary.days.map((day, idx) => ({
-      id: day.id,
-      label: day.date
-        ? new Date(day.date + "T00:00:00").toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-          })
-        : `Day ${idx + 1}`,
-    }));
-  }, [itinerary]);
-
   if (loading) {
     return (
       <div className="flex justify-center py-12">
@@ -804,16 +223,6 @@ export default function TripDetailPage() {
   }
 
   /**
-   * Compute which existing dated days fall outside a new date range.
-   */
-  function getOrphanedDays(newStart: string, newEnd: string): ItineraryDay[] {
-    if (!itinerary) return [];
-    return itinerary.days.filter(
-      (d) => d.date && (d.date < newStart || d.date > newEnd)
-    );
-  }
-
-  /**
    * Called by EditTripForm before saving when dates change.
    * If reconciliation is needed, shows the dialog and returns a promise
    * that resolves when the user picks an action and the save completes.
@@ -822,7 +231,6 @@ export default function TripDetailPage() {
     payload: TripUpdatePayload
   ): Promise<Trip> {
     const hasNewDates = payload.start_date && payload.end_date;
-    const hadOldDates = trip!.start_date && trip!.end_date;
 
     // If no new dates or no itinerary, just save directly
     if (!hasNewDates || !itinerary || itinerary.days.length === 0) {
@@ -867,124 +275,14 @@ export default function TripDetailPage() {
     }
   }
 
-  async function handleScheduleLocationToDay(
-    locationId: string,
-    dayId: string
-  ) {
-    if (!itinerary) return;
-    const day = itinerary.days.find((d) => d.id === dayId);
-    if (!day) return;
-
-    // Optimistic update: immediately show the location as scheduled.
-    const loc = locations.find((l) => l.id === locationId);
-    if (loc) {
-      setItinerary((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          days: prev.days.map((d) => {
-            if (d.id !== dayId) return d;
-            const mainOpt = d.options.find((o) => o.option_index === 1);
-            if (!mainOpt) return d;
-            return {
-              ...d,
-              options: d.options.map((o) =>
-                o.id === mainOpt.id
-                  ? {
-                      ...o,
-                      locations: [
-                        ...o.locations,
-                        {
-                          location_id: locationId,
-                          sort_order: o.locations.length,
-                          time_period: "morning",
-                          location: {
-                            id: loc.id,
-                            name: loc.name,
-                            city: loc.city,
-                            address: loc.address,
-                            google_link: loc.google_link,
-                            category: loc.category,
-                            note: loc.note,
-                            working_hours: loc.working_hours,
-                            requires_booking: loc.requires_booking,
-                            image_url: loc.image_url,
-                            user_image_url: loc.user_image_url,
-                            attribution_name: loc.attribution_name,
-                            attribution_uri: loc.attribution_uri,
-                          },
-                        },
-                      ],
-                    }
-                  : o
-              ),
-            };
-          }),
-        };
-      });
-    }
-
-    try {
-      // Use the main option (option_index 1), or create one if none exists.
-      let optionId: string;
-      const mainOption = day.options.find((o) => o.option_index === 1);
-      if (mainOption) {
-        optionId = mainOption.id;
-      } else {
-        const created = await api.itinerary.createOption(tripId, dayId);
-        optionId = created.id;
-      }
-
-      // Append at end of the option's locations.
-      const existingCount =
-        day.options.find((o) => o.id === optionId)?.locations.length ?? 0;
-
-      await api.itinerary.addLocationToOption(tripId, dayId, optionId, {
-        location_id: locationId,
-        sort_order: existingCount,
-        time_period: "morning",
-      });
-
-      // Background refetch to reconcile with server state (no UI flicker).
-      fetchItinerary();
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to schedule location"
-      );
-      // Revert optimistic update on error.
-      fetchItinerary();
-    }
-  }
-
   async function handlePhotoUpload(locationId: string, file: File) {
     const updated = await api.locations.uploadPhoto(tripId, locationId, file);
     setLocations((prev) =>
       prev.map((loc) => (loc.id === locationId ? updated : loc))
     );
-    // Update itinerary LocationSummary too
-    setItinerary((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        days: prev.days.map((d) => ({
-          ...d,
-          options: d.options.map((o) => ({
-            ...o,
-            locations: o.locations.map((l) =>
-              l.location_id === locationId
-                ? {
-                    ...l,
-                    location: {
-                      ...l.location,
-                      user_image_url: updated.user_image_url,
-                    },
-                  }
-                : l
-            ),
-          })),
-        })),
-      };
-    });
+    syncLocationSummary(locationId, () => ({
+      user_image_url: updated.user_image_url,
+    }));
   }
 
   async function handlePhotoReset(locationId: string) {
@@ -994,26 +292,7 @@ export default function TripDetailPage() {
         loc.id === locationId ? { ...loc, user_image_url: null } : loc
       )
     );
-    setItinerary((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        days: prev.days.map((d) => ({
-          ...d,
-          options: d.options.map((o) => ({
-            ...o,
-            locations: o.locations.map((l) =>
-              l.location_id === locationId
-                ? {
-                    ...l,
-                    location: { ...l.location, user_image_url: null },
-                  }
-                : l
-            ),
-          })),
-        })),
-      };
-    });
+    syncLocationSummary(locationId, () => ({ user_image_url: null }));
   }
 
   function handleLocationAdded(
@@ -1406,140 +685,12 @@ export default function TripDetailPage() {
       )}
 
       {activeTab === "itinerary" && (
-        <section
-          id="tab-panel-itinerary"
-          role="tabpanel"
-          aria-labelledby="tab-itinerary"
-        >
-          {itineraryLoading && (
-            <div className="flex justify-center py-12">
-              <LoadingSpinner size="lg" />
-            </div>
-          )}
-          {itineraryError && !itineraryLoading && (
-            <ErrorBanner message={itineraryError} onRetry={fetchItinerary} />
-          )}
-          {itineraryActionError && !itineraryLoading && (
-            <ErrorBanner
-              message={itineraryActionError}
-              onRetry={() => setItineraryActionError(null)}
-            />
-          )}
-          {!itineraryLoading &&
-            !itineraryError &&
-            itinerary?.days.length === 0 && (
-              <EmptyState
-                message={
-                  trip.start_date && trip.end_date
-                    ? "No days yet. Generate days from your trip dates."
-                    : "No days yet. Add a day to get started."
-                }
-              >
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {trip.start_date && trip.end_date ? (
-                    <Button
-                      onClick={handleGenerateDays}
-                      disabled={addDayLoading || generateDaysLoading}
-                    >
-                      {generateDaysLoading
-                        ? "Generating…"
-                        : "Generate days from dates"}
-                    </Button>
-                  ) : (
-                    <Button
-                      onClick={handleAddDay}
-                      disabled={addDayLoading || generateDaysLoading}
-                    >
-                      {addDayLoading ? "Adding…" : "Add day"}
-                    </Button>
-                  )}
-                </div>
-              </EmptyState>
-            )}
-          {!itineraryLoading &&
-            !itineraryError &&
-            itinerary &&
-            itinerary.days.length > 0 && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold">Days</h2>
-                  {trip.start_date && trip.end_date ? (
-                    (() => {
-                      const coveredDates = new Set(
-                        itinerary.days.map((d) => d.date).filter(Boolean)
-                      );
-                      const start = new Date(trip.start_date + "T00:00:00");
-                      const end = new Date(trip.end_date + "T00:00:00");
-                      let hasMissing = false;
-                      for (
-                        let d = new Date(start);
-                        d <= end;
-                        d.setDate(d.getDate() + 1)
-                      ) {
-                        if (!coveredDates.has(format(d, "yyyy-MM-dd"))) {
-                          hasMissing = true;
-                          break;
-                        }
-                      }
-                      return hasMissing ? (
-                        <Button
-                          size="sm"
-                          onClick={handleGenerateDays}
-                          disabled={addDayLoading || generateDaysLoading}
-                        >
-                          {generateDaysLoading
-                            ? "Generating…"
-                            : "Generate missing days"}
-                        </Button>
-                      ) : null;
-                    })()
-                  ) : (
-                    <Button
-                      size="sm"
-                      onClick={handleAddDay}
-                      disabled={addDayLoading || generateDaysLoading}
-                    >
-                      {addDayLoading ? "Adding…" : "Add day"}
-                    </Button>
-                  )}
-                </div>
-                {itinerary.days.map((day) => {
-                  const currentOption = getSelectedOption(day);
-                  return (
-                    <ItineraryDayCard
-                      key={day.id}
-                      day={day}
-                      tripId={tripId}
-                      currentOption={currentOption}
-                      tripLocations={locations}
-                      createOptionLoading={createOptionLoading === day.id}
-                      tripStartDate={trip.start_date}
-                      tripEndDate={trip.end_date}
-                      calculatingRouteId={calculatingRouteId}
-                      routeMetricsError={routeMetricsError}
-                      onSelectOption={(dayId, optId) =>
-                        setSelectedOptionByDay((prev) => ({
-                          ...prev,
-                          [dayId]: optId,
-                        }))
-                      }
-                      onUpdateDayDate={handleUpdateDayDate}
-                      onCreateAlternative={handleCreateAlternative}
-                      onDeleteOption={handleDeleteOption}
-                      onSaveOptionDetails={handleSaveOptionDetails}
-                      onAddLocations={handleAddLocationsToOption}
-                      onRemoveLocation={handleRemoveLocationFromOption}
-                      onUpdateTimePeriod={handleUpdateLocationTimePeriod}
-                      onReorderLocations={handleReorderOptionLocations}
-                      onRoutesChanged={fetchItinerary}
-                      onRouteCreated={handleRouteCreated}
-                      onRetryRouteMetrics={handleRetryRouteMetrics}
-                    />
-                  );
-                })}
-              </div>
-            )}
-        </section>
+        <ItineraryTab
+          trip={trip}
+          tripId={tripId}
+          locations={locations}
+          itineraryState={itineraryState}
+        />
       )}
 
       {dateChangeDialog &&
