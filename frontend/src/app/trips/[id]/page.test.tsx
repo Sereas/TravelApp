@@ -483,8 +483,9 @@ describe("TripDetailPage", () => {
     render(<TripDetailPage />);
 
     await screen.findByText("Eiffel Tower");
+    // City dropdown only appears when 2+ cities exist
     expect(
-      screen.queryByRole("button", { name: /group by/i })
+      screen.queryByRole("button", { name: /city/i })
     ).not.toBeInTheDocument();
   });
 
@@ -510,10 +511,15 @@ describe("TripDetailPage", () => {
     render(<TripDetailPage />);
 
     await screen.findByText("Eiffel Tower");
-    const groupBtn = screen.getByRole("button", { name: /group by/i });
-    expect(groupBtn).toBeInTheDocument();
+    // Open the city popover
+    const cityBtn = screen.getByRole("button", { name: /city/i });
+    expect(cityBtn).toBeInTheDocument();
 
-    await userEvent.click(groupBtn);
+    await userEvent.click(cityBtn);
+    // Click "Group by city" inside the popover
+    const groupOption = screen.getByRole("button", { name: /group by city/i });
+    await userEvent.click(groupOption);
+
     const headings = screen.getAllByRole("heading", { level: 3 });
     const cityNames = headings.map((h) => h.textContent);
     expect(cityNames.some((t) => t?.includes("Nice"))).toBe(true);

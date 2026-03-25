@@ -66,11 +66,41 @@ function formatDuration(seconds: number): string {
   return m === 0 ? `${h}h` : `${h}h ${m}min`;
 }
 
-function formatRouteTotalDuration(route: {
+/** Derive totals from segments when available, otherwise use stored aggregates. */
+function getRouteTotals(route: {
   duration_seconds?: number | null;
-}): string {
-  if (route.duration_seconds == null) return "-- min";
-  return formatDuration(route.duration_seconds);
+  distance_meters?: number | null;
+  segments?: Array<{
+    duration_seconds: number | null;
+    distance_meters: number | null;
+  }>;
+}): { duration: number | null; distance: number | null } {
+  if (route.segments && route.segments.length > 0) {
+    const duration = route.segments.reduce(
+      (sum, s) => sum + (s.duration_seconds ?? 0),
+      0
+    );
+    const distance = route.segments.reduce(
+      (sum, s) => sum + (s.distance_meters ?? 0),
+      0
+    );
+    return {
+      duration: duration > 0 ? duration : null,
+      distance: distance > 0 ? distance : null,
+    };
+  }
+  return {
+    duration: route.duration_seconds ?? null,
+    distance: route.distance_meters ?? null,
+  };
+}
+
+function formatRouteTotalDuration(
+  route: Parameters<typeof getRouteTotals>[0]
+): string {
+  const { duration } = getRouteTotals(route);
+  if (duration == null) return "-- min";
+  return formatDuration(duration);
 }
 
 function formatDistance(meters: number | null | undefined): string {
@@ -80,10 +110,11 @@ function formatDistance(meters: number | null | undefined): string {
   return `${km.toFixed(decimals)} km`;
 }
 
-function formatRouteTotalDistance(route: {
-  distance_meters?: number | null;
-}): string {
-  return formatDistance(route.distance_meters);
+function formatRouteTotalDistance(
+  route: Parameters<typeof getRouteTotals>[0]
+): string {
+  const { distance } = getRouteTotals(route);
+  return formatDistance(distance);
 }
 
 interface ItineraryRouteManagerProps {

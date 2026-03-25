@@ -32,20 +32,30 @@ export function ItineraryInspectorPanel({
   const walkRoutes = routes.filter((r) => r.transport_mode === "walk");
   const transferRoutes = routes.filter((r) => r.transport_mode !== "walk");
 
+  function routeTotals(r: (typeof routes)[number]) {
+    if (r.segments && r.segments.length > 0) {
+      return {
+        dur: r.segments.reduce((s, seg) => s + (seg.duration_seconds ?? 0), 0),
+        dist: r.segments.reduce((s, seg) => s + (seg.distance_meters ?? 0), 0),
+      };
+    }
+    return { dur: r.duration_seconds ?? 0, dist: r.distance_meters ?? 0 };
+  }
+
   const walkDuration = walkRoutes.reduce(
-    (sum, r) => sum + (r.duration_seconds ?? 0),
+    (sum, r) => sum + routeTotals(r).dur,
     0
   );
   const walkDistance = walkRoutes.reduce(
-    (sum, r) => sum + (r.distance_meters ?? 0),
+    (sum, r) => sum + routeTotals(r).dist,
     0
   );
   const transferDuration = transferRoutes.reduce(
-    (sum, r) => sum + (r.duration_seconds ?? 0),
+    (sum, r) => sum + routeTotals(r).dur,
     0
   );
   const transferDistance = transferRoutes.reduce(
-    (sum, r) => sum + (r.distance_meters ?? 0),
+    (sum, r) => sum + routeTotals(r).dist,
     0
   );
   const hasWalk = walkDuration > 0 || walkDistance > 0;

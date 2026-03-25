@@ -83,6 +83,7 @@ export function useItineraryState({
     Record<string, string>
   >({});
   const hasFetchedRef = useRef(false);
+  const calculatingRouteIdRef = useRef<string | null>(null);
 
   const fetchItinerary = useCallback(async () => {
     setItineraryError(null);
@@ -90,6 +91,60 @@ export function useItineraryState({
     try {
       const data = await api.itinerary.get(tripId);
       setItinerary(data);
+
+      // Auto-recalculate routes with missing segments (e.g. after a stop was
+      // deleted and some segments were removed). Only fire once per route to
+      // avoid loops — skip if we're already calculating.
+      // Only trigger when segments is an explicit array (present in tree data)
+      // but shorter than expected — not when segments is undefined.
+      for (const day of data.days) {
+        for (const option of day.options) {
+          for (const route of option.routes ?? []) {
+            const expectedSegments = route.location_ids.length - 1;
+            const hasSegmentsArray = Array.isArray(route.segments);
+            const actualSegments = hasSegmentsArray
+              ? route.segments!.length
+              : 0;
+            if (
+              expectedSegments > 0 &&
+              hasSegmentsArray &&
+              actualSegments < expectedSegments &&
+              !calculatingRouteIdRef.current
+            ) {
+              // Trigger recalculation in the background
+              void (async () => {
+                calculatingRouteIdRef.current = route.route_id;
+                setCalculatingRouteId(route.route_id);
+                try {
+                  const withSegments = await api.itinerary.getRouteWithSegments(
+                    tripId,
+                    day.id,
+                    option.id,
+                    route.route_id
+                  );
+                  setItinerary((prev) =>
+                    prev
+                      ? patchRouteInItinerary(
+                          prev,
+                          day.id,
+                          option.id,
+                          route.route_id,
+                          withSegments
+                        )
+                      : prev
+                  );
+                } catch {
+                  // Silently fail — user can retry manually
+                } finally {
+                  calculatingRouteIdRef.current = null;
+                  setCalculatingRouteId(null);
+                }
+              })();
+              return; // Only recalculate one route at a time
+            }
+          }
+        }
+      }
     } catch (err) {
       setItineraryError(
         err instanceof Error ? err.message : "Failed to load itinerary"

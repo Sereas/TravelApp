@@ -183,3 +183,103 @@ def test_delete_location_only_removes_target(
         assert locations_inserted[0]["name"] == "Louvre"
     finally:
         app.dependency_overrides.clear()
+
+
+def test_delete_location_calls_cascade_rpc(
+    client: TestClient,
+    valid_jwt,
+    mock_user_id,
+):
+    """Delete endpoint calls delete_location_cascade RPC with correct params."""
+    trip_id = str(uuid4())
+    location_id = str(uuid4())
+
+    rpc_calls = []
+
+    class _MockSb:
+        def rpc(self, name, params):
+            rpc_calls.append((name, params))
+            if name == "verify_resource_chain":
+                return type(
+                    "C", (), {"execute": lambda _: type("R", (), {"data": True})()}
+                )()
+            if name == "delete_location_cascade":
+                return type(
+                    "C", (), {"execute": lambda _: type("R", (), {"data": None})()}
+                )()
+            return type(
+                "C", (), {"execute": lambda _: type("R", (), {"data": None})()}
+            )()
+
+    async def override_user():
+        return mock_user_id
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: _MockSb()
+    try:
+        resp = client.delete(
+            f"/api/v1/trips/{trip_id}/locations/{location_id}",
+            headers={"Authorization": f"Bearer {valid_jwt}"},
+        )
+        assert resp.status_code == 204
+
+        # Verify RPC was called with correct params
+        cascade_calls = [
+            (n, p) for n, p in rpc_calls if n == "delete_location_cascade"
+        ]
+        assert len(cascade_calls) == 1
+        _, params = cascade_calls[0]
+        assert params["p_trip_id"] == trip_id
+        assert params["p_location_id"] == location_id
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_delete_location_cascade_rpc_not_found_returns_404(
+    client: TestClient,
+    valid_jwt,
+    mock_user_id,
+):
+    """When the RPC raises LOCATION_NOT_FOUND, endpoint returns 404."""
+    from postgrest.exceptions import APIError
+
+    trip_id = str(uuid4())
+    location_id = str(uuid4())
+
+    class _MockSb:
+        def rpc(self, name, params):
+            if name == "verify_resource_chain":
+                return type(
+                    "C", (), {"execute": lambda _: type("R", (), {"data": True})()}
+                )()
+            if name == "delete_location_cascade":
+
+                def _raise(_=None):
+                    raise APIError(
+                        {
+                            "message": "LOCATION_NOT_FOUND",
+                            "code": "P0001",
+                            "hint": None,
+                            "details": None,
+                        }
+                    )
+
+                return type("C", (), {"execute": _raise})()
+            return type(
+                "C", (), {"execute": lambda _: type("R", (), {"data": None})()}
+            )()
+
+    async def override_user():
+        return mock_user_id
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: _MockSb()
+    try:
+        resp = client.delete(
+            f"/api/v1/trips/{trip_id}/locations/{location_id}",
+            headers={"Authorization": f"Bearer {valid_jwt}"},
+        )
+        assert resp.status_code == 404
+        assert "not found" in resp.json()["detail"].lower()
+    finally:
+        app.dependency_overrides.clear()

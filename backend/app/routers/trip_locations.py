@@ -491,20 +491,19 @@ async def delete_location(
     """
     _ensure_resource_chain(supabase, trip_id, user_id)
 
-    loc_result = (
-        supabase.table("locations")
-        .select("location_id")
-        .eq("location_id", str(location_id))
-        .eq("trip_id", str(trip_id))
-        .execute()
-    )
-    if not loc_result.data or len(loc_result.data) == 0:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Location not found",
-        )
+    try:
+        supabase.rpc(
+            "delete_location_cascade",
+            {"p_trip_id": str(trip_id), "p_location_id": str(location_id)},
+        ).execute()
+    except Exception as exc:
+        if "LOCATION_NOT_FOUND" in str(exc):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Location not found",
+            ) from exc
+        raise
 
-    supabase.table("locations").delete().eq("location_id", str(location_id)).execute()
     logger.info(
         "location_deleted",
         location_id=str(location_id),

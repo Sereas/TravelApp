@@ -86,6 +86,8 @@ export default function TripDetailPage() {
   );
   const [deletingTrip, setDeletingTrip] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [cityFilter, setCityFilter] = useState<string | null>(null);
+  const [cityPopoverOpen, setCityPopoverOpen] = useState(false);
   const [groupByCity, setGroupByCity] = useState(false);
   const [groupByPerson, setGroupByPerson] = useState(false);
   const [locationNameSearch, setLocationNameSearch] = useState("");
@@ -139,13 +141,16 @@ export default function TripDetailPage() {
   }, [tripId]);
 
   const categoryOptions = useMemo(() => {
+    const base = cityFilter
+      ? locations.filter((loc) => (loc.city || "No city") === cityFilter)
+      : locations;
     const counts: Record<string, number> = {};
-    for (const loc of locations) {
+    for (const loc of base) {
       const cat = loc.category ?? "Uncategorized";
       counts[cat] = (counts[cat] || 0) + 1;
     }
     return Object.entries(counts).sort(([a], [b]) => a.localeCompare(b));
-  }, [locations]);
+  }, [locations, cityFilter]);
 
   const cities = useMemo(() => {
     const set = new Set<string>();
@@ -170,12 +175,15 @@ export default function TripDetailPage() {
         (loc) => (loc.category ?? "Uncategorized") === categoryFilter
       );
     }
+    if (cityFilter) {
+      list = list.filter((loc) => (loc.city || "No city") === cityFilter);
+    }
     if (locationNameSearch.trim()) {
       const q = locationNameSearch.trim().toLowerCase();
       list = list.filter((loc) => (loc.name ?? "").toLowerCase().includes(q));
     }
     return list;
-  }, [locations, categoryFilter, locationNameSearch]);
+  }, [locations, categoryFilter, cityFilter, locationNameSearch]);
 
   const groupedLocations = useMemo(() => {
     if (!groupByCity && !groupByPerson) return null;
@@ -676,22 +684,99 @@ export default function TripDetailPage() {
                 />
               </div>
               {cities.size >= 2 && (
-                <button
-                  type="button"
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm font-medium transition-colors",
-                    groupByCity
-                      ? "bg-brand-muted text-brand-strong"
-                      : "text-foreground hover:bg-brand-muted"
-                  )}
-                  onClick={() => {
-                    setGroupByCity((v) => !v);
-                    if (!groupByCity) setGroupByPerson(false);
-                  }}
+                <Popover
+                  open={cityPopoverOpen}
+                  onOpenChange={setCityPopoverOpen}
                 >
-                  <Building2 size={14} />
-                  {groupByCity ? "Ungrouped" : "Group by City"}
-                </button>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm font-medium transition-colors",
+                        groupByCity || cityFilter
+                          ? "bg-brand-muted text-brand-strong"
+                          : "text-foreground hover:bg-brand-muted"
+                      )}
+                    >
+                      <Building2 size={14} />
+                      {cityFilter
+                        ? cityFilter
+                        : groupByCity
+                          ? "Grouped by city"
+                          : "City"}
+                      <ChevronDown size={12} className="opacity-50" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    className="w-48 p-1.5"
+                    align="start"
+                    sideOffset={6}
+                  >
+                    <button
+                      type="button"
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors",
+                        !cityFilter && !groupByCity
+                          ? "bg-brand-muted font-medium text-brand-strong"
+                          : "text-foreground hover:bg-muted"
+                      )}
+                      onClick={() => {
+                        setCityFilter(null);
+                        setCategoryFilter(null);
+                        setGroupByCity(false);
+                        setCityPopoverOpen(false);
+                      }}
+                    >
+                      All cities
+                    </button>
+                    <button
+                      type="button"
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors",
+                        groupByCity && !cityFilter
+                          ? "bg-brand-muted font-medium text-brand-strong"
+                          : "text-foreground hover:bg-muted"
+                      )}
+                      onClick={() => {
+                        setGroupByCity(true);
+                        setCityFilter(null);
+                        setCategoryFilter(null);
+                        setGroupByPerson(false);
+                        setCityPopoverOpen(false);
+                      }}
+                    >
+                      Group by city
+                    </button>
+                    <div className="my-1 border-t border-border" />
+                    {Array.from(cities)
+                      .sort((a, b) => a.localeCompare(b))
+                      .map((city) => (
+                        <button
+                          key={city}
+                          type="button"
+                          className={cn(
+                            "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors",
+                            cityFilter === city
+                              ? "bg-brand-muted font-medium text-brand-strong"
+                              : "text-foreground hover:bg-muted"
+                          )}
+                          onClick={() => {
+                            const next = cityFilter === city ? null : city;
+                            setCityFilter(next);
+                            setCategoryFilter(null);
+                            setGroupByCity(false);
+                            setCityPopoverOpen(false);
+                          }}
+                        >
+                          <MapPin
+                            size={12}
+                            className="shrink-0 text-muted-foreground"
+                          />
+                          {city}
+                        </button>
+                      ))}
+                  </PopoverContent>
+                </Popover>
               )}
               {addedByEmails.size >= 2 && (
                 <button
@@ -822,13 +907,31 @@ export default function TripDetailPage() {
               different search or clear the search box.
             </p>
           ) : groupedLocations ? (
-            <div className="space-y-6">
+            <div className="space-y-8">
               {groupedLocations.map(([groupName, locs]) => (
                 <div key={groupName}>
-                  <h3 className="mb-3 text-sm font-semibold text-muted-foreground">
-                    {groupName}{" "}
-                    <span className="font-normal">({locs.length})</span>
-                  </h3>
+                  <div className="mb-4 flex items-center gap-3">
+                    {groupByCity && (
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand/10">
+                        <MapPin size={14} className="text-brand" />
+                      </div>
+                    )}
+                    {groupByPerson && (
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                        <User size={14} className="text-primary" />
+                      </div>
+                    )}
+                    <div>
+                      <h3 className="text-base font-bold text-foreground">
+                        {groupName}
+                      </h3>
+                      <p className="text-xs text-muted-foreground">
+                        {locs.length}{" "}
+                        {locs.length === 1 ? "location" : "locations"}
+                      </p>
+                    </div>
+                    <div className="h-px flex-1 bg-border" />
+                  </div>
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                     {locs.map(renderLocationCard)}
                   </div>

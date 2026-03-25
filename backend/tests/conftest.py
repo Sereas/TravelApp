@@ -433,6 +433,33 @@ def mock_supabase_trips_and_locations():
                 return type(
                     "RpcChain", (), {"execute": lambda _: type("R", (), {"data": valid})()}
                 )()
+            if name == "delete_location_cascade":
+                loc_id = str(params.get("p_location_id", ""))
+                trip_id = str(params.get("p_trip_id", ""))
+                idx = next(
+                    (
+                        i
+                        for i, loc in enumerate(locations_inserted)
+                        if str(loc.get("location_id")) == loc_id
+                        and str(loc.get("trip_id")) == trip_id
+                    ),
+                    None,
+                )
+
+                def _exec(self_inner=None):
+                    if idx is None:
+                        from postgrest.exceptions import APIError
+
+                        raise APIError({
+                            "message": "LOCATION_NOT_FOUND",
+                            "code": "P0001",
+                            "hint": None,
+                            "details": None,
+                        })
+                    locations_inserted.pop(idx)
+                    return type("R", (), {"data": None})()
+
+                return type("RpcChain", (), {"execute": _exec})()
             return type("RpcChain", (), {"execute": lambda _: type("R", (), {"data": None})()})()
 
     return locations_inserted, MockSupabaseTL2
