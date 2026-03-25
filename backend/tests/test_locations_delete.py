@@ -200,16 +200,10 @@ def test_delete_location_calls_cascade_rpc(
         def rpc(self, name, params):
             rpc_calls.append((name, params))
             if name == "verify_resource_chain":
-                return type(
-                    "C", (), {"execute": lambda _: type("R", (), {"data": True})()}
-                )()
+                return type("C", (), {"execute": lambda _: type("R", (), {"data": True})()})()
             if name == "delete_location_cascade":
-                return type(
-                    "C", (), {"execute": lambda _: type("R", (), {"data": None})()}
-                )()
-            return type(
-                "C", (), {"execute": lambda _: type("R", (), {"data": None})()}
-            )()
+                return type("C", (), {"execute": lambda _: type("R", (), {"data": None})()})()
+            return type("C", (), {"execute": lambda _: type("R", (), {"data": None})()})()
 
     async def override_user():
         return mock_user_id
@@ -224,9 +218,7 @@ def test_delete_location_calls_cascade_rpc(
         assert resp.status_code == 204
 
         # Verify RPC was called with correct params
-        cascade_calls = [
-            (n, p) for n, p in rpc_calls if n == "delete_location_cascade"
-        ]
+        cascade_calls = [(n, p) for n, p in rpc_calls if n == "delete_location_cascade"]
         assert len(cascade_calls) == 1
         _, params = cascade_calls[0]
         assert params["p_trip_id"] == trip_id
@@ -249,9 +241,7 @@ def test_delete_location_cascade_rpc_not_found_returns_404(
     class _MockSb:
         def rpc(self, name, params):
             if name == "verify_resource_chain":
-                return type(
-                    "C", (), {"execute": lambda _: type("R", (), {"data": True})()}
-                )()
+                return type("C", (), {"execute": lambda _: type("R", (), {"data": True})()})()
             if name == "delete_location_cascade":
 
                 def _raise(_=None):
@@ -265,9 +255,7 @@ def test_delete_location_cascade_rpc_not_found_returns_404(
                     )
 
                 return type("C", (), {"execute": _raise})()
-            return type(
-                "C", (), {"execute": lambda _: type("R", (), {"data": None})()}
-            )()
+            return type("C", (), {"execute": lambda _: type("R", (), {"data": None})()})()
 
     async def override_user():
         return mock_user_id

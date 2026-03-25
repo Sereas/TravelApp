@@ -450,12 +450,14 @@ def mock_supabase_trips_and_locations():
                     if idx is None:
                         from postgrest.exceptions import APIError
 
-                        raise APIError({
-                            "message": "LOCATION_NOT_FOUND",
-                            "code": "P0001",
-                            "hint": None,
-                            "details": None,
-                        })
+                        raise APIError(
+                            {
+                                "message": "LOCATION_NOT_FOUND",
+                                "code": "P0001",
+                                "hint": None,
+                                "details": None,
+                            }
+                        )
                     locations_inserted.pop(idx)
                     return type("R", (), {"data": None})()
 

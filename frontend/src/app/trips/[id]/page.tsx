@@ -612,7 +612,6 @@ export default function TripDetailPage() {
               })()}
           </div>
         )}
-
       </div>
 
       {/* Sticky tabs bar */}
