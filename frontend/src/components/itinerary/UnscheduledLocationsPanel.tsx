@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { Location } from "@/lib/api";
+import { useReadOnly } from "@/lib/read-only-context";
 import {
   ChevronDown,
   Compass,
@@ -27,6 +28,7 @@ export function UnscheduledLocationsPanel({
   currentDayId,
   onScheduleToDay,
 }: UnscheduledLocationsPanelProps) {
+  const readOnly = useReadOnly();
   const [expanded, setExpanded] = useState(false);
   const [filter, setFilter] = useState("");
 
@@ -114,7 +116,7 @@ export function UnscheduledLocationsPanel({
                     )}
                   </div>
                 </div>
-                {currentDayId && (
+                {!readOnly && currentDayId && (
                   <button
                     type="button"
                     className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-primary/30 text-primary transition-colors hover:border-primary hover:bg-primary hover:text-white"

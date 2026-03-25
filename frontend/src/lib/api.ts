@@ -242,6 +242,69 @@ export interface ItineraryResponse {
   days: ItineraryDay[];
 }
 
+async function publicRequest<T>(
+  path: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(options.headers as Record<string, string>),
+  };
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers,
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(
+      body.detail ?? `Request failed with status ${res.status}`,
+      res.status,
+      body.detail
+    );
+  }
+
+  return res.json();
+}
+
+export interface ShareResponse {
+  share_token: string;
+  share_url: string;
+  created_at: string;
+  expires_at: string | null;
+}
+
+export interface SharedTripInfo {
+  name: string;
+  start_date: string | null;
+  end_date: string | null;
+}
+
+export interface SharedLocationSummary {
+  id: string;
+  name: string;
+  city: string | null;
+  address: string | null;
+  google_link: string | null;
+  category: string | null;
+  note: string | null;
+  working_hours: string | null;
+  requires_booking: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  image_url: string | null;
+  user_image_url: string | null;
+  attribution_name: string | null;
+  attribution_uri: string | null;
+}
+
+export interface SharedTripData {
+  trip: SharedTripInfo;
+  locations: SharedLocationSummary[];
+  itinerary: ItineraryResponse;
+}
+
 export const api = {
   trips: {
     list: () => request<Trip[]>("/api/v1/trips"),
@@ -620,5 +683,31 @@ export const api = {
         `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/routes/${routeId}`,
         { method: "DELETE" }
       ),
+  },
+
+  sharing: {
+    /** Create or get existing share link for a trip. */
+    createShare: (tripId: string) =>
+      request<ShareResponse>(`/api/v1/trips/${tripId}/share`, {
+        method: "POST",
+      }),
+
+    /** Get current active share status. Returns null if no active share (404). */
+    getShare: async (tripId: string): Promise<ShareResponse | null> => {
+      try {
+        return await request<ShareResponse>(`/api/v1/trips/${tripId}/share`);
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) return null;
+        throw err;
+      }
+    },
+
+    /** Revoke the active share link. */
+    revokeShare: (tripId: string) =>
+      request<void>(`/api/v1/trips/${tripId}/share`, { method: "DELETE" }),
+
+    /** Get shared trip data (public, no auth). */
+    getSharedTrip: (token: string) =>
+      publicRequest<SharedTripData>(`/api/v1/shared/${token}`),
   },
 };

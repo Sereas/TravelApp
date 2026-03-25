@@ -15,6 +15,7 @@ import {
   type DateChangeResult,
 } from "@/components/trips/DateChangeDialog";
 import { ItineraryTab } from "@/components/itinerary/ItineraryTab";
+import { ShareTripDialog } from "@/components/trips/ShareTripDialog";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { LoadingSpinner } from "@/components/feedback/LoadingSpinner";
 import { ErrorBanner } from "@/components/feedback/ErrorBanner";
@@ -91,6 +92,7 @@ export default function TripDetailPage() {
   const [groupByCity, setGroupByCity] = useState(false);
   const [groupByPerson, setGroupByPerson] = useState(false);
   const [locationNameSearch, setLocationNameSearch] = useState("");
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
 
   const [activeTab, setActiveTab] = useState<"locations" | "itinerary">(
     "locations"
@@ -449,6 +451,7 @@ export default function TripDetailPage() {
                   type="button"
                   className="inline-flex items-center gap-1.5 rounded-full bg-white/80 px-4 py-2 text-sm font-medium text-foreground shadow-sm ring-1 ring-border transition-colors hover:bg-white"
                   aria-label="Share trip"
+                  onClick={() => setShareDialogOpen(true)}
                 >
                   <Share2 size={14} />
                   Share
@@ -957,6 +960,12 @@ export default function TripDetailPage() {
           />
         </div>
       )}
+
+      <ShareTripDialog
+        tripId={tripId}
+        open={shareDialogOpen}
+        onOpenChange={setShareDialogOpen}
+      />
 
       {dateChangeDialog &&
         (() => {

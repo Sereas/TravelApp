@@ -28,6 +28,7 @@ import { AddLocationsToOptionDialog } from "@/components/itinerary/AddLocationsT
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { useReadOnly } from "@/lib/read-only-context";
 import {
   Sunrise,
   Sun,
@@ -237,6 +238,7 @@ export function ItineraryDayCard({
   routeMetricsError,
   onInspectLocation,
 }: ItineraryDayCardProps) {
+  const readOnly = useReadOnly();
   const alreadyAdded = useMemo(
     () => new Set(currentOption?.locations.map((l) => l.location_id) ?? []),
     [currentOption]
@@ -606,27 +608,29 @@ export function ItineraryDayCard({
           {currentOption && (
             <div key={currentOption.id} className="animate-page-flip">
               {/* Add locations */}
-              <div className="mb-3">
-                <AddLocationsToOptionDialog
-                  trigger={
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 gap-1 text-xs"
-                    >
-                      <Plus size={12} />
-                      Add locations
-                    </Button>
-                  }
-                  allLocations={tripLocations}
-                  alreadyAddedIds={alreadyAdded}
-                  startingCity={currentOption.starting_city}
-                  endingCity={currentOption.ending_city}
-                  onConfirm={(ids) =>
-                    onAddLocations(day.id, currentOption.id, ids)
-                  }
-                />
-              </div>
+              {!readOnly && (
+                <div className="mb-3">
+                  <AddLocationsToOptionDialog
+                    trigger={
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 gap-1 text-xs"
+                      >
+                        <Plus size={12} />
+                        Add locations
+                      </Button>
+                    }
+                    allLocations={tripLocations}
+                    alreadyAddedIds={alreadyAdded}
+                    startingCity={currentOption.starting_city}
+                    endingCity={currentOption.ending_city}
+                    onConfirm={(ids) =>
+                      onAddLocations(day.id, currentOption.id, ids)
+                    }
+                  />
+                </div>
+              )}
 
               <ItineraryDayTimeline
                 sorted={sorted}
@@ -740,7 +744,8 @@ export function ItineraryDayCard({
       </Card>
 
       {/* Sticky bottom pick-mode toolbar — portaled so it floats above everything */}
-      {isPickMode &&
+      {!readOnly &&
+        isPickMode &&
         currentOption &&
         typeof document !== "undefined" &&
         createPortal(

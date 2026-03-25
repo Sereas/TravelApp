@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { User as UserIcon, LogOut } from "lucide-react";
 import {
   Popover,
@@ -11,6 +12,7 @@ import { createBrowserClient } from "@/lib/supabase";
 import type { User } from "@supabase/supabase-js";
 
 export function UserNav() {
+  const pathname = usePathname();
   const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
@@ -26,7 +28,7 @@ export function UserNav() {
     return () => subscription.unsubscribe();
   }, []);
 
-  if (!user) return null;
+  if (!user || pathname.startsWith("/shared/")) return null;
 
   async function handleLogout() {
     const supabase = createBrowserClient();

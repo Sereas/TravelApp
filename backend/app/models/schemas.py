@@ -555,6 +555,51 @@ class RouteSegmentResponse(BaseModel):
     next_retry_at: str | None = Field(None, description="ISO8601; next eligible retry on view")
 
 
+class SharedTripInfo(BaseModel):
+    """Trip info returned in public shared view (no user_id)."""
+
+    name: str
+    start_date: date_type | None = None
+    end_date: date_type | None = None
+
+
+class ShareTripResponse(BaseModel):
+    """Response when creating or fetching a share link."""
+
+    share_token: str
+    share_url: str
+    created_at: datetime
+    expires_at: datetime | None = None
+
+
+class SharedLocationSummary(BaseModel):
+    """Location info for public shared view (no added_by_email, no google_raw)."""
+
+    id: str
+    name: str
+    city: str | None = None
+    address: str | None = None
+    google_link: str | None = None
+    category: str | None = None
+    note: str | None = None
+    working_hours: str | None = None
+    requires_booking: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    image_url: str | None = None
+    user_image_url: str | None = None
+    attribution_name: str | None = None
+    attribution_uri: str | None = None
+
+
+class SharedTripResponse(BaseModel):
+    """Full public shared trip view: trip info + locations + itinerary."""
+
+    trip: SharedTripInfo
+    locations: list[SharedLocationSummary]
+    itinerary: ItineraryResponse
+
+
 class RouteWithSegmentsResponse(BaseModel):
     """Route plus per-segment data and geometry (for recalculate and get-with-segments)."""
 

@@ -6,6 +6,7 @@ import { CategoryIcon } from "@/components/locations/CategoryIcon";
 import { LoadingSpinner } from "@/components/feedback/LoadingSpinner";
 import { CATEGORY_META, type CategoryKey } from "@/lib/location-constants";
 import { cn } from "@/lib/utils";
+import { useReadOnly } from "@/lib/read-only-context";
 import {
   Sunrise,
   Sun,
@@ -197,6 +198,7 @@ export function ItineraryLocationRow({
   onInspectLocation,
   onRemoveLocation,
 }: ItineraryLocationRowProps) {
+  const readOnly = useReadOnly();
   const tk = optionLocation.time_period || "morning";
   const tm = TIME_META[tk] ?? TIME_META.morning;
   const TIcon = tm.icon;
@@ -211,7 +213,9 @@ export function ItineraryLocationRow({
   return (
     <div className="flex gap-2">
       <div className="flex w-5 shrink-0 justify-center pt-2">
-        {isPickMode ? (
+        {readOnly ? (
+          <div className="w-5" />
+        ) : isPickMode ? (
           <button
             type="button"
             onClick={() => onTogglePick(optionLocation.location_id)}
@@ -378,28 +382,35 @@ export function ItineraryLocationRow({
             </a>
           ) : null}
 
-          <div
-            ref={
-              timePickerOpenId === optionLocation.location_id
-                ? (node) => {
-                    tpTriggerRef.current = node;
-                  }
-                : undefined
-            }
-          >
-            <button
-              type="button"
-              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-transparent bg-muted/60 px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-primary/20 hover:bg-primary/5 hover:text-foreground"
-              onClick={() => onToggleTimePicker(optionLocation.location_id)}
-              aria-label={`Time: ${tm.label}`}
-            >
+          {readOnly ? (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-muted/60 px-2 py-1 text-[10px] font-medium text-muted-foreground">
               <TIcon size={10} className="shrink-0" />
               <span className="w-[48px]">{tm.label}</span>
-              <ChevronDown size={9} className="opacity-40" />
-            </button>
-          </div>
+            </span>
+          ) : (
+            <div
+              ref={
+                timePickerOpenId === optionLocation.location_id
+                  ? (node) => {
+                      tpTriggerRef.current = node;
+                    }
+                  : undefined
+              }
+            >
+              <button
+                type="button"
+                className="inline-flex shrink-0 items-center gap-1 rounded-full border border-transparent bg-muted/60 px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-primary/20 hover:bg-primary/5 hover:text-foreground"
+                onClick={() => onToggleTimePicker(optionLocation.location_id)}
+                aria-label={`Time: ${tm.label}`}
+              >
+                <TIcon size={10} className="shrink-0" />
+                <span className="w-[48px]">{tm.label}</span>
+                <ChevronDown size={9} className="opacity-40" />
+              </button>
+            </div>
+          )}
 
-          {!isPickMode && currentOptionId && (
+          {!readOnly && !isPickMode && currentOptionId && (
             <button
               type="button"
               className="shrink-0 text-muted-foreground/30 opacity-0 transition hover:text-destructive group-hover:opacity-100"

@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import type { Location, Trip } from "@/lib/api";
 import type { useItineraryState } from "@/features/itinerary/useItineraryState";
 import { cn } from "@/lib/utils";
+import { useReadOnly } from "@/lib/read-only-context";
 import { Crosshair } from "lucide-react";
 
 type ItineraryState = ReturnType<typeof useItineraryState>;
@@ -61,6 +62,7 @@ export function ItineraryTab({
     handleScheduleLocationToDay,
   } = itineraryState;
 
+  const readOnly = useReadOnly();
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -117,30 +119,34 @@ export function ItineraryTab({
       {!itineraryLoading && !itineraryError && itinerary?.days.length === 0 && (
         <EmptyState
           message={
-            trip.start_date && trip.end_date
-              ? "No days yet. Generate days from your trip dates."
-              : "No days yet. Add a day to get started."
+            readOnly
+              ? "No itinerary days planned yet."
+              : trip.start_date && trip.end_date
+                ? "No days yet. Generate days from your trip dates."
+                : "No days yet. Add a day to get started."
           }
         >
-          <div className="mt-3 flex flex-wrap gap-2">
-            {trip.start_date && trip.end_date ? (
-              <Button
-                onClick={handleGenerateDays}
-                disabled={addDayLoading || generateDaysLoading}
-              >
-                {generateDaysLoading
-                  ? "Generating..."
-                  : "Generate days from dates"}
-              </Button>
-            ) : (
-              <Button
-                onClick={handleAddDay}
-                disabled={addDayLoading || generateDaysLoading}
-              >
-                {addDayLoading ? "Adding..." : "Add day"}
-              </Button>
-            )}
-          </div>
+          {!readOnly && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {trip.start_date && trip.end_date ? (
+                <Button
+                  onClick={handleGenerateDays}
+                  disabled={addDayLoading || generateDaysLoading}
+                >
+                  {generateDaysLoading
+                    ? "Generating..."
+                    : "Generate days from dates"}
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleAddDay}
+                  disabled={addDayLoading || generateDaysLoading}
+                >
+                  {addDayLoading ? "Adding..." : "Add day"}
+                </Button>
+              )}
+            </div>
+          )}
         </EmptyState>
       )}
       {!itineraryLoading &&
@@ -162,47 +168,48 @@ export function ItineraryTab({
                   </p>
                 </div>
               </div>
-              {trip.start_date && trip.end_date ? (
-                (() => {
-                  const coveredDates = new Set(
-                    itinerary.days.map((day) => day.date).filter(Boolean)
-                  );
-                  const start = new Date(trip.start_date + "T00:00:00");
-                  const end = new Date(trip.end_date + "T00:00:00");
-                  let hasMissing = false;
+              {!readOnly &&
+                (trip.start_date && trip.end_date ? (
+                  (() => {
+                    const coveredDates = new Set(
+                      itinerary.days.map((day) => day.date).filter(Boolean)
+                    );
+                    const start = new Date(trip.start_date + "T00:00:00");
+                    const end = new Date(trip.end_date + "T00:00:00");
+                    let hasMissing = false;
 
-                  for (
-                    let date = new Date(start);
-                    date <= end;
-                    date.setDate(date.getDate() + 1)
-                  ) {
-                    if (!coveredDates.has(format(date, "yyyy-MM-dd"))) {
-                      hasMissing = true;
-                      break;
+                    for (
+                      let date = new Date(start);
+                      date <= end;
+                      date.setDate(date.getDate() + 1)
+                    ) {
+                      if (!coveredDates.has(format(date, "yyyy-MM-dd"))) {
+                        hasMissing = true;
+                        break;
+                      }
                     }
-                  }
 
-                  return hasMissing ? (
-                    <Button
-                      size="sm"
-                      onClick={handleGenerateDays}
-                      disabled={addDayLoading || generateDaysLoading}
-                    >
-                      {generateDaysLoading
-                        ? "Generating..."
-                        : "Generate missing days"}
-                    </Button>
-                  ) : null;
-                })()
-              ) : (
-                <Button
-                  size="sm"
-                  onClick={handleAddDay}
-                  disabled={addDayLoading || generateDaysLoading}
-                >
-                  {addDayLoading ? "Adding..." : "Add day"}
-                </Button>
-              )}
+                    return hasMissing ? (
+                      <Button
+                        size="sm"
+                        onClick={handleGenerateDays}
+                        disabled={addDayLoading || generateDaysLoading}
+                      >
+                        {generateDaysLoading
+                          ? "Generating..."
+                          : "Generate missing days"}
+                      </Button>
+                    ) : null;
+                  })()
+                ) : (
+                  <Button
+                    size="sm"
+                    onClick={handleAddDay}
+                    disabled={addDayLoading || generateDaysLoading}
+                  >
+                    {addDayLoading ? "Adding..." : "Add day"}
+                  </Button>
+                ))}
             </div>
             <ItineraryDayRail
               days={itinerary.days}
@@ -263,12 +270,16 @@ export function ItineraryTab({
                     selectedDay ? getSelectedOption(selectedDay) : undefined
                   }
                 />
-                <UnscheduledLocationsPanel
-                  locations={locations}
-                  itineraryLocationMap={itineraryLocationMap}
-                  currentDayId={selectedDayId ?? itinerary.days[0]?.id ?? null}
-                  onScheduleToDay={handleScheduleLocationToDay}
-                />
+                {!readOnly && (
+                  <UnscheduledLocationsPanel
+                    locations={locations}
+                    itineraryLocationMap={itineraryLocationMap}
+                    currentDayId={
+                      selectedDayId ?? itinerary.days[0]?.id ?? null
+                    }
+                    onScheduleToDay={handleScheduleLocationToDay}
+                  />
+                )}
               </div>
             </div>
           </div>

@@ -5,6 +5,7 @@ import { type ItineraryDay, type ItineraryOption } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/feedback/LoadingSpinner";
 import { cn } from "@/lib/utils";
+import { useReadOnly } from "@/lib/read-only-context";
 import {
   AlertCircle,
   ChevronDown,
@@ -151,6 +152,7 @@ export function ItineraryRouteManager({
   onDeleteRoute,
   onBeginCreateRoute,
 }: ItineraryRouteManagerProps) {
+  const readOnly = useReadOnly();
   const [expandedRouteId, setExpandedRouteId] = useState<string | null>(null);
 
   return (
@@ -167,7 +169,7 @@ export function ItineraryRouteManager({
             </p>
           </div>
         </div>
-        {sortedLocations.length >= 2 && !isPickMode && (
+        {!readOnly && sortedLocations.length >= 2 && !isPickMode && (
           <Button
             variant="ghost"
             size="sm"
@@ -291,24 +293,28 @@ export function ItineraryRouteManager({
                       )}
                     </button>
                   )}
-                  <button
-                    type="button"
-                    className="shrink-0 text-muted-foreground hover:text-primary disabled:opacity-50"
-                    onClick={() => onEditRoute(route)}
-                    aria-label="Edit route"
-                    disabled={isCalculating}
-                  >
-                    <Pencil size={12} />
-                  </button>
-                  <button
-                    type="button"
-                    className="shrink-0 text-muted-foreground hover:text-destructive disabled:opacity-50"
-                    onClick={() => onDeleteRoute(route.route_id)}
-                    aria-label="Delete route"
-                    disabled={isCalculating}
-                  >
-                    <Trash2 size={12} />
-                  </button>
+                  {!readOnly && (
+                    <>
+                      <button
+                        type="button"
+                        className="shrink-0 text-muted-foreground hover:text-primary disabled:opacity-50"
+                        onClick={() => onEditRoute(route)}
+                        aria-label="Edit route"
+                        disabled={isCalculating}
+                      >
+                        <Pencil size={12} />
+                      </button>
+                      <button
+                        type="button"
+                        className="shrink-0 text-muted-foreground hover:text-destructive disabled:opacity-50"
+                        onClick={() => onDeleteRoute(route.route_id)}
+                        aria-label="Delete route"
+                        disabled={isCalculating}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </>
+                  )}
                 </div>
 
                 {/* Expanded segment details */}

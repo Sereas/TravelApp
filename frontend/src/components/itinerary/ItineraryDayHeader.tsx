@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ItineraryDay, ItineraryOption } from "@/lib/api";
 import { ItineraryPlanSwitcher } from "@/components/itinerary/ItineraryPlanSwitcher";
 import { cn } from "@/lib/utils";
+import { useReadOnly } from "@/lib/read-only-context";
 import { ArrowRight, Pencil } from "lucide-react";
 
 function AutosaveInput({
@@ -105,6 +106,7 @@ export function ItineraryDayHeader({
   onDeleteOption,
   onSaveOptionDetails,
 }: ItineraryDayHeaderProps) {
+  const readOnly = useReadOnly();
   const dayLabel = day.date
     ? formatDate(day.date)
     : `Day ${day.sort_order + 1}`;
@@ -119,7 +121,7 @@ export function ItineraryDayHeader({
           <div className="h-full w-1 rounded-full bg-brand" />
         </div>
         <div className="flex items-center gap-1.5">
-          {editingDate ? (
+          {!readOnly && editingDate ? (
             <input
               type="date"
               ref={(el) => {
@@ -154,63 +156,92 @@ export function ItineraryDayHeader({
               <h3 className="text-2xl font-bold tracking-tight text-foreground">
                 {dayLabel}
               </h3>
-              <button
-                onClick={() => setEditingDate(true)}
-                className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                aria-label="Edit day date"
-                title={day.date ? "Change date" : "Assign a date"}
-              >
-                <Pencil size={12} />
-              </button>
+              {!readOnly && (
+                <button
+                  onClick={() => setEditingDate(true)}
+                  className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  aria-label="Edit day date"
+                  title={day.date ? "Change date" : "Assign a date"}
+                >
+                  <Pencil size={12} />
+                </button>
+              )}
             </>
           )}
         </div>
 
         {currentOption && (
           <div className="mt-2 flex items-center gap-1.5 text-sm text-muted-foreground">
-            <AutosaveInput
-              id={`sc-${currentOption.id}`}
-              placeholder="Departure"
-              initialValue={currentOption.starting_city ?? ""}
-              onSave={async (value) => {
-                const nextValue = value || null;
-                if (nextValue === (currentOption.starting_city ?? null)) return;
-                onSaveOptionDetails(day.id, currentOption.id, {
-                  starting_city: nextValue,
-                });
-              }}
-              className="w-28 text-sm"
-            />
-            <ArrowRight
-              size={12}
-              className="shrink-0 text-muted-foreground/40"
-            />
-            <AutosaveInput
-              id={`ec-${currentOption.id}`}
-              placeholder="Arrival"
-              initialValue={currentOption.ending_city ?? ""}
-              onSave={async (value) => {
-                const nextValue = value || null;
-                if (nextValue === (currentOption.ending_city ?? null)) return;
-                onSaveOptionDetails(day.id, currentOption.id, {
-                  ending_city: nextValue,
-                });
-              }}
-              className="w-28 text-sm"
-            />
+            {readOnly ? (
+              <>
+                {currentOption.starting_city && (
+                  <span className="text-sm font-medium">
+                    {currentOption.starting_city}
+                  </span>
+                )}
+                {currentOption.starting_city && currentOption.ending_city && (
+                  <ArrowRight
+                    size={12}
+                    className="shrink-0 text-muted-foreground/40"
+                  />
+                )}
+                {currentOption.ending_city && (
+                  <span className="text-sm font-medium">
+                    {currentOption.ending_city}
+                  </span>
+                )}
+              </>
+            ) : (
+              <>
+                <AutosaveInput
+                  id={`sc-${currentOption.id}`}
+                  placeholder="Departure"
+                  initialValue={currentOption.starting_city ?? ""}
+                  onSave={async (value) => {
+                    const nextValue = value || null;
+                    if (nextValue === (currentOption.starting_city ?? null))
+                      return;
+                    onSaveOptionDetails(day.id, currentOption.id, {
+                      starting_city: nextValue,
+                    });
+                  }}
+                  className="w-28 text-sm"
+                />
+                <ArrowRight
+                  size={12}
+                  className="shrink-0 text-muted-foreground/40"
+                />
+                <AutosaveInput
+                  id={`ec-${currentOption.id}`}
+                  placeholder="Arrival"
+                  initialValue={currentOption.ending_city ?? ""}
+                  onSave={async (value) => {
+                    const nextValue = value || null;
+                    if (nextValue === (currentOption.ending_city ?? null))
+                      return;
+                    onSaveOptionDetails(day.id, currentOption.id, {
+                      ending_city: nextValue,
+                    });
+                  }}
+                  className="w-28 text-sm"
+                />
+              </>
+            )}
           </div>
         )}
       </div>
 
-      <ItineraryPlanSwitcher
-        day={day}
-        currentOption={currentOption}
-        createOptionLoading={createOptionLoading}
-        onSelectOption={onSelectOption}
-        onCreateAlternative={onCreateAlternative}
-        onDeleteOption={onDeleteOption}
-        onSaveOptionDetails={onSaveOptionDetails}
-      />
+      {!readOnly && (
+        <ItineraryPlanSwitcher
+          day={day}
+          currentOption={currentOption}
+          createOptionLoading={createOptionLoading}
+          onSelectOption={onSelectOption}
+          onCreateAlternative={onCreateAlternative}
+          onDeleteOption={onDeleteOption}
+          onSaveOptionDetails={onSaveOptionDetails}
+        />
+      )}
     </div>
   );
 }

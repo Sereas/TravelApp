@@ -16,6 +16,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useReadOnly } from "@/lib/read-only-context";
 import {
   CATEGORY_META,
   type CategoryKey,
@@ -132,9 +133,11 @@ export function LocationCard({
   deleteTrigger,
   className,
 }: LocationCardProps) {
+  const readOnly = useReadOnly();
   const catMeta = category ? CATEGORY_META[category as CategoryKey] : undefined;
   const hasGeo = city || address;
-  const useMenu = onEdit != null || onDelete != null || deleteTrigger != null;
+  const useMenu =
+    !readOnly && (onEdit != null || onDelete != null || deleteTrigger != null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [photoDialogOpen, setPhotoDialogOpen] = useState(false);
@@ -222,7 +225,7 @@ export function LocationCard({
         </div>
 
         {/* Camera icon for photo upload */}
-        {onPhotoUpload && (
+        {!readOnly && onPhotoUpload && (
           <div className="absolute left-2 top-2">
             <Button
               variant="ghost"
@@ -421,7 +424,7 @@ export function LocationCard({
                       : "Scheduled"}
                   </span>
                 </span>
-              ) : canSchedule ? (
+              ) : !readOnly && canSchedule ? (
                 <Popover open={scheduleOpen} onOpenChange={setScheduleOpen}>
                   <PopoverTrigger asChild>
                     <button
@@ -490,7 +493,7 @@ export function LocationCard({
       </div>
 
       {/* Photo upload dialog */}
-      {onPhotoUpload && onPhotoReset && (
+      {!readOnly && onPhotoUpload && onPhotoReset && (
         <PhotoUploadDialog
           open={photoDialogOpen}
           onOpenChange={setPhotoDialogOpen}
