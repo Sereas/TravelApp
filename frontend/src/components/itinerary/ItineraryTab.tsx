@@ -256,7 +256,7 @@ export function ItineraryTab({
                 })}
               </div>
 
-              <div className="space-y-4 xl:sticky xl:top-[4.5rem] xl:self-start">
+              <div className="space-y-4 xl:sticky xl:top-[6.75rem] xl:self-start">
                 <ItineraryInspectorPanel
                   day={selectedDay}
                   currentOption={

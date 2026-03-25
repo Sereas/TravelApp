@@ -97,7 +97,7 @@ export default function TripDetailPage() {
   );
   const itineraryState = useItineraryState({
     tripId,
-    enabled: !!trip,
+    enabled: true,
     locations,
   });
   const {
@@ -404,7 +404,7 @@ export default function TripDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div>
       {/* Trip hero banner */}
       <div className="grain-overlay -mx-4 -mt-4 overflow-hidden rounded-b-3xl bg-gradient-to-br from-brand/10 via-background to-primary/8 px-4 pb-6 pt-4 sm:-mx-6 sm:px-6 md:-mx-8 md:px-8">
         <button
@@ -613,57 +613,59 @@ export default function TripDetailPage() {
           </div>
         )}
 
-        {/* Tabs inside the banner */}
-        <nav
-          className="mt-5 flex gap-2"
-          role="tablist"
-          aria-label="Trip sections"
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === "locations"}
-            aria-controls="tab-panel-locations"
-            id="tab-locations"
-            className={cn(
-              "rounded-full px-5 py-2 text-sm font-semibold tracking-wide transition-all",
-              activeTab === "locations"
-                ? "bg-brand text-white shadow-md"
-                : "bg-white/70 text-muted-foreground ring-1 ring-border hover:bg-white hover:text-foreground"
-            )}
-            onClick={() => setActiveTab("locations")}
-          >
-            Locations
-            {locations.length > 0 && (
-              <span className="ml-1.5 text-xs opacity-80">
-                {locations.length}
-              </span>
-            )}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === "itinerary"}
-            aria-controls="tab-panel-itinerary"
-            id="tab-itinerary"
-            className={cn(
-              "rounded-full px-5 py-2 text-sm font-semibold tracking-wide transition-all",
-              activeTab === "itinerary"
-                ? "bg-brand text-white shadow-md"
-                : "bg-white/70 text-muted-foreground ring-1 ring-border hover:bg-white hover:text-foreground"
-            )}
-            onClick={() => setActiveTab("itinerary")}
-          >
-            Itinerary
-          </button>
-        </nav>
       </div>
+
+      {/* Sticky tabs bar */}
+      <nav
+        className="sticky top-14 z-30 -mx-4 flex gap-2 border-b border-border/40 bg-background/95 px-4 py-3 backdrop-blur-sm sm:-mx-6 sm:px-6 md:-mx-8 md:px-8"
+        role="tablist"
+        aria-label="Trip sections"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "locations"}
+          aria-controls="tab-panel-locations"
+          id="tab-locations"
+          className={cn(
+            "rounded-full px-5 py-2 text-sm font-semibold tracking-wide transition-all",
+            activeTab === "locations"
+              ? "bg-brand text-white shadow-md"
+              : "bg-white/70 text-muted-foreground ring-1 ring-border hover:bg-white hover:text-foreground"
+          )}
+          onClick={() => setActiveTab("locations")}
+        >
+          Locations
+          {locations.length > 0 && (
+            <span className="ml-1.5 text-xs opacity-80">
+              {locations.length}
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "itinerary"}
+          aria-controls="tab-panel-itinerary"
+          id="tab-itinerary"
+          className={cn(
+            "rounded-full px-5 py-2 text-sm font-semibold tracking-wide transition-all",
+            activeTab === "itinerary"
+              ? "bg-brand text-white shadow-md"
+              : "bg-white/70 text-muted-foreground ring-1 ring-border hover:bg-white hover:text-foreground"
+          )}
+          onClick={() => setActiveTab("itinerary")}
+        >
+          Itinerary
+        </button>
+      </nav>
 
       {activeTab === "locations" && (
         <section
           id="tab-panel-locations"
           role="tabpanel"
           aria-labelledby="tab-locations"
+          className="mt-6"
         >
           {/* Toolbar row */}
           {locations.length > 0 && (
@@ -947,12 +949,14 @@ export default function TripDetailPage() {
       )}
 
       {activeTab === "itinerary" && (
-        <ItineraryTab
-          trip={trip}
-          tripId={tripId}
-          locations={locations}
-          itineraryState={itineraryState}
-        />
+        <div className="mt-6">
+          <ItineraryTab
+            trip={trip}
+            tripId={tripId}
+            locations={locations}
+            itineraryState={itineraryState}
+          />
+        </div>
       )}
 
       {dateChangeDialog &&
