@@ -32,7 +32,7 @@ describe("ItineraryDayTimeline", () => {
       />
     );
 
-    expect(screen.getByText(/No locations planned yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/No stops planned yet/i)).toBeInTheDocument();
   });
 
   it("shows end drop zone during drag and forwards the drop event", () => {

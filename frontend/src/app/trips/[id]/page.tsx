@@ -27,6 +27,7 @@ import {
   MapPin,
   Pencil,
   Plus,
+  Route,
   Search,
   Share2,
   Trash2,
@@ -396,10 +397,11 @@ export default function TripDetailPage() {
 
   return (
     <div className="space-y-6">
-      <div>
+      {/* Trip hero banner */}
+      <div className="grain-overlay -mx-4 -mt-4 overflow-hidden rounded-b-3xl bg-gradient-to-br from-brand/10 via-background to-primary/8 px-4 pb-6 pt-4 sm:-mx-6 sm:px-6 md:-mx-8 md:px-8">
         <button
           type="button"
-          className="mb-3 -ml-1 inline-flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+          className="mb-4 -ml-1 inline-flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
           onClick={() => router.push("/trips")}
         >
           <ChevronLeft size={14} className="shrink-0" />
@@ -415,45 +417,200 @@ export default function TripDetailPage() {
             onBeforeSave={handleBeforeTripSave}
           />
         ) : (
-          <div>
-            <h1 className="font-serif text-3xl font-bold tracking-tight text-foreground">
-              {trip.name}
-            </h1>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              {dateDisplay && (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-muted px-3 py-1 text-xs font-medium text-brand-strong">
-                  <Calendar size={12} />
-                  {dateDisplay}
-                </span>
-              )}
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs font-medium text-muted-foreground">
-                <Users size={12} />1 Traveler
-              </span>
-              <div className="flex-1" />
-              <button
-                type="button"
-                className="inline-flex items-center gap-1.5 rounded-full border border-border px-4 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-brand-muted"
-                aria-label="Share trip"
-              >
-                <Share2 size={14} />
-                Share
-              </button>
-              <Button
-                className="rounded-full bg-primary px-5 py-1.5 text-sm font-semibold text-white hover:bg-primary-strong"
-                onClick={() => setEditingTrip(true)}
-                aria-label="Edit trip"
-              >
-                <Pencil className="mr-1.5 h-3.5 w-3.5" />
-                Edit Trip
-              </Button>
+          <div className="space-y-4">
+            {/* Title row */}
+            <div className="flex items-start gap-4">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/80 shadow-sm ring-1 ring-brand/10">
+                <MapPin size={28} className="text-brand" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h1 className="text-3xl font-bold tracking-tight text-foreground">
+                  {trip.name}
+                </h1>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {dateDisplay && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-white/70 px-3 py-1 text-xs font-medium text-brand-strong shadow-sm ring-1 ring-brand/10">
+                      <Calendar size={12} />
+                      {dateDisplay}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-white/80 px-4 py-2 text-sm font-medium text-foreground shadow-sm ring-1 ring-border transition-colors hover:bg-white"
+                  aria-label="Share trip"
+                >
+                  <Share2 size={14} />
+                  Share
+                </button>
+                <Button
+                  className="rounded-full bg-primary px-5 py-2 text-sm font-semibold text-white shadow-md hover:bg-primary-strong"
+                  onClick={() => setEditingTrip(true)}
+                  aria-label="Edit trip"
+                >
+                  <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                  Edit Trip
+                </Button>
+              </div>
             </div>
+
+            {/* Quick stats + avatars row */}
+            <div className="flex items-center gap-3">
+              {/* Quick stats */}
+              <div className="flex items-center gap-1.5 rounded-lg bg-white/60 px-3 py-1.5 text-xs text-muted-foreground ring-1 ring-border/50">
+                <MapPin size={11} className="text-brand" />
+                <span className="font-semibold text-foreground">
+                  {locations.length}
+                </span>{" "}
+                {locations.length === 1 ? "place" : "places"}
+              </div>
+              {itinerary && itinerary.days.length > 0 && (
+                <div className="flex items-center gap-1.5 rounded-lg bg-white/60 px-3 py-1.5 text-xs text-muted-foreground ring-1 ring-border/50">
+                  <Calendar size={11} className="text-brand" />
+                  <span className="font-semibold text-foreground">
+                    {itinerary.days.length}
+                  </span>{" "}
+                  days
+                </div>
+              )}
+              {itinerary &&
+                (() => {
+                  const cities = new Set<string>();
+                  itinerary.days.forEach((day) =>
+                    day.options.forEach((opt) => {
+                      if (opt.starting_city) cities.add(opt.starting_city);
+                      if (opt.ending_city) cities.add(opt.ending_city);
+                    })
+                  );
+                  return cities.size > 0 ? (
+                    <div className="flex items-center gap-1.5 rounded-lg bg-white/60 px-3 py-1.5 text-xs text-muted-foreground ring-1 ring-border/50">
+                      <Route size={11} className="text-brand" />
+                      <span className="font-semibold text-foreground">
+                        {cities.size}
+                      </span>{" "}
+                      {cities.size === 1 ? "city" : "cities"}
+                    </div>
+                  ) : null;
+                })()}
+
+              <div className="flex-1" />
+
+              {/* Travelers */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 rounded-lg bg-white/60 px-3 py-1.5 text-xs text-muted-foreground ring-1 ring-border/50 transition-colors hover:bg-white hover:text-foreground"
+                  >
+                    <Users size={13} className="text-brand" />
+                    <div className="flex -space-x-1.5">
+                      {Array.from(addedByEmails)
+                        .slice(0, 3)
+                        .map((email) => (
+                          <div
+                            key={email}
+                            className="flex h-6 w-6 items-center justify-center rounded-full bg-brand/15 text-[9px] font-bold uppercase text-brand ring-2 ring-white"
+                            title={email}
+                          >
+                            {email[0]}
+                          </div>
+                        ))}
+                      {addedByEmails.size === 0 && (
+                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-brand/15 ring-2 ring-white">
+                          <User size={10} className="text-brand" />
+                        </div>
+                      )}
+                      {addedByEmails.size > 3 && (
+                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-[9px] font-bold text-muted-foreground ring-2 ring-white">
+                          +{addedByEmails.size - 3}
+                        </div>
+                      )}
+                    </div>
+                    <span className="font-medium">
+                      {addedByEmails.size || 1}
+                    </span>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-64 p-0">
+                  <div className="border-b px-3 py-2.5">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      Travelers
+                    </h4>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto py-1">
+                    {addedByEmails.size === 0 && (
+                      <div className="px-3 py-2 text-xs text-muted-foreground">
+                        No travelers yet
+                      </div>
+                    )}
+                    {Array.from(addedByEmails).map((email) => (
+                      <div
+                        key={email}
+                        className="flex items-center gap-2.5 px-3 py-1.5"
+                      >
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand/15 text-[10px] font-bold uppercase text-brand">
+                          {email[0]}
+                        </div>
+                        <span className="min-w-0 truncate text-sm text-foreground">
+                          {email}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="border-t px-3 py-2">
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-brand transition-colors hover:bg-brand/10"
+                      onClick={() => {
+                        /* TODO: invite flow */
+                      }}
+                    >
+                      <Plus size={14} />
+                      Invite traveler
+                    </button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            {/* Trip progress bar */}
+            {itinerary &&
+              itinerary.days.length > 0 &&
+              (() => {
+                const totalDays = itinerary.days.length;
+                const plannedDays = itinerary.days.filter((day) =>
+                  day.options.some((opt) => opt.locations.length > 0)
+                ).length;
+                const pct = Math.round((plannedDays / totalDays) * 100);
+                return (
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                      <span>Planning progress</span>
+                      <span>
+                        {plannedDays}/{totalDays} days ·{" "}
+                        <span className="text-brand">{pct}%</span>
+                      </span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-border/50">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-brand to-brand-strong transition-all duration-500"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })()}
           </div>
         )}
-      </div>
 
-      {/* Tabs: Locations | Itinerary */}
-      <div className="border-b border-border">
-        <nav className="flex gap-6" role="tablist" aria-label="Trip sections">
+        {/* Tabs inside the banner */}
+        <nav
+          className="mt-5 flex gap-2"
+          role="tablist"
+          aria-label="Trip sections"
+        >
           <button
             type="button"
             role="tab"
@@ -461,16 +618,18 @@ export default function TripDetailPage() {
             aria-controls="tab-panel-locations"
             id="tab-locations"
             className={cn(
-              "border-b-[3px] pb-3 text-xs font-semibold uppercase tracking-wider transition-colors",
+              "rounded-full px-5 py-2 text-sm font-semibold tracking-wide transition-all",
               activeTab === "locations"
-                ? "border-brand text-brand"
-                : "border-transparent text-muted-foreground hover:text-foreground"
+                ? "bg-brand text-white shadow-md"
+                : "bg-white/70 text-muted-foreground ring-1 ring-border hover:bg-white hover:text-foreground"
             )}
             onClick={() => setActiveTab("locations")}
           >
             Locations
             {locations.length > 0 && (
-              <span className="ml-1.5">({locations.length})</span>
+              <span className="ml-1.5 text-xs opacity-80">
+                {locations.length}
+              </span>
             )}
           </button>
           <button
@@ -480,10 +639,10 @@ export default function TripDetailPage() {
             aria-controls="tab-panel-itinerary"
             id="tab-itinerary"
             className={cn(
-              "border-b-[3px] pb-3 text-xs font-semibold uppercase tracking-wider transition-colors",
+              "rounded-full px-5 py-2 text-sm font-semibold tracking-wide transition-all",
               activeTab === "itinerary"
-                ? "border-brand text-brand"
-                : "border-transparent text-muted-foreground hover:text-foreground"
+                ? "bg-brand text-white shadow-md"
+                : "bg-white/70 text-muted-foreground ring-1 ring-border hover:bg-white hover:text-foreground"
             )}
             onClick={() => setActiveTab("itinerary")}
           >

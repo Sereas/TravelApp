@@ -431,7 +431,7 @@ describe("TripDetailPage", () => {
 
     await screen.findByText("Eiffel Tower");
     const locationsTab = screen.getByRole("tab", { name: /locations/i });
-    expect(locationsTab).toHaveTextContent("(2)");
+    expect(locationsTab).toHaveTextContent("2");
   });
 
   it("shows category filter chips when 2+ categories exist", async () => {
@@ -807,8 +807,8 @@ describe("TripDetailPage", () => {
     expect(await screen.findByText("Mon, Jun 1")).toBeInTheDocument();
     expect(screen.getByText("Eiffel Tower")).toBeInTheDocument();
     expect(screen.getByText("Louvre Museum")).toBeInTheDocument();
-    expect(screen.getByText(/morning/i)).toBeInTheDocument();
-    expect(screen.getByText(/afternoon/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/morning/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/afternoon/i).length).toBeGreaterThan(0);
   });
 
   it("calls updateOptionLocation when time period is changed in itinerary", async () => {
@@ -920,7 +920,7 @@ describe("TripDetailPage", () => {
     await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
 
     expect(await screen.findByText("Mon, Jun 1")).toBeInTheDocument();
-    expect(screen.getByText(/no locations planned yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/no stops planned yet/i)).toBeInTheDocument();
   });
 
   // --- Slice 14: Add day and generate days ---

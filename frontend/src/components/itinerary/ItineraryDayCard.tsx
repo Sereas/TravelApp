@@ -703,7 +703,7 @@ export function ItineraryDayCard({
                   {showMap ? (
                     <div className="rounded-lg border border-border bg-muted/20 p-4">
                       <div className="mb-2 flex items-center justify-between">
-                        <span className="font-serif text-xs font-semibold text-foreground">
+                        <span className="text-xs font-bold text-foreground">
                           Map
                         </span>
                         <button

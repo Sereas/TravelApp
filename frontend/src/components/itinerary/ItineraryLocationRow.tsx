@@ -103,12 +103,12 @@ function formatSegmentMetrics(
     !segment ||
     (segment.duration_seconds == null && segment.distance_meters == null)
   ) {
-    return "— min · — km";
+    return "-- --";
   }
   const dur =
     segment.duration_seconds != null
       ? formatDuration(segment.duration_seconds)
-      : "— min";
+      : "--";
   const dist =
     segment.distance_meters != null
       ? (() => {
@@ -116,8 +116,8 @@ function formatSegmentMetrics(
           const decimals = km >= 10 ? 0 : 1;
           return `${km.toFixed(decimals)} km`;
         })()
-      : "— km";
-  return `${dur} · ${dist}`;
+      : "--";
+  return `${dur} / ${dist}`;
 }
 
 interface RouteInfo {
@@ -267,11 +267,11 @@ export function ItineraryLocationRow({
       >
         <div
           className={cn(
-            "group flex items-center gap-3 rounded-xl border border-transparent px-2 py-2 text-sm transition-all duration-200",
+            "group flex items-center gap-3 rounded-xl border px-2 py-2 text-sm transition-all duration-200",
             isDrag && "opacity-40",
             expanded
-              ? "bg-accent/30 shadow-sm"
-              : "bg-white/70 hover:border-border hover:bg-accent/10 hover:-translate-y-px hover:shadow-sm motion-reduce:hover:translate-y-0 dark:bg-card/70"
+              ? "border-primary/20 bg-primary/5 shadow-sm"
+              : "border-white/80 bg-white hover:-translate-y-px hover:border-primary/10 hover:shadow-md motion-reduce:hover:translate-y-0 dark:border-card dark:bg-card"
           )}
         >
           <button
@@ -283,64 +283,68 @@ export function ItineraryLocationRow({
             }}
             aria-expanded={expanded}
           >
-            <div className="polaroid-img relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-muted">
-              {imageUrl ? (
-                <img
-                  src={imageUrl}
-                  alt={optionLocation.location.name}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center bg-brand-muted/30">
-                  {optionLocation.location.category ? (
-                    <CategoryIcon
-                      category={optionLocation.location.category as CategoryKey}
-                      size={18}
-                      className="text-muted-foreground/60"
-                    />
-                  ) : (
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/60">
-                      Spot
+            <div className="relative shrink-0">
+              <div className="polaroid-img vintage-img relative h-16 w-16 overflow-hidden rounded-lg bg-muted">
+                {imageUrl ? (
+                  <img
+                    src={imageUrl}
+                    alt={optionLocation.location.name}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center bg-primary/5">
+                    {optionLocation.location.category ? (
+                      <CategoryIcon
+                        category={
+                          optionLocation.location.category as CategoryKey
+                        }
+                        size={20}
+                        className="text-primary/40"
+                      />
+                    ) : (
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/40">
+                        Spot
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+              {routeInfos.length > 0 && (
+                <span className="absolute -bottom-1 -right-1 inline-flex items-center gap-px rounded-full bg-white p-0.5 shadow-sm">
+                  {routeInfos.map((info) => (
+                    <span
+                      key={info.route.route_id}
+                      className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 text-[7px] font-bold"
+                      style={{
+                        borderColor: info.color.hex,
+                        color: info.color.hex,
+                      }}
+                      title={`${info.route.transport_mode} route, stop ${info.idx + 1}`}
+                    >
+                      {info.idx + 1}
                     </span>
-                  )}
-                </div>
+                  ))}
+                </span>
               )}
             </div>
-            {routeInfos.length > 0 && (
-              <span className="inline-flex shrink-0 items-center gap-0.5">
-                {routeInfos.map((info) => (
-                  <span
-                    key={info.route.route_id}
-                    className="inline-flex h-3 w-3 items-center justify-center rounded-full border text-[7px] font-semibold opacity-75"
-                    style={{
-                      borderColor: info.color.hex,
-                      color: info.color.hex,
-                    }}
-                    title={`${info.route.transport_mode} route, stop ${info.idx + 1}`}
-                  >
-                    {info.idx + 1}
-                  </span>
-                ))}
-              </span>
-            )}
             <div className="min-w-0 flex-1">
-              <div className="truncate font-medium text-foreground">
+              <div className="truncate font-bold text-foreground">
                 {optionLocation.location.name}
               </div>
-              <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground/70">
+              <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 {optionLocation.location.city ? (
                   <span className="truncate">
                     {optionLocation.location.city}
                   </span>
                 ) : null}
                 {optionLocation.location.category ? (
-                  <span className="rounded-full bg-brand-muted/40 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  <span className="rounded-full bg-primary/8 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary/70">
                     {optionLocation.location.category}
                   </span>
                 ) : null}
               </div>
               {optionLocation.location.note ? (
-                <div className="mt-1 whitespace-pre-wrap border-l-2 border-primary/20 pl-2 text-xs leading-5 text-muted-foreground/80">
+                <div className="journal-note mt-1 text-xs leading-5 text-muted-foreground/70">
                   {optionLocation.location.note}
                 </div>
               ) : null}
@@ -350,7 +354,7 @@ export function ItineraryLocationRow({
           {showBooking && (
             <span
               className={cn(
-                "inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium",
+                "inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-bold",
                 booking === "yes_done"
                   ? "border-booking-done-border bg-booking-done-bg text-booking-done-text"
                   : "border-booking-pending-border bg-booking-pending-bg text-booking-pending-text"
@@ -385,7 +389,7 @@ export function ItineraryLocationRow({
           >
             <button
               type="button"
-              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-transparent bg-muted/60 px-2 py-1 text-[10px] text-muted-foreground transition-colors hover:border-border hover:bg-accent/70 hover:text-foreground"
+              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-transparent bg-muted/60 px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-primary/20 hover:bg-primary/5 hover:text-foreground"
               onClick={() => onToggleTimePicker(optionLocation.location_id)}
               aria-label={`Time: ${tm.label}`}
             >
@@ -417,16 +421,20 @@ export function ItineraryLocationRow({
         {expanded &&
           (optionLocation.location.address ||
             optionLocation.location.working_hours) && (
-            <div className="mb-1 ml-1 mr-4 space-y-1 rounded-b-lg bg-accent/15 px-3 py-2 text-xs">
+            <div className="mb-1 ml-1 mr-4 space-y-1 rounded-b-lg bg-primary/5 px-3 py-2 text-xs">
               {optionLocation.location.address && (
                 <div>
-                  <span className="text-muted-foreground">Address:</span>{" "}
+                  <span className="font-bold text-muted-foreground">
+                    Address:
+                  </span>{" "}
                   {optionLocation.location.address}
                 </div>
               )}
               {optionLocation.location.working_hours && (
                 <div>
-                  <span className="text-muted-foreground">Hours:</span>{" "}
+                  <span className="font-bold text-muted-foreground">
+                    Hours:
+                  </span>{" "}
                   <span className="whitespace-pre-wrap">
                     {formatHoursLines(
                       optionLocation.location.working_hours
@@ -470,7 +478,7 @@ export function ItineraryLocationRow({
                       size="sm"
                       className="inline-block h-3 w-3 align-middle"
                     />{" "}
-                    Calculating…
+                    Calculating...
                   </>
                 ) : (
                   formatSegmentMetrics(info.route.segments?.[info.idx])

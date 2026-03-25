@@ -49,7 +49,7 @@ function AutosaveInput({
         }
       }}
       className={cn(
-        "h-7 rounded border border-transparent bg-transparent px-1.5 text-sm transition-colors hover:border-input focus:border-input focus:bg-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+        "h-7 rounded border border-transparent bg-transparent px-1.5 text-sm font-medium transition-colors hover:border-input focus:border-input focus:bg-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
         className
       )}
     />
@@ -113,7 +113,11 @@ export function ItineraryDayHeader({
   return (
     <div className="flex items-start gap-3">
       <div className="min-w-0 flex-1">
-        <div className="h-0.5 w-16 rounded-full bg-gradient-to-r from-primary/40 to-transparent mb-2" />
+        <div className="mb-2 flex h-1 w-20 gap-1">
+          <div className="h-full flex-1 rounded-full bg-primary" />
+          <div className="h-full w-2 rounded-full bg-brand" />
+          <div className="h-full w-1 rounded-full bg-brand" />
+        </div>
         <div className="flex items-center gap-1.5">
           {editingDate ? (
             <input
@@ -147,7 +151,7 @@ export function ItineraryDayHeader({
             />
           ) : (
             <>
-              <h3 className="font-serif text-2xl font-bold tracking-tight text-foreground">
+              <h3 className="text-2xl font-bold tracking-tight text-foreground">
                 {dayLabel}
               </h3>
               <button
@@ -163,10 +167,10 @@ export function ItineraryDayHeader({
         </div>
 
         {currentOption && (
-          <div className="mt-1.5 flex items-center gap-1.5 text-sm text-muted-foreground">
+          <div className="mt-2 flex items-center gap-1.5 text-sm text-muted-foreground">
             <AutosaveInput
               id={`sc-${currentOption.id}`}
-              placeholder="Start city"
+              placeholder="Departure"
               initialValue={currentOption.starting_city ?? ""}
               onSave={async (value) => {
                 const nextValue = value || null;
@@ -183,7 +187,7 @@ export function ItineraryDayHeader({
             />
             <AutosaveInput
               id={`ec-${currentOption.id}`}
-              placeholder="End city"
+              placeholder="Arrival"
               initialValue={currentOption.ending_city ?? ""}
               onSave={async (value) => {
                 const nextValue = value || null;

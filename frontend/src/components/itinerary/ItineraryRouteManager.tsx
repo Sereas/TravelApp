@@ -16,6 +16,7 @@ import {
   Trash2,
   Car,
   TrainFront,
+  Navigation,
 } from "lucide-react";
 
 const TRANSPORT = [
@@ -68,12 +69,12 @@ function formatDuration(seconds: number): string {
 function formatRouteTotalDuration(route: {
   duration_seconds?: number | null;
 }): string {
-  if (route.duration_seconds == null) return "— min";
+  if (route.duration_seconds == null) return "-- min";
   return formatDuration(route.duration_seconds);
 }
 
 function formatDistance(meters: number | null | undefined): string {
-  if (meters == null) return "— km";
+  if (meters == null) return "-- km";
   const km = meters / 1000;
   const decimals = km >= 10 ? 0 : 1;
   return `${km.toFixed(decimals)} km`;
@@ -124,13 +125,16 @@ export function ItineraryRouteManager({
   return (
     <section className="mt-5 rounded-2xl border border-border/70 bg-muted/20 px-3 py-3">
       <div className="mb-2 flex items-center justify-between gap-3">
-        <div>
-          <div className="font-serif text-sm font-semibold text-foreground">
-            Journey
+        <div className="flex items-center gap-2">
+          <Navigation size={14} className="text-brand" />
+          <div>
+            <div className="text-xs font-bold uppercase tracking-widest text-brand">
+              Logistics
+            </div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Routes between stops
+            </p>
           </div>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Routes between your stops
-          </p>
         </div>
         {sortedLocations.length >= 2 && !isPickMode && (
           <Button
@@ -171,35 +175,32 @@ export function ItineraryRouteManager({
 
             return (
               <div key={route.route_id} className="space-y-0">
-                {/* Summary row */}
+                {/* Ticket-style route card */}
                 <div
                   className={cn(
-                    "flex items-center gap-2 border border-white/80 border-l-[3px] px-2.5 py-2 text-xs shadow-sm",
-                    isExpanded
-                      ? "rounded-t-lg rounded-tr-2xl"
-                      : "rounded-lg rounded-r-2xl",
-                    color.bar,
-                    color.bg
+                    "ticket-card flex items-center gap-2 border-l-[4px] pl-4 pr-6 py-2.5 text-xs",
+                    isExpanded ? "rounded-t-xl" : "rounded-xl",
+                    color.bar
                   )}
                 >
-                  <Icon size={12} className={cn("shrink-0", color.text)} />
+                  <Icon size={14} className={cn("shrink-0", color.text)} />
                   <button
                     type="button"
                     className={cn(
-                      "min-w-0 flex-1 truncate text-left font-medium",
+                      "min-w-0 flex-1 truncate text-left font-bold",
                       color.text
                     )}
-                    title={stopNames.join(" → ")}
+                    title={stopNames.join(" > ")}
                     onClick={() =>
                       setExpandedRouteId(isExpanded ? null : route.route_id)
                     }
                   >
-                    {stopNames.join(" → ")}
+                    {stopNames.join(" > ")}
                   </button>
                   {isCalculating && (
                     <span className="flex shrink-0 items-center gap-1 text-muted-foreground">
                       <LoadingSpinner size="sm" className="shrink-0" />
-                      <span>Calculating…</span>
+                      <span>Calculating...</span>
                     </span>
                   )}
                   {!isCalculating && metricsError && (
@@ -230,8 +231,8 @@ export function ItineraryRouteManager({
                     </span>
                   )}
                   {!isCalculating && !metricsError && (
-                    <span className="shrink-0 text-muted-foreground">
-                      {formatRouteTotalDuration(route)} ·{" "}
+                    <span className="shrink-0 font-medium text-muted-foreground">
+                      {formatRouteTotalDuration(route)} /{" "}
                       {formatRouteTotalDistance(route)}
                       {route.route_status === "error" && (
                         <span
@@ -283,10 +284,8 @@ export function ItineraryRouteManager({
                 {isExpanded && hasSegments && (
                   <div
                     className={cn(
-                      "rounded-b-lg rounded-br-2xl border border-t-0 border-white/80 border-l-[3px] px-3 pb-2.5 pt-1",
-                      color.bar,
-                      color.bg,
-                      "bg-opacity-50"
+                      "rounded-b-xl border border-t-0 border-white/80 border-l-[4px] px-3 pb-2.5 pt-1 bg-white/60",
+                      color.bar
                     )}
                   >
                     {stopNames.map((name, i) => {
@@ -301,7 +300,7 @@ export function ItineraryRouteManager({
                               size={10}
                               className={cn("shrink-0", color.text)}
                             />
-                            <span className="truncate text-xs font-medium text-foreground">
+                            <span className="truncate text-xs font-bold text-foreground">
                               {name}
                             </span>
                           </div>
@@ -316,8 +315,8 @@ export function ItineraryRouteManager({
                               <span className="text-[11px] text-muted-foreground">
                                 {segment.duration_seconds != null
                                   ? formatDuration(segment.duration_seconds)
-                                  : "—"}
-                                {" · "}
+                                  : "--"}
+                                {" / "}
                                 {formatDistance(segment.distance_meters)}
                               </span>
                             </div>
@@ -329,7 +328,7 @@ export function ItineraryRouteManager({
                                 className="shrink-0 text-muted-foreground/50"
                               />
                               <span className="text-[11px] text-muted-foreground/50">
-                                — min · — km
+                                -- min / -- km
                               </span>
                             </div>
                           )}
@@ -347,9 +346,9 @@ export function ItineraryRouteManager({
       {routes.length === 0 && !isPickMode && (
         <div className="rounded-xl border border-dashed border-border bg-white/70 px-3 py-3 text-xs text-muted-foreground dark:bg-card/70">
           <span className="inline-flex items-center gap-2">
-            <span className="inline-block h-px w-4 bg-muted-foreground/20" />
+            <span className="inline-block h-px w-6 bg-primary/20" />
             No routes yet
-            <span className="inline-block h-px w-4 bg-muted-foreground/20" />
+            <span className="inline-block h-px w-6 bg-primary/20" />
           </span>
         </div>
       )}

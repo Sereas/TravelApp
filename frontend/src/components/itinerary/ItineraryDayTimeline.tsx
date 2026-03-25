@@ -58,7 +58,7 @@ const TIME_SECTIONS = [
   {
     key: "morning",
     label: "Morning",
-    displayLabel: "Sunrise",
+    displayLabel: "Morning",
     icon: Sunrise,
     accent:
       "text-time-morning-text bg-time-morning-bg border-time-morning-border",
@@ -67,7 +67,7 @@ const TIME_SECTIONS = [
   {
     key: "afternoon",
     label: "Afternoon",
-    displayLabel: "Midday",
+    displayLabel: "Afternoon",
     icon: Sun,
     accent:
       "text-time-afternoon-text bg-time-afternoon-bg border-time-afternoon-border",
@@ -76,7 +76,7 @@ const TIME_SECTIONS = [
   {
     key: "evening",
     label: "Evening",
-    displayLabel: "Sundown",
+    displayLabel: "Evening",
     icon: Sunset,
     accent:
       "text-time-evening-text bg-time-evening-bg border-time-evening-border",
@@ -85,7 +85,7 @@ const TIME_SECTIONS = [
   {
     key: "night",
     label: "Night",
-    displayLabel: "Late",
+    displayLabel: "Night",
     icon: Moon,
     accent: "text-time-night-text bg-time-night-bg border-time-night-border",
     wash: "bg-gradient-to-b from-time-night-bg/40 to-transparent",
@@ -119,20 +119,20 @@ export function ItineraryDayTimeline({
 }: ItineraryDayTimelineProps) {
   if (sorted.length === 0) {
     return (
-      <div className="py-8 flex flex-col items-center gap-3 text-muted-foreground/50">
-        <div className="flex gap-2 items-center">
+      <div className="flex flex-col items-center gap-3 py-8 text-muted-foreground/50">
+        <div className="flex items-center gap-2">
           <div className="flex flex-col items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full border-2 border-dashed border-muted-foreground/20" />
-            <div className="w-0.5 h-4 border-l border-dashed border-muted-foreground/15" />
-            <div className="w-2 h-2 rounded-full border-2 border-dashed border-muted-foreground/20" />
-            <div className="w-0.5 h-4 border-l border-dashed border-muted-foreground/15" />
-            <div className="w-2 h-2 rounded-full border-2 border-dashed border-muted-foreground/20" />
+            <div className="h-2 w-2 rounded-full border-2 border-dashed border-primary/20" />
+            <div className="h-4 w-0.5 border-l border-dashed border-primary/15" />
+            <div className="h-2 w-2 rounded-full border-2 border-dashed border-primary/20" />
+            <div className="h-4 w-0.5 border-l border-dashed border-primary/15" />
+            <div className="h-2 w-2 rounded-full border-2 border-dashed border-primary/20" />
           </div>
           <div className="ml-2">
-            <p className="font-serif text-sm text-muted-foreground/60">
-              No locations planned yet
+            <p className="text-sm font-medium text-muted-foreground/50">
+              No stops planned yet
             </p>
-            <p className="mt-0.5 text-xs text-muted-foreground/40">
+            <p className="mt-0.5 text-xs text-muted-foreground/30">
               Add places from the unscheduled panel
             </p>
           </div>
@@ -167,14 +167,14 @@ export function ItineraryDayTimeline({
             <div className="mb-2 flex items-center justify-between gap-3">
               <div
                 className={cn(
-                  "inline-flex items-center gap-2 rounded-full border px-2.5 py-1 font-serif text-xs font-semibold",
+                  "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-widest",
                   section.accent
                 )}
               >
                 <SectionIcon size={13} />
                 {section.displayLabel}
               </div>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-xs font-medium text-muted-foreground">
                 {section.items.length}{" "}
                 {section.items.length === 1 ? "stop" : "stops"}
               </span>
@@ -267,7 +267,7 @@ export function ItineraryDayTimeline({
           className={cn(
             "mx-9 mt-0.5 h-7 rounded-md border-2 border-dashed transition-colors",
             dropId === "__end__"
-              ? "border-primary bg-accent/30"
+              ? "border-primary bg-primary/10"
               : "border-muted-foreground/20"
           )}
           onDragOver={(e) => {

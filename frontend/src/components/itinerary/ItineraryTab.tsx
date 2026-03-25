@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import type { Location, Trip } from "@/lib/api";
 import type { useItineraryState } from "@/features/itinerary/useItineraryState";
 import { cn } from "@/lib/utils";
+import { Crosshair } from "lucide-react";
 
 type ItineraryState = ReturnType<typeof useItineraryState>;
 
@@ -128,7 +129,7 @@ export function ItineraryTab({
                 disabled={addDayLoading || generateDaysLoading}
               >
                 {generateDaysLoading
-                  ? "Generating…"
+                  ? "Generating..."
                   : "Generate days from dates"}
               </Button>
             ) : (
@@ -136,7 +137,7 @@ export function ItineraryTab({
                 onClick={handleAddDay}
                 disabled={addDayLoading || generateDaysLoading}
               >
-                {addDayLoading ? "Adding…" : "Add day"}
+                {addDayLoading ? "Adding..." : "Add day"}
               </Button>
             )}
           </div>
@@ -148,13 +149,18 @@ export function ItineraryTab({
         itinerary.days.length > 0 && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <div>
-                <h2 className="font-serif text-2xl font-bold tracking-tight text-foreground">
-                  Planner
-                </h2>
-                <p className="mt-0.5 text-sm text-muted-foreground">
-                  Your day-by-day travel journal
-                </p>
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 ring-1 ring-brand/20">
+                  <Crosshair size={20} className="text-brand" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold tracking-tight text-foreground">
+                    Your adventure
+                  </h2>
+                  <p className="mt-0.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Plan day by day
+                  </p>
+                </div>
               </div>
               {trip.start_date && trip.end_date ? (
                 (() => {
@@ -183,7 +189,7 @@ export function ItineraryTab({
                       disabled={addDayLoading || generateDaysLoading}
                     >
                       {generateDaysLoading
-                        ? "Generating…"
+                        ? "Generating..."
                         : "Generate missing days"}
                     </Button>
                   ) : null;
@@ -194,7 +200,7 @@ export function ItineraryTab({
                   onClick={handleAddDay}
                   disabled={addDayLoading || generateDaysLoading}
                 >
-                  {addDayLoading ? "Adding…" : "Add day"}
+                  {addDayLoading ? "Adding..." : "Add day"}
                 </Button>
               )}
             </div>

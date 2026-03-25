@@ -52,14 +52,16 @@ export function UnscheduledLocationsPanel({
   const hiddenCount = filtered.length - COLLAPSED_COUNT;
 
   return (
-    <aside className="rounded-2xl border border-border bg-card p-4">
+    <aside className="grain-overlay overflow-hidden rounded-2xl border border-border bg-card p-4">
       <div className="mb-2 flex items-center justify-between">
-        <div className="flex items-center gap-2 font-serif text-sm font-semibold text-foreground">
-          <Inbox size={16} className="text-primary/60" />
-          Not yet planned
+        <div className="flex items-center gap-2">
+          <Inbox size={14} className="text-brand" />
+          <span className="text-xs font-bold uppercase tracking-widest text-brand">
+            Not yet planned
+          </span>
         </div>
         {unscheduled.length > 0 && (
-          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+          <span className="stamp-badge text-[10px] text-primary">
             {unscheduled.length}
           </span>
         )}
@@ -67,8 +69,8 @@ export function UnscheduledLocationsPanel({
 
       {unscheduled.length === 0 ? (
         <div className="py-4 text-center">
-          <Compass size={20} className="mx-auto mb-1.5 text-brand/40" />
-          <p className="font-serif text-xs text-muted-foreground/60">
+          <Compass size={24} className="mx-auto mb-2 text-brand/40" />
+          <p className="text-xs text-muted-foreground/60">
             All places planned!
           </p>
         </div>
@@ -88,7 +90,7 @@ export function UnscheduledLocationsPanel({
                   setExpanded(false);
                 }}
                 placeholder="Filter places..."
-                className="w-full rounded-lg border border-border bg-white py-1.5 pl-8 pr-3 text-xs text-foreground placeholder:text-muted-foreground/40 focus:border-brand/40 focus:outline-none"
+                className="w-full rounded-lg border border-border bg-white py-1.5 pl-8 pr-3 text-xs text-foreground placeholder:text-muted-foreground/40 focus:border-primary/40 focus:outline-none"
               />
             </div>
           )}
@@ -97,11 +99,11 @@ export function UnscheduledLocationsPanel({
             {visible.map((location) => (
               <div
                 key={location.id}
-                className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-muted/40"
+                className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-primary/5"
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5 text-[13px] leading-tight">
-                    <span className="truncate font-medium text-foreground">
+                    <span className="truncate font-bold text-foreground">
                       {location.name}
                     </span>
                     {location.city && (
@@ -115,7 +117,7 @@ export function UnscheduledLocationsPanel({
                 {currentDayId && (
                   <button
                     type="button"
-                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-brand/20 bg-brand-muted/30 text-brand transition-colors hover:bg-brand hover:text-white"
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-primary/30 text-primary transition-colors hover:border-primary hover:bg-primary hover:text-white"
                     aria-label={`Add ${location.name}`}
                     title="Add to current day"
                     onClick={(event) => {
@@ -133,7 +135,7 @@ export function UnscheduledLocationsPanel({
           {needsCollapse && !expanded && hiddenCount > 0 && (
             <button
               type="button"
-              className="mt-1 flex w-full items-center justify-center gap-1 rounded-lg py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+              className="mt-1 flex w-full items-center justify-center gap-1 rounded-lg py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground"
               onClick={() => setExpanded(true)}
             >
               Show {hiddenCount} more
@@ -144,7 +146,7 @@ export function UnscheduledLocationsPanel({
           {expanded && needsCollapse && (
             <button
               type="button"
-              className="mt-1 flex w-full items-center justify-center gap-1 rounded-lg py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+              className="mt-1 flex w-full items-center justify-center gap-1 rounded-lg py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground"
               onClick={() => setExpanded(false)}
             >
               Show less
