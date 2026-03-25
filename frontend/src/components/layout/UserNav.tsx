@@ -28,7 +28,7 @@ export function UserNav() {
     return () => subscription.unsubscribe();
   }, []);
 
-  if (!user || pathname.startsWith("/shared/")) return null;
+  if (!user || pathname?.startsWith("/shared/")) return null;
 
   async function handleLogout() {
     const supabase = createBrowserClient();
