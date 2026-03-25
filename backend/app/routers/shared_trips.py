@@ -190,6 +190,6 @@ async def revoke_trip_share(
     """Revoke all active shares for a trip."""
     _ensure_trip_owned(supabase, trip_id, user_id)
 
-    supabase.table("trip_shares").update({"is_active": False}).eq(
-        "trip_id", str(trip_id)
-    ).eq("is_active", True).execute()
+    supabase.table("trip_shares").update({"is_active": False}).eq("trip_id", str(trip_id)).eq(
+        "is_active", True
+    ).execute()
