@@ -92,6 +92,86 @@ $$;
 
 ALTER FUNCTION public.delete_empty_dateless_days(p_trip_id uuid) OWNER TO postgres;
 
+CREATE FUNCTION public.delete_location_cascade(p_trip_id uuid, p_location_id uuid) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    v_route_id   uuid;
+    v_stop_count integer;
+    v_total_dur  integer;
+    v_total_dist integer;
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM locations
+        WHERE location_id = p_location_id
+          AND trip_id     = p_trip_id
+    ) THEN
+        RAISE EXCEPTION 'LOCATION_NOT_FOUND';
+    END IF;
+
+    FOR v_route_id IN
+        SELECT DISTINCT rs.route_id
+        FROM route_stops rs
+        WHERE rs.location_id = p_location_id
+    LOOP
+        SELECT COUNT(*) INTO v_stop_count
+        FROM route_stops
+        WHERE route_id = v_route_id;
+
+        IF v_stop_count <= 2 THEN
+            DELETE FROM option_routes WHERE route_id = v_route_id;
+        ELSE
+            DELETE FROM route_segments
+            WHERE route_id = v_route_id
+              AND (from_location_id = p_location_id
+                   OR to_location_id = p_location_id);
+
+            DELETE FROM route_stops
+            WHERE route_id    = v_route_id
+              AND location_id = p_location_id;
+
+            WITH numbered AS (
+                SELECT route_id, location_id,
+                       ROW_NUMBER() OVER (ORDER BY stop_order) - 1 AS new_order
+                FROM route_stops
+                WHERE route_id = v_route_id
+            )
+            UPDATE route_stops rs
+            FROM numbered
+            WHERE rs.route_id    = numbered.route_id
+              AND rs.location_id = numbered.location_id;
+
+            WITH numbered AS (
+                SELECT id,
+                       ROW_NUMBER() OVER (ORDER BY segment_order) - 1 AS new_order
+                FROM route_segments
+                WHERE route_id = v_route_id
+            )
+            UPDATE route_segments seg
+            FROM numbered
+            WHERE seg.id = numbered.id;
+
+            SELECT COALESCE(SUM(sc.duration_seconds), 0),
+                   COALESCE(SUM(sc.distance_meters), 0)
+            INTO v_total_dur, v_total_dist
+            FROM route_segments rseg
+            JOIN segment_cache sc ON sc.id = rseg.segment_cache_id
+            WHERE rseg.route_id = v_route_id;
+
+            UPDATE option_routes
+                distance_meters  = v_total_dist
+            WHERE route_id = v_route_id;
+        END IF;
+    END LOOP;
+
+    DELETE FROM locations
+    WHERE location_id = p_location_id
+      AND trip_id     = p_trip_id;
+END;
+$$;
+
+ALTER FUNCTION public.delete_location_cascade(p_trip_id uuid, p_location_id uuid) OWNER TO postgres;
+
 CREATE FUNCTION public.get_itinerary_routes(p_option_ids uuid[]) RETURNS TABLE(route_id uuid, option_id uuid, label text, transport_mode text, duration_seconds integer, distance_meters integer, sort_order integer, stop_location_ids json, segments json)
     LANGUAGE sql STABLE SECURITY DEFINER
     AS $$
@@ -313,11 +393,13 @@ $$;
 ALTER FUNCTION public.reconcile_clear_dates(p_trip_id uuid, p_day_ids uuid[]) OWNER TO postgres;
 
 CREATE FUNCTION public.remove_location_from_option(p_option_id uuid, p_location_id uuid) RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER
+    LANGUAGE plpgsql
     AS $$
 DECLARE
     v_route_id   uuid;
     v_stop_count integer;
+    v_total_dur  integer;
+    v_total_dist integer;
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM option_locations
@@ -341,9 +423,46 @@ BEGIN
         IF v_stop_count <= 2 THEN
             DELETE FROM option_routes WHERE route_id = v_route_id;
         ELSE
+            DELETE FROM route_segments
+            WHERE route_id = v_route_id
+              AND (from_location_id = p_location_id
+                   OR to_location_id = p_location_id);
+
             DELETE FROM route_stops
             WHERE route_id   = v_route_id
               AND location_id = p_location_id;
+
+            WITH numbered AS (
+                SELECT route_id, location_id,
+                       ROW_NUMBER() OVER (ORDER BY stop_order) - 1 AS new_order
+                FROM route_stops
+                WHERE route_id = v_route_id
+            )
+            UPDATE route_stops rs
+            FROM numbered
+            WHERE rs.route_id    = numbered.route_id
+              AND rs.location_id = numbered.location_id;
+
+            WITH numbered AS (
+                SELECT id,
+                       ROW_NUMBER() OVER (ORDER BY segment_order) - 1 AS new_order
+                FROM route_segments
+                WHERE route_id = v_route_id
+            )
+            UPDATE route_segments seg
+            FROM numbered
+            WHERE seg.id = numbered.id;
+
+            SELECT COALESCE(SUM(sc.duration_seconds), 0),
+                   COALESCE(SUM(sc.distance_meters), 0)
+            INTO v_total_dur, v_total_dist
+            FROM route_segments rseg
+            JOIN segment_cache sc ON sc.id = rseg.segment_cache_id
+            WHERE rseg.route_id = v_route_id;
+
+            UPDATE option_routes
+                distance_meters  = v_total_dist
+            WHERE route_id = v_route_id;
         END IF;
     END LOOP;
 
@@ -538,7 +657,7 @@ CREATE TABLE public.locations (
     google_raw jsonb,
     added_by_email text,
     user_image_url text,
-    CONSTRAINT locations_category_check CHECK (((category IS NULL) OR ((category)::text = ANY ((ARRAY['Museum'::character varying, 'Restaurant'::character varying, 'Café'::character varying, 'Bar'::character varying, 'Walking around'::character varying, 'Excursion'::character varying, 'Accommodation'::character varying, 'Transport'::character varying, 'Shopping'::character varying, 'Park / nature'::character varying, 'Beach'::character varying, 'Viewpoint'::character varying, 'Event'::character varying, 'Other'::character varying])::text[])))),
+    CONSTRAINT locations_category_check CHECK (((category IS NULL) OR ((category)::text = ANY ((ARRAY['Accommodation'::character varying, 'Bar'::character varying, 'Beach'::character varying, 'Café'::character varying, 'Church'::character varying, 'City'::character varying, 'Event'::character varying, 'Excursion'::character varying, 'Hiking'::character varying, 'Historic site'::character varying, 'Market'::character varying, 'Museum'::character varying, 'Nature'::character varying, 'Nightlife'::character varying, 'Park'::character varying, 'Parking'::character varying, 'Restaurant'::character varying, 'Shopping'::character varying, 'Spa / Wellness'::character varying, 'Transport'::character varying, 'Viewpoint'::character varying, 'Walking around'::character varying, 'Other'::character varying])::text[])))),
     CONSTRAINT locations_requires_booking_check CHECK (((requires_booking IS NULL) OR ((requires_booking)::text = ANY ((ARRAY['no'::character varying, 'yes'::character varying, 'yes_done'::character varying])::text[]))))
 );
 
@@ -780,7 +899,7 @@ ALTER TABLE ONLY public.route_segments
     ADD CONSTRAINT route_segments_segment_cache_id_fkey FOREIGN KEY (segment_cache_id) REFERENCES public.segment_cache(id) ON DELETE RESTRICT;
 
 ALTER TABLE ONLY public.route_stops
-    ADD CONSTRAINT route_stops_location_id_fkey FOREIGN KEY (location_id) REFERENCES public.locations(location_id) ON DELETE RESTRICT;
+    ADD CONSTRAINT route_stops_location_id_fkey FOREIGN KEY (location_id) REFERENCES public.locations(location_id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.route_stops
     ADD CONSTRAINT route_stops_route_id_fkey FOREIGN KEY (route_id) REFERENCES public.option_routes(route_id) ON DELETE CASCADE;
@@ -966,6 +1085,10 @@ GRANT ALL ON FUNCTION public.delete_days_batch(p_trip_id uuid, p_day_ids uuid[])
 GRANT ALL ON FUNCTION public.delete_empty_dateless_days(p_trip_id uuid) TO anon;
 GRANT ALL ON FUNCTION public.delete_empty_dateless_days(p_trip_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.delete_empty_dateless_days(p_trip_id uuid) TO service_role;
+
+GRANT ALL ON FUNCTION public.delete_location_cascade(p_trip_id uuid, p_location_id uuid) TO anon;
+GRANT ALL ON FUNCTION public.delete_location_cascade(p_trip_id uuid, p_location_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.delete_location_cascade(p_trip_id uuid, p_location_id uuid) TO service_role;
 
 GRANT ALL ON FUNCTION public.get_itinerary_routes(p_option_ids uuid[]) TO anon;
 GRANT ALL ON FUNCTION public.get_itinerary_routes(p_option_ids uuid[]) TO authenticated;
