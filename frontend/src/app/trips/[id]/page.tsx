@@ -93,6 +93,7 @@ export default function TripDetailPage() {
   const [groupByPerson, setGroupByPerson] = useState(false);
   const [locationNameSearch, setLocationNameSearch] = useState("");
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [isPickMode, setIsPickMode] = useState(false);
 
   const [activeTab, setActiveTab] = useState<"locations" | "itinerary">(
     "locations"
@@ -408,7 +409,12 @@ export default function TripDetailPage() {
   return (
     <div>
       {/* Trip hero banner */}
-      <div className="grain-overlay -mx-4 -mt-4 overflow-hidden rounded-b-3xl bg-gradient-to-br from-brand/10 via-background to-primary/8 px-4 pb-6 pt-4 sm:-mx-6 sm:px-6 md:-mx-8 md:px-8">
+      <div
+        className={cn(
+          "grain-overlay -mx-4 -mt-4 overflow-hidden rounded-b-3xl bg-gradient-to-br from-brand/10 via-background to-primary/8 px-4 pb-6 pt-4 sm:-mx-6 sm:px-6 md:-mx-8 md:px-8 transition-opacity duration-300",
+          isPickMode && "opacity-20 pointer-events-none"
+        )}
+      >
         <button
           type="button"
           className="mb-4 -ml-1 inline-flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
@@ -619,7 +625,10 @@ export default function TripDetailPage() {
 
       {/* Sticky tabs bar */}
       <nav
-        className="sticky top-14 z-30 -mx-4 flex gap-2 border-b border-border/40 bg-background/95 px-4 py-3 backdrop-blur-sm sm:-mx-6 sm:px-6 md:-mx-8 md:px-8"
+        className={cn(
+          "sticky top-14 z-30 -mx-4 flex gap-2 border-b border-border/40 bg-background/95 px-4 py-3 backdrop-blur-sm sm:-mx-6 sm:px-6 md:-mx-8 md:px-8 transition-opacity duration-300",
+          isPickMode && "opacity-20 pointer-events-none"
+        )}
         role="tablist"
         aria-label="Trip sections"
       >
@@ -957,6 +966,7 @@ export default function TripDetailPage() {
             tripId={tripId}
             locations={locations}
             itineraryState={itineraryState}
+            onPickModeChange={setIsPickMode}
           />
         </div>
       )}

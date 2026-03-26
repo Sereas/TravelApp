@@ -212,6 +212,7 @@ export interface ItineraryDayCardProps {
   calculatingRouteId: string | null;
   routeMetricsError: Record<string, string>;
   onInspectLocation: (dayId: string, locationId: string) => void;
+  onPickModeChange?: (active: boolean) => void;
 }
 
 export function ItineraryDayCard({
@@ -237,6 +238,7 @@ export function ItineraryDayCard({
   calculatingRouteId,
   routeMetricsError,
   onInspectLocation,
+  onPickModeChange,
 }: ItineraryDayCardProps) {
   const readOnly = useReadOnly();
   const alreadyAdded = useMemo(
@@ -260,6 +262,10 @@ export function ItineraryDayCard({
   const [savingRoute, setSavingRoute] = useState(false);
 
   const isPickMode = creating || editingRouteId !== null;
+
+  useEffect(() => {
+    onPickModeChange?.(isPickMode);
+  }, [isPickMode, onPickModeChange]);
 
   function handleEditRoute(route: (typeof routes)[0]) {
     setEditingRouteId(route.route_id);
@@ -589,7 +595,12 @@ export function ItineraryDayCard({
     <>
       {tpPortal}
       <Card>
-        <CardHeader className="pb-2">
+        <CardHeader
+          className={cn(
+            "pb-2 transition-opacity duration-300",
+            isPickMode && "opacity-20"
+          )}
+        >
           <ItineraryDayHeader
             day={day}
             currentOption={currentOption}
@@ -609,7 +620,12 @@ export function ItineraryDayCard({
             <div key={currentOption.id} className="animate-page-flip">
               {/* Add locations */}
               {!readOnly && (
-                <div className="mb-3">
+                <div
+                  className={cn(
+                    "mb-3 transition-opacity duration-300",
+                    isPickMode && "opacity-20 pointer-events-none"
+                  )}
+                >
                   <AddLocationsToOptionDialog
                     trigger={
                       <Button
@@ -703,7 +719,12 @@ export function ItineraryDayCard({
 
               {/* Map — visible by default at bottom */}
               {mapLocations.length > 0 && (
-                <div className="mt-4">
+                <div
+                  className={cn(
+                    "mt-4 transition-opacity duration-300",
+                    isPickMode && "opacity-20 pointer-events-none"
+                  )}
+                >
                   {showMap ? (
                     <div className="rounded-lg border border-border bg-muted/20 p-4">
                       <div className="mb-2 flex items-center justify-between">
@@ -749,39 +770,32 @@ export function ItineraryDayCard({
         currentOption &&
         typeof document !== "undefined" &&
         createPortal(
-          <div className="fixed inset-x-0 bottom-0 z-50 border-t bg-background shadow-[0_-4px_20px_rgba(0,0,0,0.08)]">
-            <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-2.5">
-              {/* Left group: mode label + transport */}
-              <div className="flex shrink-0 items-center gap-2 rounded-lg bg-brand-muted/50 px-2.5 py-1.5 dark:bg-brand-muted/20">
-                <span className="text-xs font-semibold text-brand">
-                  {editingRouteId ? "Edit" : "Route"}
-                </span>
-                {PICK_TRANSPORT.map((mode) => {
-                  const MIcon = mode.icon;
-                  return (
-                    <button
-                      key={mode.key}
-                      type="button"
-                      className={cn(
-                        "rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors",
-                        pickTransport === mode.key
-                          ? "bg-brand text-brand-foreground shadow-sm"
-                          : "text-brand/60 hover:bg-brand/10 hover:text-brand"
-                      )}
-                      onClick={() => setPickTransport(mode.key)}
-                    >
-                      <MIcon size={11} className="mr-0.5 inline" />
-                      {mode.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Center: picked stops sequence */}
-              <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-lg border border-border bg-card px-2.5 py-1.5 scrollbar-hide">
+          <div className="fixed inset-x-0 bottom-0 z-50 border-t border-brand/20 bg-background/95 backdrop-blur-sm shadow-[0_-2px_12px_rgba(0,0,0,0.08)]">
+            <div className="mx-auto flex max-w-5xl items-center gap-2 px-3 py-1.5">
+              {PICK_TRANSPORT.map((mode) => {
+                const MIcon = mode.icon;
+                return (
+                  <button
+                    key={mode.key}
+                    type="button"
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all",
+                      pickTransport === mode.key
+                        ? "bg-brand text-white shadow-sm"
+                        : "text-muted-foreground hover:text-brand"
+                    )}
+                    onClick={() => setPickTransport(mode.key)}
+                  >
+                    <MIcon size={11} />
+                    {mode.label}
+                  </button>
+                );
+              })}
+              <div className="mx-1 h-4 w-px bg-border" />
+              <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-hide">
                 {pickIds.length === 0 ? (
-                  <span className="text-xs text-muted-foreground/50">
-                    Click stops to add…
+                  <span className="text-[11px] text-muted-foreground/50">
+                    Tap stops to build route
                   </span>
                 ) : (
                   pickIds.map((id, i) => {
@@ -794,18 +808,18 @@ export function ItineraryDayCard({
                         className="inline-flex shrink-0 items-center"
                       >
                         {i > 0 && (
-                          <span className="mx-1 text-[10px] text-muted-foreground/30">
+                          <span className="mx-0.5 text-[10px] text-muted-foreground/30">
                             →
                           </span>
                         )}
-                        <span className="inline-flex items-center gap-1 text-xs font-medium text-foreground">
-                          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-brand/15 text-[9px] font-bold text-brand">
+                        <span className="inline-flex items-center gap-0.5 rounded-full bg-brand/10 py-0.5 pl-0.5 pr-1.5 text-[11px] font-medium text-brand">
+                          <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-brand text-[8px] font-bold text-white">
                             {i + 1}
                           </span>
-                          <span className="max-w-[100px] truncate">{name}</span>
+                          <span className="max-w-[80px] truncate">{name}</span>
                           <button
                             type="button"
-                            className="rounded-full p-0.5 text-muted-foreground/40 transition-colors hover:bg-destructive/10 hover:text-destructive"
+                            className="rounded-full p-px text-brand/40 hover:text-destructive"
                             onClick={() =>
                               setPickIds((cur) =>
                                 cur.filter((pid) => pid !== id)
@@ -813,7 +827,7 @@ export function ItineraryDayCard({
                             }
                             aria-label={`Remove ${name}`}
                           >
-                            <X size={9} />
+                            <X size={8} />
                           </button>
                         </span>
                       </span>
@@ -821,35 +835,30 @@ export function ItineraryDayCard({
                   })
                 )}
               </div>
-
-              {/* Right group: actions */}
-              <div className="flex shrink-0 items-center gap-1.5">
-                {sorted.length >= 2 && pickIds.length < sorted.length && (
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                    onClick={() => setPickIds(sorted.map((l) => l.location_id))}
-                  >
-                    <ListOrdered size={10} />
-                    All
-                  </button>
-                )}
-                <Button
-                  size="sm"
-                  className="h-7 text-xs"
-                  disabled={pickIds.length < 2 || savingRoute}
-                  onClick={handleSaveRoute}
-                >
-                  {savingRoute ? "Saving…" : `Save (${pickIds.length})`}
-                </Button>
+              {sorted.length >= 2 && pickIds.length < sorted.length && (
                 <button
                   type="button"
-                  className="px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-                  onClick={handleCancelPick}
+                  className="shrink-0 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                  onClick={() => setPickIds(sorted.map((l) => l.location_id))}
                 >
-                  Cancel
+                  All
                 </button>
-              </div>
+              )}
+              <Button
+                size="sm"
+                className="h-7 shrink-0 rounded-full px-3 text-[11px] shadow-sm"
+                disabled={pickIds.length < 2 || savingRoute}
+                onClick={handleSaveRoute}
+              >
+                {savingRoute ? "Saving…" : `Save (${pickIds.length})`}
+              </Button>
+              <button
+                type="button"
+                className="shrink-0 text-[11px] text-muted-foreground hover:text-foreground"
+                onClick={handleCancelPick}
+              >
+                Cancel
+              </button>
             </div>
           </div>,
           document.body

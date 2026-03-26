@@ -183,8 +183,17 @@ export function ItineraryRouteManager({
       </div>
 
       {isPickMode && (
-        <div className="rounded-xl border border-dashed border-primary/30 bg-primary/5 px-3 py-2 text-xs text-primary/70">
-          Click stops above to add them to the route.
+        <div className="flex items-center gap-2 rounded-xl border border-brand/20 bg-brand/5 px-3 py-2.5">
+          <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand/15">
+            <Plus size={10} className="text-brand" />
+          </div>
+          <span className="text-xs font-medium text-brand/80">
+            Tap the{" "}
+            <span className="inline-flex h-4 w-4 translate-y-[3px] items-center justify-center rounded-full border border-dashed border-brand/40 text-[8px]">
+              +
+            </span>{" "}
+            buttons on stops above to build your route
+          </span>
         </div>
       )}
 

@@ -211,7 +211,12 @@ export function ItineraryLocationRow({
     : null;
 
   return (
-    <div className="flex gap-2">
+    <div
+      className={cn(
+        "flex gap-2 transition-opacity duration-300",
+        isPickMode && !picking && "opacity-70"
+      )}
+    >
       <div className="flex w-5 shrink-0 justify-center pt-2">
         {readOnly ? (
           <div className="w-5" />
@@ -220,13 +225,13 @@ export function ItineraryLocationRow({
             type="button"
             onClick={() => onTogglePick(optionLocation.location_id)}
             className={cn(
-              "flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold",
+              "flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold transition-all duration-200",
               picking
-                ? "bg-primary text-primary-foreground"
-                : "border-2 border-dashed border-muted-foreground/30 text-muted-foreground hover:border-primary"
+                ? "bg-brand text-white shadow-md shadow-brand/30 scale-110"
+                : "border-2 border-dashed border-brand/30 text-brand/50 hover:border-brand hover:text-brand hover:scale-110"
             )}
           >
-            {picking ? pickSeq : <Plus size={10} />}
+            {picking ? pickSeq : <Plus size={12} />}
           </button>
         ) : (
           <div
@@ -243,19 +248,35 @@ export function ItineraryLocationRow({
         )}
       </div>
 
-      <div className="flex w-4 shrink-0 flex-col items-center">
+      <div className="flex w-5 shrink-0 flex-col items-center">
         <div
-          className="h-3 w-0.5"
+          className={cn(
+            "flex-1 rounded-full transition-all duration-300",
+            topConnectorHex ? "w-[3px]" : "w-0"
+          )}
           style={{ backgroundColor: topConnectorHex ?? "transparent" }}
         />
         <div
           className={cn(
-            "h-3 w-3 shrink-0 rounded-full border-2 border-white shadow-sm",
-            catMeta?.bg ?? "bg-muted"
+            "shrink-0 rounded-full transition-all duration-300",
+            topConnectorHex || bottomConnectorHex
+              ? "h-3 w-3 ring-2 ring-white shadow-sm"
+              : "h-2 w-2 border border-border/40"
           )}
+          style={
+            topConnectorHex || bottomConnectorHex
+              ? {
+                  backgroundColor:
+                    topConnectorHex ?? bottomConnectorHex ?? undefined,
+                }
+              : undefined
+          }
         />
         <div
-          className="min-h-3 w-0.5 flex-1"
+          className={cn(
+            "flex-1 rounded-full transition-all duration-300",
+            bottomConnectorHex ? "w-[3px]" : "w-0"
+          )}
           style={{ backgroundColor: bottomConnectorHex ?? "transparent" }}
         />
       </div>
@@ -273,9 +294,11 @@ export function ItineraryLocationRow({
           className={cn(
             "group flex items-center gap-3 rounded-xl border px-2 py-2 text-sm transition-all duration-200",
             isDrag && "opacity-40",
-            expanded
-              ? "border-primary/20 bg-primary/5 shadow-sm"
-              : "border-white/80 bg-white hover:-translate-y-px hover:border-primary/10 hover:shadow-md motion-reduce:hover:translate-y-0 dark:border-card dark:bg-card"
+            isPickMode && picking
+              ? "border-brand/30 bg-brand/5 shadow-md shadow-brand/10 ring-1 ring-brand/20"
+              : expanded
+                ? "border-primary/20 bg-primary/5 shadow-sm"
+                : "border-white/80 bg-white hover:-translate-y-px hover:border-primary/10 hover:shadow-md motion-reduce:hover:translate-y-0 dark:border-card dark:bg-card"
           )}
         >
           <button

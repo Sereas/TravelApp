@@ -141,6 +141,30 @@ export function ItineraryDayTimeline({
     );
   }
 
+  // Build connector map: route stop N gets a top line if N > 0,
+  // and a bottom line if N < last stop.
+  const connectorMap = new Map<
+    string,
+    { top: string | null; bottom: string | null }
+  >();
+
+  for (const ol of sorted) {
+    const routeInfos = locRouteMap.get(ol.location_id) ?? [];
+    let top: string | null = null;
+    let bottom: string | null = null;
+
+    for (const info of routeInfos) {
+      if (!top && info.idx > 0) {
+        top = info.color.hex;
+      }
+      if (!bottom && info.idx < info.route.location_ids.length - 1) {
+        bottom = info.color.hex;
+      }
+    }
+
+    connectorMap.set(ol.location_id, { top, bottom });
+  }
+
   const groupedSections = TIME_SECTIONS.map((section) => ({
     ...section,
     items: sorted.filter(
@@ -182,9 +206,6 @@ export function ItineraryDayTimeline({
 
             <div className="space-y-0">
               {section.items.map((optionLocation) => {
-                const index = sorted.findIndex(
-                  (item) => item.location_id === optionLocation.location_id
-                );
                 const expanded = expandedId === optionLocation.location_id;
                 const isDrag = dragId === optionLocation.location_id;
                 const isDrop = dropId === optionLocation.location_id && !isDrag;
@@ -194,36 +215,9 @@ export function ItineraryDayTimeline({
                   isPickMode && pickIds.includes(optionLocation.location_id);
                 const pickSeq = pickIds.indexOf(optionLocation.location_id) + 1;
 
-                const prevOl = sorted[index - 1];
-                const nextOl = sorted[index + 1];
-
-                let topConnectorHex: string | null = null;
-                if (prevOl) {
-                  for (const info of routeInfos) {
-                    if (
-                      info.idx > 0 &&
-                      info.route.location_ids[info.idx - 1] ===
-                        prevOl.location_id
-                    ) {
-                      topConnectorHex = info.color.hex;
-                      break;
-                    }
-                  }
-                }
-
-                let bottomConnectorHex: string | null = null;
-                if (nextOl) {
-                  for (const info of routeInfos) {
-                    const nextIdx = info.idx + 1;
-                    if (
-                      nextIdx < info.route.location_ids.length &&
-                      info.route.location_ids[nextIdx] === nextOl.location_id
-                    ) {
-                      bottomConnectorHex = info.color.hex;
-                      break;
-                    }
-                  }
-                }
+                const connectors = connectorMap.get(optionLocation.location_id);
+                const topConnectorHex = connectors?.top ?? null;
+                const bottomConnectorHex = connectors?.bottom ?? null;
 
                 return (
                   <ItineraryLocationRow
