@@ -7,13 +7,25 @@ from uuid import UUID
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, status
 
-from backend.app.clients.google_places import GooglePlacesDisabledError, get_google_places_client
+from backend.app.clients.google_places import (
+    GoogleListParseError,
+    GooglePlacesDisabledError,
+    get_google_places_client,
+)
 from backend.app.db.supabase import get_supabase_client
 from backend.app.dependencies import get_current_user_email, get_current_user_id
 from backend.app.models.schemas import (
     AddLocationBody,
+    ImportedLocationSummary,
+    ImportGoogleListBody,
+    ImportGoogleListResponse,
     LocationResponse,
     UpdateLocationBody,
+)
+from backend.app.routers.locations_google import (
+    _clean_working_hours,
+    _extract_city,
+    _suggest_category,
 )
 from backend.app.routers.trip_ownership import _ensure_resource_chain
 from backend.app.services.place_photos import ensure_place_photo
@@ -356,6 +368,177 @@ async def batch_add_locations(
     out = [_loc_to_response(full) for full in final_locs]
     logger.info("locations_batch_added", trip_id=str(trip_id), count=len(body))
     return out
+
+
+_COORD_MATCH_THRESHOLD = 0.0005  # ~50 m at mid-latitudes
+
+
+@router.post(
+    "/{trip_id}/locations/import-google-list",
+    response_model=ImportGoogleListResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def import_google_list(
+    trip_id: UUID,
+    body: ImportGoogleListBody,
+    user_id: UUID = Depends(get_current_user_id),
+    user_email: str | None = Depends(get_current_user_email),
+    supabase=Depends(get_supabase_client),
+):
+    """Import locations from a Google Maps shared list into a trip.
+
+    Parses the shared list, deduplicates against existing trip locations,
+    enriches new places via Google Places API, and batch-inserts them.
+    """
+    _ensure_resource_chain(supabase, trip_id, user_id)
+
+    try:
+        client = get_google_places_client()
+    except GooglePlacesDisabledError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Google integration is not configured",
+        ) from None
+
+    try:
+        parsed_places = client.parse_shared_list(body.google_list_url)
+    except GoogleListParseError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from None
+
+    existing_rows = (
+        supabase.table("locations")
+        .select("google_place_id, name, latitude, longitude")
+        .eq("trip_id", str(trip_id))
+        .execute()
+    ).data or []
+
+    imported: list[ImportedLocationSummary] = []
+    existing: list[ImportedLocationSummary] = []
+    failed: list[ImportedLocationSummary] = []
+
+    rows_to_insert: list[dict] = []
+
+    enriched_place_ids: set[str] = set()
+    existing_place_ids: set[str] = {
+        r["google_place_id"] for r in existing_rows if r.get("google_place_id")
+    }
+
+    for place in parsed_places:
+        if _coords_match_existing(place.latitude, place.longitude, existing_rows):
+            existing.append(
+                ImportedLocationSummary(
+                    name=place.name,
+                    status="existing",
+                    detail="Coordinates match an existing location in this trip",
+                )
+            )
+            continue
+
+        try:
+            resolved = client._search_place_by_text(
+                place.name,
+                latitude=place.latitude,
+                longitude=place.longitude,
+                radius_m=500,
+            )
+        except Exception as exc:
+            failed.append(
+                ImportedLocationSummary(
+                    name=place.name,
+                    status="failed",
+                    detail=f"Google Places enrichment failed: {exc}",
+                )
+            )
+            continue
+
+        if resolved.place_id in existing_place_ids or resolved.place_id in enriched_place_ids:
+            existing.append(
+                ImportedLocationSummary(
+                    name=resolved.name or place.name,
+                    status="existing",
+                    detail=f"google_place_id {resolved.place_id} already in trip",
+                )
+            )
+            continue
+
+        enriched_place_ids.add(resolved.place_id)
+
+        suggested_category = _suggest_category(resolved.types)
+        city = _extract_city(resolved.formatted_address)
+        clean_hours = _clean_working_hours(resolved.opening_hours_text)
+
+        row = {
+            "trip_id": str(trip_id),
+            "name": resolved.name or place.name,
+            "address": resolved.formatted_address,
+            "google_place_id": resolved.place_id,
+            "google_source_type": "google_list_import",
+            "google_raw": resolved.raw,
+            "added_by_user_id": str(user_id),
+            "added_by_email": user_email,
+            "city": city,
+            "working_hours": "; ".join(clean_hours) if clean_hours else None,
+            "category": suggested_category,
+            "latitude": resolved.latitude,
+            "longitude": resolved.longitude,
+        }
+        rows_to_insert.append(row)
+        imported.append(
+            ImportedLocationSummary(
+                name=resolved.name or place.name,
+                status="imported",
+            )
+        )
+
+    if rows_to_insert:
+        result = supabase.table("locations").insert(rows_to_insert).execute()
+        if not result.data or len(result.data) != len(rows_to_insert):
+            logger.error(
+                "google_list_import_batch_failed",
+                trip_id=str(trip_id),
+                expected=len(rows_to_insert),
+                got=len(result.data) if result.data else 0,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to insert some locations; please try again",
+            )
+
+    logger.info(
+        "google_list_imported",
+        trip_id=str(trip_id),
+        imported=len(imported),
+        existing=len(existing),
+        failed=len(failed),
+    )
+
+    return ImportGoogleListResponse(
+        imported_count=len(imported),
+        existing_count=len(existing),
+        failed_count=len(failed),
+        imported=imported,
+        existing=existing,
+        failed=failed,
+    )
+
+
+def _coords_match_existing(
+    lat: float,
+    lng: float,
+    existing_rows: list[dict],
+) -> bool:
+    """Return True if (lat, lng) is within ~50 m of any existing location."""
+    for row in existing_rows:
+        e_lat = row.get("latitude")
+        e_lng = row.get("longitude")
+        if e_lat is None or e_lng is None:
+            continue
+        if abs(lat - e_lat) < _COORD_MATCH_THRESHOLD and abs(lng - e_lng) < _COORD_MATCH_THRESHOLD:
+            return True
+    return False
 
 
 @router.patch(
