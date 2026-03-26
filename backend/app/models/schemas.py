@@ -618,3 +618,31 @@ class RouteWithSegmentsResponse(BaseModel):
             "ok = all segments success; error = one or more segments failed (partial or total)"
         ),
     )
+
+
+# -------- Google Maps shared list import schemas --------
+
+
+class ImportGoogleListBody(BaseModel):
+    """Request body for importing locations from a Google Maps shared list."""
+
+    google_list_url: str = Field(..., min_length=1, description="Google Maps shared list URL")
+
+
+class ImportedLocationSummary(BaseModel):
+    """Summary of one location in the import result."""
+
+    name: str
+    status: str  # "imported", "existing", "failed"
+    detail: str | None = None
+
+
+class ImportGoogleListResponse(BaseModel):
+    """Response for bulk import from Google Maps list."""
+
+    imported_count: int
+    existing_count: int
+    failed_count: int
+    imported: list[ImportedLocationSummary]
+    existing: list[ImportedLocationSummary]
+    failed: list[ImportedLocationSummary]

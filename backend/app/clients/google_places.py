@@ -21,6 +21,19 @@ class GooglePlacesDisabledError(RuntimeError):
     """Raised when Google Places integration is not configured."""
 
 
+class GoogleListParseError(RuntimeError):
+    """Raised when parsing a Google Maps shared list fails."""
+
+
+@dataclass
+class ListPlace:
+    """A place extracted from a Google Maps shared list."""
+
+    name: str
+    latitude: float
+    longitude: float
+
+
 @dataclass
 class PlaceResolution:
     """Normalized subset of Place Details plus raw payload."""
@@ -95,6 +108,162 @@ class GooglePlacesClient:
         if name:
             return self._search_place_by_text(name)
         return self._search_place_by_text(long_url)
+
+    # ------------------------------------------------------------------
+    # Google Maps shared-list parsing
+    # ------------------------------------------------------------------
+
+    _COORDS_RE = re.compile(r"\[null,null,(-?[0-9]+\.[0-9]+),(-?[0-9]+\.[0-9]+)\]")
+    _BROWSER_UA = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/125.0.0.0 Safari/537.36"
+    )
+    _LIST_PAGE_SIZE = 20
+
+    def parse_shared_list(self, url: str) -> list[ListPlace]:
+        """Parse a Google Maps shared list URL and return place names + coords.
+
+        Supports short (maps.app.goo.gl) and already-expanded URLs.
+        Handles pagination for lists with more than 20 items.
+
+        Raises ``GoogleListParseError`` on CAPTCHA / 429 or when no places are
+        found in the response.
+        """
+        long_url = self._follow_list_redirects(url)
+        data_param = self._extract_data_param(long_url)
+        if not data_param:
+            raise GoogleListParseError(
+                "Could not extract data parameter from the Google Maps list URL. "
+                "Make sure the URL is a valid shared list link."
+            )
+
+        all_places: list[ListPlace] = []
+        page = 0
+        while True:
+            page_text = self._fetch_list_page(data_param, page)
+            places = self._parse_list_html(page_text)
+            if not places:
+                break
+            all_places.extend(places)
+            if len(places) < self._LIST_PAGE_SIZE:
+                break
+            page += 1
+
+        if not all_places:
+            raise GoogleListParseError(
+                "No places found in the Google Maps list. "
+                "The list may be empty, private, or the URL may be invalid."
+            )
+        return all_places
+
+    def _follow_list_redirects(self, url: str) -> str:
+        """Follow redirects from a short/shared list URL until we find ``data=``."""
+        parsed = urlparse(url)
+        host = parsed.netloc.lower()
+        if "data=" in url:
+            return url
+        if "maps.app.goo.gl" not in host and "goo.gl" not in host:
+            return url
+        current_url = url
+        for _ in range(8):
+            resp = self._http.get(
+                current_url,
+                follow_redirects=False,
+                headers={"User-Agent": self._BROWSER_UA},
+            )
+            location = resp.headers.get("location") or ""
+            if not location or resp.status_code not in (301, 302, 303, 307, 308):
+                break
+            current_url = location
+            if "data=" in current_url:
+                return current_url
+        return current_url
+
+    def _extract_data_param(self, url: str) -> str | None:
+        """Extract the ``data=`` query-string value from a full Maps URL."""
+        m = re.search(r"[?&]data=([^&]+)", url)
+        if m:
+            return unquote(m.group(1))
+        m = re.search(r"/data=([^?&]+)", url)
+        if m:
+            return unquote(m.group(1))
+        return None
+
+    def _fetch_list_page(self, data_param: str, page: int) -> str:
+        """Fetch one page of the list.  Page 0 = items 0..19, page 1 = 20..39, etc."""
+        offset = page * self._LIST_PAGE_SIZE
+        if "7i20" not in data_param:
+            data_param = data_param.rstrip("!") + f"!7i{self._LIST_PAGE_SIZE}"
+        if re.search(r"!8i\d+", data_param):
+            data_param = re.sub(r"!8i\d+", f"!8i{offset}", data_param)
+        else:
+            data_param = data_param + f"!8i{offset}"
+
+        fetch_url = f"https://www.google.com/maps/@/data={data_param}?ucbcb=1"
+        resp = self._http.get(
+            fetch_url,
+            headers={"User-Agent": self._BROWSER_UA},
+            follow_redirects=True,
+            timeout=15.0,
+        )
+        if resp.status_code == 429 or "sorry" in resp.url.path.lower():
+            raise GoogleListParseError(
+                "Google returned a CAPTCHA or rate-limit response (HTTP 429). "
+                "Please try again later."
+            )
+        resp.raise_for_status()
+        return resp.text
+
+    def _parse_list_html(self, text: str) -> list[ListPlace]:
+        """Extract place names + coordinates from a Maps list page response."""
+        places: list[ListPlace] = []
+        seen_coords: set[tuple[str, str]] = set()
+
+        for m in self._COORDS_RE.finditer(text):
+            lat_s, lng_s = m.group(1), m.group(2)
+            coord_key = (lat_s, lng_s)
+            if coord_key in seen_coords:
+                continue
+            seen_coords.add(coord_key)
+
+            name = self._extract_name_before_coords(text, m.start())
+            if not name:
+                continue
+            places.append(
+                ListPlace(
+                    name=name,
+                    latitude=float(lat_s),
+                    longitude=float(lng_s),
+                )
+            )
+        return places
+
+    @staticmethod
+    def _extract_name_before_coords(text: str, match_start: int) -> str | None:
+        """Walk backwards from a coord match to find the place name."""
+        chunk = text[max(0, match_start - 600) : match_start]
+        # The name typically appears as: \"NAME\"]] or \\\"NAME\\\"]]
+        # Try the escaped variant first (more common in raw response).
+        parts = chunk.split('\\"]]')
+        if len(parts) >= 2:
+            candidate = parts[-2]
+            # Name is after the last \\\" in the candidate
+            idx = candidate.rfind('\\"')
+            if idx != -1:
+                name = candidate[idx + 3 :].strip()
+                if name:
+                    return name
+        # Fallback: try un-escaped variant
+        parts = chunk.split('"]]')
+        if len(parts) >= 2:
+            candidate = parts[-2]
+            idx = candidate.rfind('"')
+            if idx != -1:
+                name = candidate[idx + 1 :].strip()
+                if name:
+                    return name
+        return None
 
     def _follow_redirects_if_needed(self, url: str) -> str:
         parsed = urlparse(url)
