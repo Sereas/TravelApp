@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   type ItineraryDay,
   type ItineraryOption,
@@ -128,6 +128,13 @@ function formatRouteTotalDistance(
 
 type TransportMode = "walk" | "drive" | "transit";
 
+const TIME_PERIOD_ORDER: Record<string, number> = {
+  morning: 0,
+  afternoon: 1,
+  evening: 2,
+  night: 3,
+};
+
 interface ItineraryRouteManagerProps {
   day: ItineraryDay;
   currentOption: ItineraryOption;
@@ -165,6 +172,17 @@ function InlineRouteBuilder({
   onSave: (transport: TransportMode, locationIds: string[]) => void;
   onCancel: () => void;
 }) {
+  const displayLocations = useMemo(
+    () =>
+      [...sortedLocations].sort((a, b) => {
+        const ta = TIME_PERIOD_ORDER[a.time_period || "morning"] ?? 0;
+        const tb = TIME_PERIOD_ORDER[b.time_period || "morning"] ?? 0;
+        if (ta !== tb) return ta - tb;
+        return a.sort_order - b.sort_order;
+      }),
+    [sortedLocations]
+  );
+
   const [pickIds, setPickIds] = useState<string[]>(initialPickIds);
   const [transport, setTransport] = useState<TransportMode>(initialTransport);
 
@@ -191,8 +209,8 @@ function InlineRouteBuilder({
   }, []);
 
   const selectAllInOrder = useCallback(() => {
-    setPickIds(sortedLocations.map((l) => l.location_id));
-  }, [sortedLocations]);
+    setPickIds(displayLocations.map((l) => l.location_id));
+  }, [displayLocations]);
 
   return (
     <div className="space-y-3 rounded-xl border border-brand/20 bg-brand/5 p-3">
@@ -245,8 +263,8 @@ function InlineRouteBuilder({
         <span className="text-[11px] font-medium text-muted-foreground">
           Select stops in order ({pickIds.length} selected)
         </span>
-        {sortedLocations.length >= 2 &&
-          pickIds.length < sortedLocations.length && (
+        {displayLocations.length >= 2 &&
+          pickIds.length < displayLocations.length && (
             <button
               type="button"
               onClick={selectAllInOrder}
@@ -259,7 +277,7 @@ function InlineRouteBuilder({
 
       {/* Available stops */}
       <div className="space-y-1">
-        {sortedLocations.map((ol) => {
+        {displayLocations.map((ol) => {
           const selected = pickIds.includes(ol.location_id);
           const seq = selected ? pickIds.indexOf(ol.location_id) + 1 : 0;
           return (
@@ -310,7 +328,7 @@ function InlineRouteBuilder({
           </span>
           <div className="rounded-lg border border-border/60 bg-card p-1">
             {pickIds.map((id, i) => {
-              const ol = sortedLocations.find((l) => l.location_id === id);
+              const ol = displayLocations.find((l) => l.location_id === id);
               if (!ol) return null;
               return (
                 <div
