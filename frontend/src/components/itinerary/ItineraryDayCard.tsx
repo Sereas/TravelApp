@@ -29,19 +29,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { useReadOnly } from "@/lib/read-only-context";
-import {
-  Sunrise,
-  Sun,
-  Sunset,
-  Moon,
-  MapPin,
-  Plus,
-  Footprints,
-  Car,
-  TrainFront,
-  X,
-  ListOrdered,
-} from "lucide-react";
+import { Sunrise, Sun, Sunset, Moon, MapPin, Plus } from "lucide-react";
 
 const TIME_META: Record<
   string,
@@ -116,13 +104,6 @@ const ROUTE_COLORS = [
   },
 ];
 
-const PICK_TRANSPORT = [
-  { key: "walk" as const, label: "Walk", icon: Footprints },
-  { key: "drive" as const, label: "Drive", icon: Car },
-  { key: "transit" as const, label: "Transit", icon: TrainFront },
-];
-
-/** Format a duration in seconds to human-readable string. */
 function formatDuration(seconds: number): string {
   const totalMin = Math.round(seconds / 60);
   if (totalMin < 60) return `${totalMin} min`;
@@ -197,13 +178,11 @@ export interface ItineraryDayCardProps {
     locationIds: string[]
   ) => void;
   onRoutesChanged: () => void;
-  /** After route is created, parent triggers calculation and passes back updated route. */
   onRouteCreated: (
     dayId: string,
     optionId: string,
     routeResponse: import("@/lib/api").RouteResponse
   ) => Promise<void>;
-  /** Retry calculating metrics for a route that previously failed. */
   onRetryRouteMetrics: (
     dayId: string,
     optionId: string,
@@ -212,7 +191,6 @@ export interface ItineraryDayCardProps {
   calculatingRouteId: string | null;
   routeMetricsError: Record<string, string>;
   onInspectLocation: (dayId: string, locationId: string) => void;
-  onPickModeChange?: (active: boolean) => void;
 }
 
 export function ItineraryDayCard({
@@ -238,7 +216,6 @@ export function ItineraryDayCard({
   calculatingRouteId,
   routeMetricsError,
   onInspectLocation,
-  onPickModeChange,
 }: ItineraryDayCardProps) {
   const readOnly = useReadOnly();
   const alreadyAdded = useMemo(
@@ -246,98 +223,12 @@ export function ItineraryDayCard({
     [currentOption]
   );
 
-  // Routes from itinerary tree (loaded with tree, no separate fetch)
   const routes = useMemo(
     () => currentOption?.routes ?? [],
     [currentOption?.routes]
   );
 
-  // Route creation / editing
-  const [creating, setCreating] = useState(false);
-  const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
-  const [pickIds, setPickIds] = useState<string[]>([]);
-  const [pickTransport, setPickTransport] = useState<
-    "walk" | "drive" | "transit"
-  >("walk");
-  const [savingRoute, setSavingRoute] = useState(false);
-
-  const isPickMode = creating || editingRouteId !== null;
-
-  useEffect(() => {
-    onPickModeChange?.(isPickMode);
-  }, [isPickMode, onPickModeChange]);
-
-  function handleEditRoute(route: (typeof routes)[0]) {
-    setEditingRouteId(route.route_id);
-    setPickIds([...route.location_ids]);
-    setPickTransport(
-      (route.transport_mode as "walk" | "drive" | "transit") || "walk"
-    );
-    setCreating(false);
-  }
-
-  function handleCancelPick() {
-    setCreating(false);
-    setEditingRouteId(null);
-    setPickIds([]);
-  }
-
-  async function handleSaveRoute() {
-    if (pickIds.length < 2 || !currentOption) return;
-    setSavingRoute(true);
-    try {
-      if (editingRouteId) {
-        const routeResponse = await api.itinerary.updateRoute(
-          tripId,
-          day.id,
-          currentOption.id,
-          editingRouteId,
-          {
-            transport_mode: pickTransport,
-            location_ids: pickIds,
-          }
-        );
-        setEditingRouteId(null);
-        setPickIds([]);
-        await onRouteCreated(day.id, currentOption.id, routeResponse);
-      } else {
-        const routeResponse = await api.itinerary.createRoute(
-          tripId,
-          day.id,
-          currentOption.id,
-          {
-            transport_mode: pickTransport,
-            label: null,
-            location_ids: pickIds,
-          }
-        );
-        setCreating(false);
-        setPickIds([]);
-        await onRouteCreated(day.id, currentOption.id, routeResponse);
-      }
-    } catch {
-      /* error shown by parent */
-    } finally {
-      setSavingRoute(false);
-    }
-  }
-
-  async function handleDeleteRoute(routeId: string) {
-    if (!currentOption) return;
-    try {
-      await api.itinerary.deleteRoute(
-        tripId,
-        day.id,
-        currentOption.id,
-        routeId
-      );
-      onRoutesChanged();
-    } catch {
-      /* swallow */
-    }
-  }
-
-  // Build lookup: locationId → all route memberships (a location can belong to multiple routes).
+  // Build lookup: locationId → all route memberships
   const locRouteMap = useMemo(() => {
     const m = new Map<
       string,
@@ -523,6 +414,54 @@ export function ItineraryDayCard({
     );
   }
 
+  async function handleSaveRoute(
+    transport: "walk" | "drive" | "transit",
+    locationIds: string[],
+    editingRouteId: string | null
+  ) {
+    if (!currentOption) return;
+    if (editingRouteId) {
+      const routeResponse = await api.itinerary.updateRoute(
+        tripId,
+        day.id,
+        currentOption.id,
+        editingRouteId,
+        {
+          transport_mode: transport,
+          location_ids: locationIds,
+        }
+      );
+      await onRouteCreated(day.id, currentOption.id, routeResponse);
+    } else {
+      const routeResponse = await api.itinerary.createRoute(
+        tripId,
+        day.id,
+        currentOption.id,
+        {
+          transport_mode: transport,
+          label: null,
+          location_ids: locationIds,
+        }
+      );
+      await onRouteCreated(day.id, currentOption.id, routeResponse);
+    }
+  }
+
+  async function handleDeleteRoute(routeId: string) {
+    if (!currentOption) return;
+    try {
+      await api.itinerary.deleteRoute(
+        tripId,
+        day.id,
+        currentOption.id,
+        routeId
+      );
+      onRoutesChanged();
+    } catch {
+      /* swallow */
+    }
+  }
+
   // Time picker portal
   const tpPortal =
     tpOpen && tpPos && currentOption
@@ -596,12 +535,7 @@ export function ItineraryDayCard({
     <>
       {tpPortal}
       <Card>
-        <CardHeader
-          className={cn(
-            "pb-2 transition-opacity duration-300",
-            isPickMode && "opacity-20"
-          )}
-        >
+        <CardHeader className="pb-2">
           <ItineraryDayHeader
             day={day}
             currentOption={currentOption}
@@ -619,14 +553,8 @@ export function ItineraryDayCard({
         <CardContent className="pt-0">
           {currentOption && (
             <div key={currentOption.id} className="animate-page-flip">
-              {/* Add locations */}
               {!readOnly && (
-                <div
-                  className={cn(
-                    "mb-3 transition-opacity duration-300",
-                    isPickMode && "opacity-20 pointer-events-none"
-                  )}
-                >
+                <div className="mb-3">
                   <AddLocationsToOptionDialog
                     trigger={
                       <Button
@@ -655,20 +583,14 @@ export function ItineraryDayCard({
                 expandedId={expandedId}
                 dragId={dragId}
                 dropId={dropId}
-                isPickMode={isPickMode}
-                pickIds={pickIds}
+                isPickMode={false}
+                pickIds={[]}
                 tpOpen={tpOpen}
                 tpTrigger={tpTrigger}
                 currentOptionId={currentOption.id}
                 dayId={day.id}
                 calculatingRouteId={calculatingRouteId}
-                onTogglePick={(locationId) =>
-                  setPickIds((current) =>
-                    current.includes(locationId)
-                      ? current.filter((id) => id !== locationId)
-                      : [...current, locationId]
-                  )
-                }
+                onTogglePick={() => {}}
                 onDragStart={onDragStart}
                 onDragEnd={onDragEnd}
                 onDragOver={onDragOver}
@@ -699,33 +621,17 @@ export function ItineraryDayCard({
               <ItineraryRouteManager
                 day={day}
                 currentOption={currentOption}
-                sortedLocations={sorted.map((location) => ({
-                  location_id: location.location_id,
-                  location: { name: location.location.name },
-                }))}
+                sortedLocations={sorted}
                 routes={routes}
-                isPickMode={isPickMode}
                 calculatingRouteId={calculatingRouteId}
                 routeMetricsError={routeMetricsError}
                 onRetryRouteMetrics={onRetryRouteMetrics}
-                onEditRoute={handleEditRoute}
+                onSaveRoute={handleSaveRoute}
                 onDeleteRoute={handleDeleteRoute}
-                onBeginCreateRoute={() => {
-                  setCreating(true);
-                  setEditingRouteId(null);
-                  setPickIds([]);
-                  setPickTransport("walk");
-                }}
               />
 
-              {/* Map — visible by default at bottom */}
               {mapLocations.length > 0 && (
-                <div
-                  className={cn(
-                    "mt-4 transition-opacity duration-300",
-                    isPickMode && "opacity-20 pointer-events-none"
-                  )}
-                >
+                <div className="mt-4">
                   {showMap ? (
                     <div className="rounded-lg border border-border bg-muted/20 p-4">
                       <div className="mb-2 flex items-center justify-between">
@@ -764,115 +670,6 @@ export function ItineraryDayCard({
           )}
         </CardContent>
       </Card>
-
-      {/* Sticky bottom pick-mode toolbar — portaled so it floats above everything */}
-      {!readOnly &&
-        isPickMode &&
-        currentOption &&
-        typeof document !== "undefined" &&
-        createPortal(
-          <div className="fixed inset-x-0 bottom-0 z-50 border-t border-brand/20 bg-background/95 backdrop-blur-sm shadow-[0_-2px_12px_rgba(0,0,0,0.08)]">
-            <div className="mx-auto flex max-w-5xl items-center gap-2 px-3 py-1.5">
-              <div
-                role="radiogroup"
-                aria-label="Transport mode"
-                className="flex items-center gap-1"
-              >
-                {PICK_TRANSPORT.map((mode) => {
-                  const MIcon = mode.icon;
-                  return (
-                    <button
-                      key={mode.key}
-                      type="button"
-                      role="radio"
-                      aria-checked={pickTransport === mode.key}
-                      aria-label={`Transport mode: ${mode.label}`}
-                      className={cn(
-                        "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                        pickTransport === mode.key
-                          ? "bg-brand text-white shadow-sm"
-                          : "text-muted-foreground hover:text-brand"
-                      )}
-                      onClick={() => setPickTransport(mode.key)}
-                    >
-                      <MIcon size={11} />
-                      {mode.label}
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="mx-1 h-4 w-px bg-border" />
-              <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-hide">
-                {pickIds.length === 0 ? (
-                  <span className="text-[11px] text-muted-foreground/50">
-                    Tap stops to build route
-                  </span>
-                ) : (
-                  pickIds.map((id, i) => {
-                    const name =
-                      sorted.find((l) => l.location_id === id)?.location.name ??
-                      "?";
-                    return (
-                      <span
-                        key={id}
-                        className="inline-flex shrink-0 items-center"
-                      >
-                        {i > 0 && (
-                          <span className="mx-0.5 text-[10px] text-muted-foreground/30">
-                            →
-                          </span>
-                        )}
-                        <span className="inline-flex items-center gap-0.5 rounded-full bg-brand/10 py-0.5 pl-0.5 pr-1.5 text-[11px] font-medium text-brand">
-                          <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-brand text-[8px] font-bold text-white">
-                            {i + 1}
-                          </span>
-                          <span className="max-w-[80px] truncate">{name}</span>
-                          <button
-                            type="button"
-                            className="rounded-full p-px text-brand/40 hover:text-destructive"
-                            onClick={() =>
-                              setPickIds((cur) =>
-                                cur.filter((pid) => pid !== id)
-                              )
-                            }
-                            aria-label={`Remove ${name}`}
-                          >
-                            <X size={8} />
-                          </button>
-                        </span>
-                      </span>
-                    );
-                  })
-                )}
-              </div>
-              {sorted.length >= 2 && pickIds.length < sorted.length && (
-                <button
-                  type="button"
-                  className="shrink-0 text-[11px] font-medium text-muted-foreground hover:text-foreground"
-                  onClick={() => setPickIds(sorted.map((l) => l.location_id))}
-                >
-                  All
-                </button>
-              )}
-              <Button
-                size="sm"
-                className="h-7 shrink-0 rounded-full px-3 text-[11px] shadow-sm"
-                disabled={pickIds.length < 2 || savingRoute}
-                onClick={handleSaveRoute}
-              >
-                {savingRoute ? "Saving…" : `Save (${pickIds.length})`}
-              </Button>
-              <button
-                type="button"
-                className="shrink-0 text-[11px] text-muted-foreground hover:text-foreground"
-                onClick={handleCancelPick}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>,
-          document.body
-        )}
     </>
   );
 }
