@@ -16,6 +16,7 @@ import {
 } from "@/components/trips/DateChangeDialog";
 import { ItineraryTab } from "@/components/itinerary/ItineraryTab";
 import { ShareTripDialog } from "@/components/trips/ShareTripDialog";
+import { ImportGoogleListDialog } from "@/components/locations/ImportGoogleListDialog";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { LoadingSpinner } from "@/components/feedback/LoadingSpinner";
 import { ErrorBanner } from "@/components/feedback/ErrorBanner";
@@ -25,6 +26,7 @@ import {
   Calendar,
   ChevronDown,
   ChevronLeft,
+  List,
   MapPin,
   Pencil,
   Plus,
@@ -32,7 +34,6 @@ import {
   Search,
   Share2,
   Trash2,
-  Upload,
   User,
   Users,
 } from "lucide-react";
@@ -834,14 +835,19 @@ export default function TripDetailPage() {
                         <MapPin size={16} className="text-primary" />
                         Paste Link
                       </button>
-                      <button
-                        type="button"
-                        className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground"
-                        disabled
-                      >
-                        <Upload size={16} className="opacity-40" />
-                        <span className="opacity-60">Upload Locations</span>
-                      </button>
+                      <ImportGoogleListDialog
+                        tripId={tripId}
+                        trigger={
+                          <button
+                            type="button"
+                            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-brand-muted"
+                          >
+                            <List size={16} className="text-brand" />
+                            Import Google List
+                          </button>
+                        }
+                        onImported={fetchData}
+                      />
                     </PopoverContent>
                   </Popover>
                 </>
