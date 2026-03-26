@@ -121,6 +121,14 @@ class GooglePlacesClient:
     )
     _LIST_PAGE_SIZE = 20
 
+    # Matches the address+coord block that Google embeds per place in getlist responses.
+    _ADDR_COORD_RE = re.compile(
+        r'\[null,\[null,null,"([^"]*)",null,"([^"]*)",'
+        r"\[null,null,(-?[0-9]+\.[0-9]+),(-?[0-9]+\.[0-9]+)\]"
+    )
+    # Preload link to the actual list data endpoint.
+    _GETLIST_RE = re.compile(r'href="(/maps/preview/entitylist/getlist[^"]+)"')
+
     def parse_shared_list(self, url: str) -> list[ListPlace]:
         """Parse a Google Maps shared list URL and return place names + coords.
 
@@ -138,17 +146,14 @@ class GooglePlacesClient:
                 "Make sure the URL is a valid shared list link."
             )
 
-        all_places: list[ListPlace] = []
-        page = 0
-        while True:
-            page_text = self._fetch_list_page(data_param, page)
-            places = self._parse_list_html(page_text)
-            if not places:
-                break
-            all_places.extend(places)
-            if len(places) < self._LIST_PAGE_SIZE:
-                break
-            page += 1
+        # Phase 1: fetch the initial HTML page (it contains a preload link to the real data).
+        initial_html = self._fetch_list_page(data_param, 0)
+        getlist_url = self._extract_getlist_url(initial_html)
+
+        if getlist_url:
+            all_places = self._fetch_and_parse_getlist(getlist_url)
+        else:
+            all_places = self._parse_list_response(initial_html)
 
         if not all_places:
             raise GoogleListParseError(
@@ -180,7 +185,8 @@ class GooglePlacesClient:
                 return current_url
         return current_url
 
-    def _extract_data_param(self, url: str) -> str | None:
+    @staticmethod
+    def _extract_data_param(url: str) -> str | None:
         """Extract the ``data=`` query-string value from a full Maps URL."""
         m = re.search(r"[?&]data=([^&]+)", url)
         if m:
@@ -191,16 +197,17 @@ class GooglePlacesClient:
         return None
 
     def _fetch_list_page(self, data_param: str, page: int) -> str:
-        """Fetch one page of the list.  Page 0 = items 0..19, page 1 = 20..39, etc."""
+        """Fetch the Maps HTML page for a list.  Adds pagination params."""
         offset = page * self._LIST_PAGE_SIZE
-        if "7i20" not in data_param:
-            data_param = data_param.rstrip("!") + f"!7i{self._LIST_PAGE_SIZE}"
-        if re.search(r"!8i\d+", data_param):
-            data_param = re.sub(r"!8i\d+", f"!8i{offset}", data_param)
+        dp = data_param
+        if "7i20" not in dp:
+            dp = dp.rstrip("!") + f"!7i{self._LIST_PAGE_SIZE}"
+        if re.search(r"!8i\d+", dp):
+            dp = re.sub(r"!8i\d+", f"!8i{offset}", dp)
         else:
-            data_param = data_param + f"!8i{offset}"
+            dp = dp + f"!8i{offset}"
 
-        fetch_url = f"https://www.google.com/maps/@/data={data_param}?ucbcb=1"
+        fetch_url = f"https://www.google.com/maps/@/data={dp}?ucbcb=1"
         resp = self._http.get(
             fetch_url,
             headers={"User-Agent": self._BROWSER_UA},
@@ -209,61 +216,88 @@ class GooglePlacesClient:
         )
         if resp.status_code == 429 or "sorry" in resp.url.path.lower():
             raise GoogleListParseError(
-                "Google returned a CAPTCHA or rate-limit response (HTTP 429). "
-                "Please try again later."
+                "Google returned a CAPTCHA or rate-limit response. "
+                "Try opening the list in your browser, copying the full URL "
+                "(starts with google.com/maps/…) and pasting that instead."
             )
         resp.raise_for_status()
         return resp.text
 
-    def _parse_list_html(self, text: str) -> list[ListPlace]:
-        """Extract place names + coordinates from a Maps list page response."""
+    def _extract_getlist_url(self, html: str) -> str | None:
+        """Find the preloaded ``/maps/preview/entitylist/getlist`` URL in the HTML."""
+        import html as html_mod
+
+        m = self._GETLIST_RE.search(html)
+        if not m:
+            return None
+        path = html_mod.unescape(m.group(1))
+        return "https://www.google.com" + path
+
+    def _fetch_and_parse_getlist(self, getlist_url: str) -> list[ListPlace]:
+        """Fetch the getlist endpoint and parse place data from it."""
+        resp = self._http.get(
+            getlist_url,
+            headers={"User-Agent": self._BROWSER_UA},
+            follow_redirects=True,
+            timeout=15.0,
+        )
+        if resp.status_code == 429 or "sorry" in resp.url.path.lower():
+            raise GoogleListParseError(
+                "Google returned a CAPTCHA or rate-limit response. Try again in a few minutes."
+            )
+        resp.raise_for_status()
+        return self._parse_list_response(resp.text)
+
+    def _parse_list_response(self, text: str) -> list[ListPlace]:
+        """Extract places from a getlist or HTML response.
+
+        Uses two strategies:
+        1. Address+coord regex (most reliable — extracts address context for name hint).
+        2. Coord-only regex as fallback (name will be resolved via Places API).
+        """
         places: list[ListPlace] = []
         seen_coords: set[tuple[str, str]] = set()
 
+        # Strategy 1: address block with embedded coords
+        for m in self._ADDR_COORD_RE.finditer(text):
+            full_addr, short_addr, lat_s, lng_s = m.group(1), m.group(2), m.group(3), m.group(4)
+            key = (lat_s, lng_s)
+            if key in seen_coords:
+                continue
+            seen_coords.add(key)
+            name = self._name_from_addresses(full_addr, short_addr)
+            places.append(ListPlace(name=name, latitude=float(lat_s), longitude=float(lng_s)))
+
+        # Strategy 2: bare coords not yet seen (name = placeholder, enrichment resolves it)
         for m in self._COORDS_RE.finditer(text):
             lat_s, lng_s = m.group(1), m.group(2)
-            coord_key = (lat_s, lng_s)
-            if coord_key in seen_coords:
+            key = (lat_s, lng_s)
+            if key in seen_coords:
                 continue
-            seen_coords.add(coord_key)
+            seen_coords.add(key)
+            places.append(ListPlace(name="", latitude=float(lat_s), longitude=float(lng_s)))
 
-            name = self._extract_name_before_coords(text, m.start())
-            if not name:
-                continue
-            places.append(
-                ListPlace(
-                    name=name,
-                    latitude=float(lat_s),
-                    longitude=float(lng_s),
-                )
-            )
         return places
 
     @staticmethod
-    def _extract_name_before_coords(text: str, match_start: int) -> str | None:
-        """Walk backwards from a coord match to find the place name."""
-        chunk = text[max(0, match_start - 600) : match_start]
-        # The name typically appears as: \"NAME\"]] or \\\"NAME\\\"]]
-        # Try the escaped variant first (more common in raw response).
-        parts = chunk.split('\\"]]')
-        if len(parts) >= 2:
-            candidate = parts[-2]
-            # Name is after the last \\\" in the candidate
-            idx = candidate.rfind('\\"')
-            if idx != -1:
-                name = candidate[idx + 3 :].strip()
-                if name:
-                    return name
-        # Fallback: try un-escaped variant
-        parts = chunk.split('"]]')
-        if len(parts) >= 2:
-            candidate = parts[-2]
-            idx = candidate.rfind('"')
-            if idx != -1:
-                name = candidate[idx + 1 :].strip()
-                if name:
-                    return name
-        return None
+    def _name_from_addresses(full_addr: str, short_addr: str) -> str:
+        """Extract a place name by diffing the full and short address strings.
+
+        Google's full address often embeds the venue name (e.g.
+        ``"2 Bayfront Ave B1, #01 Din Tai Fung, Singapore 018972"`` vs
+        ``"2 Bayfront Ave B1, #01, Singapore 018972"``).  The extra segment
+        in the full address that's absent in the short one is usually the name.
+        """
+        if not full_addr:
+            return ""
+        if not short_addr:
+            return full_addr.split(",")[0].strip()
+        full_parts = [p.strip() for p in full_addr.split(",")]
+        short_parts = {p.strip().lower() for p in short_addr.split(",")}
+        extras = [p for p in full_parts if p.strip().lower() not in short_parts and len(p) > 1]
+        if extras:
+            return extras[0]
+        return full_addr.split(",")[0].strip()
 
     def _follow_redirects_if_needed(self, url: str) -> str:
         parsed = urlparse(url)
