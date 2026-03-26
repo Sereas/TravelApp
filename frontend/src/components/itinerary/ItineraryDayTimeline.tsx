@@ -258,6 +258,8 @@ export function ItineraryDayTimeline({
       {dragId && (
         <div
           data-testid="timeline-end-drop-zone"
+          role="listitem"
+          aria-label="Drop here to move to end of list"
           className={cn(
             "mx-9 mt-0.5 h-7 rounded-md border-2 border-dashed transition-colors",
             dropId === "__end__"

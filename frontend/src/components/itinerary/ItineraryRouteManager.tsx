@@ -1,16 +1,24 @@
 "use client";
 
-import { useState } from "react";
-import { type ItineraryDay, type ItineraryOption } from "@/lib/api";
+import { useCallback, useMemo, useState } from "react";
+import {
+  type ItineraryDay,
+  type ItineraryOption,
+  type ItineraryOptionLocation,
+} from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/feedback/LoadingSpinner";
 import { cn } from "@/lib/utils";
 import { useReadOnly } from "@/lib/read-only-context";
 import {
   AlertCircle,
+  ArrowDown,
+  ArrowUp,
+  Check,
   ChevronDown,
   ChevronUp,
   Footprints,
+  GripVertical,
   MapPin,
   Pencil,
   Plus,
@@ -18,6 +26,7 @@ import {
   Car,
   TrainFront,
   Navigation,
+  X,
 } from "lucide-react";
 
 const TRANSPORT = [
@@ -67,7 +76,6 @@ function formatDuration(seconds: number): string {
   return m === 0 ? `${h}h` : `${h}h ${m}min`;
 }
 
-/** Derive totals from segments when available, otherwise use stored aggregates. */
 function getRouteTotals(route: {
   duration_seconds?: number | null;
   distance_meters?: number | null;
@@ -118,15 +126,20 @@ function formatRouteTotalDistance(
   return formatDistance(distance);
 }
 
+type TransportMode = "walk" | "drive" | "transit";
+
+const TIME_PERIOD_ORDER: Record<string, number> = {
+  morning: 0,
+  afternoon: 1,
+  evening: 2,
+  night: 3,
+};
+
 interface ItineraryRouteManagerProps {
   day: ItineraryDay;
   currentOption: ItineraryOption;
-  sortedLocations: Array<{
-    location_id: string;
-    location: { name: string };
-  }>;
+  sortedLocations: ItineraryOptionLocation[];
   routes: ItineraryOption["routes"];
-  isPickMode: boolean;
   calculatingRouteId: string | null;
   routeMetricsError: Record<string, string>;
   onRetryRouteMetrics: (
@@ -134,9 +147,269 @@ interface ItineraryRouteManagerProps {
     optionId: string,
     routeId: string
   ) => Promise<void>;
-  onEditRoute: (route: ItineraryOption["routes"][number]) => void;
+  onSaveRoute: (
+    transport: TransportMode,
+    locationIds: string[],
+    editingRouteId: string | null
+  ) => Promise<void>;
   onDeleteRoute: (routeId: string) => void;
-  onBeginCreateRoute: () => void;
+}
+
+function InlineRouteBuilder({
+  sortedLocations,
+  initialPickIds,
+  initialTransport,
+  isEditing,
+  saving,
+  onSave,
+  onCancel,
+}: {
+  sortedLocations: ItineraryOptionLocation[];
+  initialPickIds: string[];
+  initialTransport: TransportMode;
+  isEditing: boolean;
+  saving: boolean;
+  onSave: (transport: TransportMode, locationIds: string[]) => void;
+  onCancel: () => void;
+}) {
+  const displayLocations = useMemo(
+    () =>
+      [...sortedLocations].sort((a, b) => {
+        const ta = TIME_PERIOD_ORDER[a.time_period || "morning"] ?? 0;
+        const tb = TIME_PERIOD_ORDER[b.time_period || "morning"] ?? 0;
+        if (ta !== tb) return ta - tb;
+        return a.sort_order - b.sort_order;
+      }),
+    [sortedLocations]
+  );
+
+  const [pickIds, setPickIds] = useState<string[]>(initialPickIds);
+  const [transport, setTransport] = useState<TransportMode>(initialTransport);
+
+  const toggleStop = useCallback((locationId: string) => {
+    setPickIds((prev) =>
+      prev.includes(locationId)
+        ? prev.filter((id) => id !== locationId)
+        : [...prev, locationId]
+    );
+  }, []);
+
+  const moveStop = useCallback((index: number, direction: -1 | 1) => {
+    setPickIds((prev) => {
+      const next = [...prev];
+      const target = index + direction;
+      if (target < 0 || target >= next.length) return prev;
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  }, []);
+
+  const removeStop = useCallback((locationId: string) => {
+    setPickIds((prev) => prev.filter((id) => id !== locationId));
+  }, []);
+
+  const selectAllInOrder = useCallback(() => {
+    setPickIds(displayLocations.map((l) => l.location_id));
+  }, [displayLocations]);
+
+  return (
+    <div className="space-y-3 rounded-xl border border-brand/20 bg-brand/5 p-3">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-bold text-brand">
+          {isEditing ? "Edit route" : "New route"}
+        </span>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+          aria-label="Cancel"
+        >
+          <X size={14} />
+        </button>
+      </div>
+
+      {/* Transport mode */}
+      <div
+        className="flex items-center gap-1"
+        role="radiogroup"
+        aria-label="Transport mode"
+      >
+        {TRANSPORT.map((mode) => {
+          const MIcon = mode.icon;
+          const selected = transport === mode.key;
+          return (
+            <button
+              key={mode.key}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              onClick={() => setTransport(mode.key as TransportMode)}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all",
+                selected
+                  ? "bg-brand text-white shadow-sm"
+                  : "bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
+              )}
+            >
+              <MIcon size={13} />
+              {mode.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Stop list header */}
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-medium text-muted-foreground">
+          Select stops in order ({pickIds.length} selected)
+        </span>
+        {displayLocations.length >= 2 &&
+          pickIds.length < displayLocations.length && (
+            <button
+              type="button"
+              onClick={selectAllInOrder}
+              className="text-[11px] font-medium text-brand transition-colors hover:text-brand-strong"
+            >
+              Select all
+            </button>
+          )}
+      </div>
+
+      {/* Available stops */}
+      <div className="space-y-1">
+        {displayLocations.map((ol) => {
+          const selected = pickIds.includes(ol.location_id);
+          const seq = selected ? pickIds.indexOf(ol.location_id) + 1 : 0;
+          return (
+            <button
+              key={ol.location_id}
+              type="button"
+              onClick={() => toggleStop(ol.location_id)}
+              className={cn(
+                "flex w-full items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left text-xs transition-all",
+                selected
+                  ? "border-brand/30 bg-white shadow-sm dark:bg-card"
+                  : "border-transparent bg-card/50 hover:bg-card dark:bg-card/30 dark:hover:bg-card/60"
+              )}
+            >
+              <span
+                className={cn(
+                  "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition-all",
+                  selected
+                    ? "bg-brand text-white"
+                    : "border-2 border-muted-foreground/20 text-muted-foreground/40"
+                )}
+              >
+                {selected ? seq : ""}
+              </span>
+              <span
+                className={cn(
+                  "min-w-0 flex-1 truncate font-medium",
+                  selected ? "text-foreground" : "text-muted-foreground"
+                )}
+              >
+                {ol.location.name}
+              </span>
+              {ol.location.city && (
+                <span className="shrink-0 text-[10px] text-muted-foreground/60">
+                  {ol.location.city}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Reorder selected stops */}
+      {pickIds.length >= 2 && (
+        <div className="space-y-1">
+          <span className="text-[11px] font-medium text-muted-foreground">
+            Route order
+          </span>
+          <div className="rounded-lg border border-border/60 bg-card p-1">
+            {pickIds.map((id, i) => {
+              const ol = displayLocations.find((l) => l.location_id === id);
+              if (!ol) return null;
+              return (
+                <div
+                  key={id}
+                  className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs"
+                >
+                  <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-brand text-[9px] font-bold text-white">
+                    {i + 1}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate font-medium text-foreground">
+                    {ol.location.name}
+                  </span>
+                  <div className="flex shrink-0 items-center gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => moveStop(i, -1)}
+                      disabled={i === 0}
+                      className="rounded p-0.5 text-muted-foreground/50 transition-colors hover:text-foreground disabled:opacity-30"
+                      aria-label={`Move ${ol.location.name} up`}
+                    >
+                      <ArrowUp size={11} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveStop(i, 1)}
+                      disabled={i === pickIds.length - 1}
+                      className="rounded p-0.5 text-muted-foreground/50 transition-colors hover:text-foreground disabled:opacity-30"
+                      aria-label={`Move ${ol.location.name} down`}
+                    >
+                      <ArrowDown size={11} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeStop(id)}
+                      className="rounded p-0.5 text-muted-foreground/50 transition-colors hover:text-destructive"
+                      aria-label={`Remove ${ol.location.name}`}
+                    >
+                      <X size={11} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="flex items-center justify-end gap-2 pt-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 text-xs"
+          onClick={onCancel}
+          disabled={saving}
+        >
+          Cancel
+        </Button>
+        <Button
+          size="sm"
+          className="h-8 gap-1.5 text-xs"
+          disabled={pickIds.length < 2 || saving}
+          onClick={() => onSave(transport, pickIds)}
+        >
+          {saving ? (
+            <>
+              <LoadingSpinner size="sm" className="h-3 w-3" />
+              Saving…
+            </>
+          ) : (
+            <>
+              <Check size={13} />
+              {isEditing
+                ? "Update route"
+                : `Create route (${pickIds.length} stops)`}
+            </>
+          )}
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 export function ItineraryRouteManager({
@@ -144,16 +417,57 @@ export function ItineraryRouteManager({
   currentOption,
   sortedLocations,
   routes,
-  isPickMode,
   calculatingRouteId,
   routeMetricsError,
   onRetryRouteMetrics,
-  onEditRoute,
+  onSaveRoute,
   onDeleteRoute,
-  onBeginCreateRoute,
 }: ItineraryRouteManagerProps) {
   const readOnly = useReadOnly();
   const [expandedRouteId, setExpandedRouteId] = useState<string | null>(null);
+  const [builderMode, setBuilderMode] = useState<"create" | "edit" | null>(
+    null
+  );
+  const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const editInitialIds =
+    editingRouteId != null
+      ? (routes.find((r) => r.route_id === editingRouteId)?.location_ids ?? [])
+      : [];
+  const editInitialTransport =
+    editingRouteId != null
+      ? ((routes.find((r) => r.route_id === editingRouteId)
+          ?.transport_mode as TransportMode) ?? "walk")
+      : "walk";
+
+  function handleBeginCreate() {
+    setBuilderMode("create");
+    setEditingRouteId(null);
+  }
+
+  function handleBeginEdit(route: (typeof routes)[0]) {
+    setBuilderMode("edit");
+    setEditingRouteId(route.route_id);
+  }
+
+  function handleCancel() {
+    setBuilderMode(null);
+    setEditingRouteId(null);
+  }
+
+  async function handleSave(transport: TransportMode, locationIds: string[]) {
+    setSaving(true);
+    try {
+      await onSaveRoute(transport, locationIds, editingRouteId);
+      setBuilderMode(null);
+      setEditingRouteId(null);
+    } catch {
+      /* error shown by parent */
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <section className="mt-5 rounded-2xl border border-border/70 bg-muted/20 px-3 py-3">
@@ -169,12 +483,12 @@ export function ItineraryRouteManager({
             </p>
           </div>
         </div>
-        {!readOnly && sortedLocations.length >= 2 && !isPickMode && (
+        {!readOnly && sortedLocations.length >= 2 && builderMode === null && (
           <Button
             variant="ghost"
             size="sm"
             className="h-7 gap-1 text-xs text-muted-foreground"
-            onClick={onBeginCreateRoute}
+            onClick={handleBeginCreate}
           >
             <Plus size={12} />
             Create route
@@ -182,22 +496,37 @@ export function ItineraryRouteManager({
         )}
       </div>
 
-      {isPickMode && (
-        <div className="flex items-center gap-2 rounded-xl border border-brand/20 bg-brand/5 px-3 py-2.5">
-          <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand/15">
-            <Plus size={10} className="text-brand" />
-          </div>
-          <span className="text-xs font-medium text-brand/80">
-            Tap the{" "}
-            <span className="inline-flex h-4 w-4 translate-y-[3px] items-center justify-center rounded-full border border-dashed border-brand/40 text-[8px]">
-              +
-            </span>{" "}
-            buttons on stops above to build your route
-          </span>
+      {/* Inline route builder */}
+      {builderMode === "create" && (
+        <div className="mb-3">
+          <InlineRouteBuilder
+            sortedLocations={sortedLocations}
+            initialPickIds={[]}
+            initialTransport="walk"
+            isEditing={false}
+            saving={saving}
+            onSave={handleSave}
+            onCancel={handleCancel}
+          />
         </div>
       )}
 
-      {routes.length > 0 && !isPickMode && (
+      {builderMode === "edit" && editingRouteId && (
+        <div className="mb-3">
+          <InlineRouteBuilder
+            key={editingRouteId}
+            sortedLocations={sortedLocations}
+            initialPickIds={editInitialIds}
+            initialTransport={editInitialTransport}
+            isEditing
+            saving={saving}
+            onSave={handleSave}
+            onCancel={handleCancel}
+          />
+        </div>
+      )}
+
+      {routes.length > 0 && builderMode === null && (
         <div className="space-y-2">
           {routes.map((route, index) => {
             const color = ROUTE_COLORS[index % ROUTE_COLORS.length];
@@ -217,10 +546,9 @@ export function ItineraryRouteManager({
 
             return (
               <div key={route.route_id} className="space-y-0">
-                {/* Ticket-style route card */}
                 <div
                   className={cn(
-                    "ticket-card flex items-center gap-2 border-l-[4px] pl-4 pr-6 py-2.5 text-xs",
+                    "ticket-card flex items-center gap-2 border-l-[4px] py-2.5 pl-4 pr-6 text-xs",
                     isExpanded ? "rounded-t-xl" : "rounded-xl",
                     color.bar
                   )}
@@ -232,12 +560,12 @@ export function ItineraryRouteManager({
                       "min-w-0 flex-1 truncate text-left font-bold",
                       color.text
                     )}
-                    title={stopNames.join(" > ")}
+                    title={stopNames.join(" → ")}
                     onClick={() =>
                       setExpandedRouteId(isExpanded ? null : route.route_id)
                     }
                   >
-                    {stopNames.join(" > ")}
+                    {stopNames.join(" → ")}
                   </button>
                   {isCalculating && (
                     <span className="flex shrink-0 items-center gap-1 text-muted-foreground">
@@ -307,7 +635,7 @@ export function ItineraryRouteManager({
                       <button
                         type="button"
                         className="shrink-0 text-muted-foreground hover:text-primary disabled:opacity-50"
-                        onClick={() => onEditRoute(route)}
+                        onClick={() => handleBeginEdit(route)}
                         aria-label="Edit route"
                         disabled={isCalculating}
                       >
@@ -326,11 +654,10 @@ export function ItineraryRouteManager({
                   )}
                 </div>
 
-                {/* Expanded segment details */}
                 {isExpanded && hasSegments && (
                   <div
                     className={cn(
-                      "rounded-b-xl border border-t-0 border-white/80 border-l-[4px] px-3 pb-2.5 pt-1 bg-white/60",
+                      "rounded-b-xl border border-t-0 border-border/40 border-l-[4px] bg-card/60 px-3 pb-2.5 pt-1",
                       color.bar
                     )}
                   >
@@ -340,7 +667,6 @@ export function ItineraryRouteManager({
 
                       return (
                         <div key={i}>
-                          {/* Stop */}
                           <div className="flex items-center gap-2 py-1">
                             <MapPin
                               size={10}
@@ -351,7 +677,6 @@ export function ItineraryRouteManager({
                             </span>
                           </div>
 
-                          {/* Segment connector */}
                           {!isLast && segment && (
                             <div className="ml-[4px] flex items-center gap-2 border-l border-dashed py-0.5 pl-3.5">
                               <Icon
@@ -389,8 +714,8 @@ export function ItineraryRouteManager({
         </div>
       )}
 
-      {routes.length === 0 && !isPickMode && (
-        <div className="rounded-xl border border-dashed border-border bg-white/70 px-3 py-3 text-xs text-muted-foreground dark:bg-card/70">
+      {routes.length === 0 && builderMode === null && (
+        <div className="rounded-xl border border-dashed border-border bg-card/70 px-3 py-3 text-xs text-muted-foreground">
           <span className="inline-flex items-center gap-2">
             <span className="inline-block h-px w-6 bg-primary/20" />
             No routes yet

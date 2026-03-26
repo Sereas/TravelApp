@@ -72,8 +72,8 @@ export function ItineraryInspectorPanel({
 
       {day ? (
         <>
-          <div className="flex gap-3 text-center text-xs">
-            <div className="flex-1 rounded-xl border border-primary/10 bg-primary/5 px-2 py-2.5">
+          <div className="grid grid-cols-3 gap-3 text-center text-xs">
+            <div className="rounded-xl border border-primary/10 bg-primary/5 px-2 py-2.5">
               <MapPin size={16} className="mx-auto mb-1 text-primary/60" />
               <div className="text-xl font-bold text-foreground">
                 {placeCount}
@@ -82,7 +82,7 @@ export function ItineraryInspectorPanel({
                 {placeCount === 1 ? "place" : "places"}
               </div>
             </div>
-            <div className="flex-1 rounded-xl border border-brand/10 bg-brand/5 px-2 py-2.5">
+            <div className="rounded-xl border border-brand/10 bg-brand/5 px-2 py-2.5">
               <Route size={16} className="mx-auto mb-1 text-brand/60" />
               <div className="text-xl font-bold text-foreground">
                 {routeCount}
@@ -91,14 +91,14 @@ export function ItineraryInspectorPanel({
                 {routeCount === 1 ? "route" : "routes"}
               </div>
             </div>
-            {day.options.length > 1 && (
-              <div className="flex-1 rounded-xl border border-primary/10 bg-primary/5 px-2 py-2.5">
-                <div className="text-xl font-bold text-foreground">
-                  {day.options.length}
-                </div>
-                <div className="font-medium text-muted-foreground">plans</div>
+            <div className="rounded-xl border border-primary/10 bg-primary/5 px-2 py-2.5">
+              <div className="text-xl font-bold text-foreground">
+                {day.options.length}
               </div>
-            )}
+              <div className="font-medium text-muted-foreground">
+                {day.options.length === 1 ? "plan" : "plans"}
+              </div>
+            </div>
           </div>
           {routeCount > 0 && (hasWalk || hasTransfer) && (
             <div className="mt-3 space-y-1.5 rounded-xl border border-border/50 bg-muted/30 px-3 py-2">

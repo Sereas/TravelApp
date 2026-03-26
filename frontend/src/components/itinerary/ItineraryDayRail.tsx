@@ -2,7 +2,7 @@
 
 import type { ItineraryDay, ItineraryOption } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { ArrowRight, CalendarDays, Cloud, MapPin, Sun } from "lucide-react";
+import { ArrowRight, CalendarDays, MapPin } from "lucide-react";
 
 function formatCityLabel(option: ItineraryOption | undefined): {
   text: string | null;
@@ -78,8 +78,10 @@ export function ItineraryDayRail({
               key={day.id}
               type="button"
               onClick={() => onSelectDay?.(day.id)}
+              aria-current={isSelected ? "date" : undefined}
+              aria-label={`Day ${i + 1}: ${dateLabel}${city.text ? `, ${city.text}` : ""}${isPlanned ? `, ${locationCount} stop${locationCount === 1 ? "" : "s"}` : ""}`}
               className={cn(
-                "ticket-card group relative min-w-[170px] shrink-0 px-4 py-3 text-left transition-all duration-200",
+                "ticket-card group relative min-w-[170px] shrink-0 px-4 py-3 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 "hover:scale-[1.02] motion-reduce:hover:scale-100",
                 isSelected
                   ? "ring-2 ring-primary shadow-lg"
@@ -89,7 +91,7 @@ export function ItineraryDayRail({
               )}
             >
               {isSelected && (
-                <span className="stamp-badge pointer-events-none absolute right-2 top-2 text-[7px] text-primary">
+                <span className="stamp-badge pointer-events-none absolute right-2 top-2 text-[9px] text-primary">
                   Now
                 </span>
               )}
@@ -159,18 +161,10 @@ export function ItineraryDayRail({
                 </div>
               )}
 
-              {/* Weather placeholder per day */}
-              {day.date && (
-                <div className="mt-2 flex items-center gap-1.5 border-t border-border/40 pt-2">
-                  {i % 3 === 0 ? (
-                    <Sun size={13} className="shrink-0 text-amber-400" />
-                  ) : i % 3 === 1 ? (
-                    <Cloud size={13} className="shrink-0 text-slate-400" />
-                  ) : (
-                    <Sun size={13} className="shrink-0 text-amber-300" />
-                  )}
-                  <span className="text-[10px] font-medium text-muted-foreground">
-                    {18 + (i % 5)}° / {12 + (i % 4)}°
+              {day.options.length > 1 && (
+                <div className="mt-2 border-t border-border/40 pt-2">
+                  <span className="text-[10px] font-medium text-muted-foreground/60">
+                    {day.options.length} plans
                   </span>
                 </div>
               )}

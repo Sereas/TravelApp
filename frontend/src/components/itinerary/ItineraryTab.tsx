@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { ErrorBanner } from "@/components/feedback/ErrorBanner";
@@ -23,7 +23,6 @@ interface ItineraryTabProps {
   tripId: string;
   locations: Location[];
   itineraryState: ItineraryState;
-  onPickModeChange?: (active: boolean) => void;
 }
 
 export function ItineraryTab({
@@ -31,7 +30,6 @@ export function ItineraryTab({
   tripId,
   locations,
   itineraryState,
-  onPickModeChange: onPickModeChangeExternal,
 }: ItineraryTabProps) {
   const {
     itinerary,
@@ -66,14 +64,6 @@ export function ItineraryTab({
 
   const readOnly = useReadOnly();
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
-  const [isPickMode, setIsPickModeRaw] = useState(false);
-  const setIsPickMode = useCallback(
-    (active: boolean) => {
-      setIsPickModeRaw(active);
-      onPickModeChangeExternal?.(active);
-    },
-    [onPickModeChangeExternal]
-  );
 
   useEffect(() => {
     if (!itinerary?.days.length) {
@@ -164,12 +154,7 @@ export function ItineraryTab({
         itinerary &&
         itinerary.days.length > 0 && (
           <div className="space-y-4">
-            <div
-              className={cn(
-                "flex items-center justify-between transition-all duration-300",
-                isPickMode && "opacity-20 pointer-events-none"
-              )}
-            >
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 ring-1 ring-brand/20">
                   <Crosshair size={20} className="text-brand" />
@@ -226,19 +211,13 @@ export function ItineraryTab({
                   </Button>
                 ))}
             </div>
-            <div
-              className={cn(
-                "transition-all duration-300",
-                isPickMode && "opacity-20 pointer-events-none"
-              )}
-            >
-              <ItineraryDayRail
-                days={itinerary.days}
-                selectedOptionsByDay={selectedOptionsByDay}
-                selectedDayId={selectedDayId}
-                onSelectDay={setSelectedDayId}
-              />
-            </div>
+
+            <ItineraryDayRail
+              days={itinerary.days}
+              selectedOptionsByDay={selectedOptionsByDay}
+              selectedDayId={selectedDayId}
+              onSelectDay={setSelectedDayId}
+            />
 
             <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
               <div className="space-y-4">
@@ -279,19 +258,13 @@ export function ItineraryTab({
                         onInspectLocation={(dayId) => {
                           setSelectedDayId(dayId);
                         }}
-                        onPickModeChange={setIsPickMode}
                       />
                     </div>
                   );
                 })}
               </div>
 
-              <div
-                className={cn(
-                  "space-y-4 xl:sticky xl:top-[6.75rem] xl:self-start transition-all duration-300",
-                  isPickMode && "opacity-20 pointer-events-none"
-                )}
-              >
+              <div className="space-y-4 xl:sticky xl:top-[6.75rem] xl:self-start">
                 <ItineraryInspectorPanel
                   day={selectedDay}
                   currentOption={

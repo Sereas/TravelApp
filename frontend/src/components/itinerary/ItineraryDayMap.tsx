@@ -419,8 +419,9 @@ export function ItineraryDayMap({ locations, routes }: ItineraryDayMapProps) {
           // Only place the label if we found a non-overlapping position
           if (bestPt) {
             const el = document.createElement("div");
+            const isDark = document.documentElement.classList.contains("dark");
             el.style.cssText =
-              `background:white;color:#374151;font-size:11px;font-weight:500;` +
+              `background:${isDark ? "hsl(20,20%,10%)" : "white"};color:${isDark ? "hsl(30,20%,85%)" : "#374151"};font-size:11px;font-weight:500;` +
               `padding:2px 6px;border-radius:10px;border:1.5px solid ${color};` +
               `white-space:nowrap;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.12);`;
             el.textContent = label;
@@ -475,5 +476,7 @@ export function ItineraryDayMap({ locations, routes }: ItineraryDayMapProps) {
     });
   }, [selectedLocationId]);
 
-  return <div ref={containerRef} className="h-[480px] w-full rounded-md" />;
+  return (
+    <div ref={containerRef} className="h-[min(480px,60vh)] w-full rounded-md" />
+  );
 }

@@ -69,9 +69,8 @@ describe("ItineraryLocationRow", () => {
   it("toggles expanded details and time picker actions", async () => {
     const { props } = renderRow();
 
-    await userEvent.click(
-      screen.getAllByRole("button", { name: /eiffel tower/i })[0]
-    );
+    const expandBtn = screen.getByRole("button", { expanded: false });
+    await userEvent.click(expandBtn);
     expect(props.onToggleExpanded).toHaveBeenCalledWith("loc-1");
 
     await userEvent.click(
