@@ -235,13 +235,16 @@ export function ItineraryLocationRow({
           </button>
         ) : (
           <div
-            className="flex cursor-grab items-center justify-center text-muted-foreground/40 hover:text-foreground active:cursor-grabbing"
+            className="flex cursor-grab items-center justify-center text-muted-foreground/40 hover:text-foreground focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded active:cursor-grabbing"
+            tabIndex={0}
+            role="button"
             draggable
             onDragStart={(event) =>
               onDragStart(optionLocation.location_id, event)
             }
             onDragEnd={onDragEnd}
-            aria-label={`Drag ${optionLocation.location.name}`}
+            aria-label={`Reorder ${optionLocation.location.name}`}
+            aria-roledescription="draggable"
           >
             <GripVertical size={14} />
           </div>
@@ -397,8 +400,8 @@ export function ItineraryLocationRow({
               href={optionLocation.location.google_link}
               target="_blank"
               rel="noopener noreferrer"
-              className="shrink-0 text-muted-foreground/30 transition-colors hover:text-primary"
-              aria-label={`Map: ${optionLocation.location.name}`}
+              className="shrink-0 text-muted-foreground/60 transition-colors hover:text-primary focus-visible:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded"
+              aria-label={`Open ${optionLocation.location.name} on Google Maps`}
               onClick={(event) => event.stopPropagation()}
             >
               <ExternalLink size={12} />
@@ -436,7 +439,7 @@ export function ItineraryLocationRow({
           {!readOnly && !isPickMode && currentOptionId && (
             <button
               type="button"
-              className="shrink-0 text-muted-foreground/30 opacity-0 transition hover:text-destructive group-hover:opacity-100"
+              className="shrink-0 text-muted-foreground/30 opacity-0 transition hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100 focus-visible:text-destructive focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded"
               aria-label={`Remove ${optionLocation.location.name}`}
               onClick={(event) => {
                 event.stopPropagation();

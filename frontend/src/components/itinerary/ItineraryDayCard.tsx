@@ -55,26 +55,26 @@ const TIME_META: Record<
   morning: {
     label: "Morning",
     icon: Sunrise,
-    bg: "bg-amber-50",
-    text: "text-amber-800",
+    bg: "bg-time-morning-bg",
+    text: "text-time-morning-text",
   },
   afternoon: {
     label: "Afternoon",
     icon: Sun,
-    bg: "bg-sky-50",
-    text: "text-sky-800",
+    bg: "bg-time-afternoon-bg",
+    text: "text-time-afternoon-text",
   },
   evening: {
     label: "Evening",
     icon: Sunset,
-    bg: "bg-purple-50",
-    text: "text-purple-800",
+    bg: "bg-time-evening-bg",
+    text: "text-time-evening-text",
   },
   night: {
     label: "Night",
     icon: Moon,
-    bg: "bg-slate-800",
-    text: "text-slate-50",
+    bg: "bg-time-night-bg",
+    text: "text-time-night-text",
   },
 };
 
@@ -544,6 +544,7 @@ export function ItineraryDayCard({
               className="rounded-md border border-border bg-popover p-1 text-xs shadow-md"
               style={style}
               role="listbox"
+              aria-label="Select time of day"
             >
               {(["morning", "afternoon", "evening", "night"] as const).map(
                 (k) => {
@@ -772,25 +773,34 @@ export function ItineraryDayCard({
         createPortal(
           <div className="fixed inset-x-0 bottom-0 z-50 border-t border-brand/20 bg-background/95 backdrop-blur-sm shadow-[0_-2px_12px_rgba(0,0,0,0.08)]">
             <div className="mx-auto flex max-w-5xl items-center gap-2 px-3 py-1.5">
-              {PICK_TRANSPORT.map((mode) => {
-                const MIcon = mode.icon;
-                return (
-                  <button
-                    key={mode.key}
-                    type="button"
-                    className={cn(
-                      "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all",
-                      pickTransport === mode.key
-                        ? "bg-brand text-white shadow-sm"
-                        : "text-muted-foreground hover:text-brand"
-                    )}
-                    onClick={() => setPickTransport(mode.key)}
-                  >
-                    <MIcon size={11} />
-                    {mode.label}
-                  </button>
-                );
-              })}
+              <div
+                role="radiogroup"
+                aria-label="Transport mode"
+                className="flex items-center gap-1"
+              >
+                {PICK_TRANSPORT.map((mode) => {
+                  const MIcon = mode.icon;
+                  return (
+                    <button
+                      key={mode.key}
+                      type="button"
+                      role="radio"
+                      aria-checked={pickTransport === mode.key}
+                      aria-label={`Transport mode: ${mode.label}`}
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        pickTransport === mode.key
+                          ? "bg-brand text-white shadow-sm"
+                          : "text-muted-foreground hover:text-brand"
+                      )}
+                      onClick={() => setPickTransport(mode.key)}
+                    >
+                      <MIcon size={11} />
+                      {mode.label}
+                    </button>
+                  );
+                })}
+              </div>
               <div className="mx-1 h-4 w-px bg-border" />
               <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-hide">
                 {pickIds.length === 0 ? (

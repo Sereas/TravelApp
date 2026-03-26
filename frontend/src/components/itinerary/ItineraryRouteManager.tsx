@@ -330,7 +330,7 @@ export function ItineraryRouteManager({
                 {isExpanded && hasSegments && (
                   <div
                     className={cn(
-                      "rounded-b-xl border border-t-0 border-white/80 border-l-[4px] px-3 pb-2.5 pt-1 bg-white/60",
+                      "rounded-b-xl border border-t-0 border-border/40 border-l-[4px] px-3 pb-2.5 pt-1 bg-card/60",
                       color.bar
                     )}
                   >

@@ -92,12 +92,13 @@ export function UnscheduledLocationsPanel({
                   setExpanded(false);
                 }}
                 placeholder="Filter places..."
-                className="w-full rounded-lg border border-border bg-white py-1.5 pl-8 pr-3 text-xs text-foreground placeholder:text-muted-foreground/40 focus:border-primary/40 focus:outline-none"
+                aria-label="Filter unscheduled places"
+                className="w-full rounded-lg border border-border bg-card py-1.5 pl-8 pr-3 text-xs text-foreground placeholder:text-muted-foreground/40 focus:border-primary/40 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               />
             </div>
           )}
 
-          <div className="scrollbar-hide -mx-1 space-y-px overflow-y-auto px-1">
+          <div className="scrollbar-hide -mx-1 max-h-[320px] space-y-px overflow-y-auto px-1">
             {visible.map((location) => (
               <div
                 key={location.id}
