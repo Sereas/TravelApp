@@ -188,8 +188,7 @@ class GooglePlacesClient:
         if not n:
             return False
         return ("°" in n or "\u00b0" in n) or bool(
-            re.search(r"[NSEW]", n, re.I)
-            and re.search(r"\d\s*['\u2032]\s*\d", n)
+            re.search(r"[NSEW]", n, re.I) and re.search(r"\d\s*['\u2032]\s*\d", n)
         )
 
     @staticmethod

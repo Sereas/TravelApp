@@ -4,9 +4,7 @@ from backend.app.clients.google_places import GooglePlacesClient
 
 
 def test_coordinate_style_slug_detection() -> None:
-    assert GooglePlacesClient._is_coordinate_style_place_slug(
-        "45°49'40.9\"N 6°12'01.0\"E"
-    )
+    assert GooglePlacesClient._is_coordinate_style_place_slug("45°49'40.9\"N 6°12'01.0\"E")
     assert GooglePlacesClient._is_coordinate_style_place_slug(
         "45\u00b049'40.9\"N+6\u00b012'01.0\"E".replace("+", " ")
     )
