@@ -510,7 +510,7 @@ async def import_google_list(
             )
 
         # Fetch photos for each imported location (best-effort, non-blocking).
-        for (row, photos), inserted in zip(rows_to_insert, result.data):
+        for (row, photos), _inserted in zip(rows_to_insert, result.data, strict=True):
             gp_id = row.get("google_place_id")
             if gp_id and photos:
                 with contextlib.suppress(Exception):
