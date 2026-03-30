@@ -278,6 +278,22 @@ export function ItineraryTab({
                     currentDayId={
                       selectedDayId ?? itinerary.days[0]?.id ?? null
                     }
+                    currentDayCities={(() => {
+                      const opt = selectedDay
+                        ? getSelectedOption(selectedDay)
+                        : undefined;
+                      if (!opt) return new Set<string>();
+                      const cities = new Set<string>();
+                      if (opt.starting_city)
+                        cities.add(opt.starting_city.toLowerCase());
+                      if (opt.ending_city)
+                        cities.add(opt.ending_city.toLowerCase());
+                      for (const ol of opt.locations) {
+                        if (ol.location.city)
+                          cities.add(ol.location.city.toLowerCase());
+                      }
+                      return cities;
+                    })()}
                     onScheduleToDay={handleScheduleLocationToDay}
                   />
                 )}

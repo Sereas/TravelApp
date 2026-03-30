@@ -57,6 +57,7 @@ logs/
 
 # Documentation
 docs/
+backlog/
 
 # OS
 .DS_Store

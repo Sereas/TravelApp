@@ -1,7 +1,7 @@
 "use client";
 
 import type { ItineraryDay, ItineraryOption } from "@/lib/api";
-import { Car, Compass, Footprints, MapPin, Route } from "lucide-react";
+import { Car, Compass, Footprints, LayoutList, MapPin, Route } from "lucide-react";
 
 interface ItineraryInspectorPanelProps {
   day: ItineraryDay | null;
@@ -92,6 +92,7 @@ export function ItineraryInspectorPanel({
               </div>
             </div>
             <div className="rounded-xl border border-primary/10 bg-primary/5 px-2 py-2.5">
+              <LayoutList size={16} className="mx-auto mb-1 text-primary/60" />
               <div className="text-xl font-bold text-foreground">
                 {day.options.length}
               </div>

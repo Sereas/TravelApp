@@ -913,9 +913,22 @@ export default function TripDetailPage() {
 
           {locations.length === 0 && !addingLocation ? (
             <EmptyState message="No locations added to this trip yet.">
-              <Button onClick={() => setAddingLocation(true)}>
-                Add a location
-              </Button>
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                <Button onClick={() => setAddingLocation(true)}>
+                  <MapPin size={16} className="mr-1.5" />
+                  Add a location
+                </Button>
+                <ImportGoogleListDialog
+                  tripId={tripId}
+                  trigger={
+                    <Button variant="outline">
+                      <List size={16} className="mr-1.5" />
+                      Import Google List
+                    </Button>
+                  }
+                  onImported={fetchData}
+                />
+              </div>
             </EmptyState>
           ) : filteredLocations.length === 0 && locationNameSearch.trim() ? (
             <p className="py-4 text-sm text-muted-foreground">

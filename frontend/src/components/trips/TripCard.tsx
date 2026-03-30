@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Calendar, Compass, Map, Mountain } from "lucide-react";
 
 export interface TripCardProps {
@@ -8,6 +9,7 @@ export interface TripCardProps {
   startDate?: string | null;
   endDate?: string | null;
   imageUrl?: string | null;
+  href?: string;
   onClick?: (id: string) => void;
 }
 
@@ -44,27 +46,16 @@ export function TripCard({
   startDate,
   endDate,
   imageUrl,
+  href,
   onClick,
 }: TripCardProps) {
   const dateDisplay = formatDateDisplay(startDate, endDate);
   const hasDates = startDate || endDate;
   const PlaceholderIcon = getPlaceholderIcon(id);
+  const isClickable = !!(href || onClick);
 
-  return (
-    <div
-      className={`group overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-all duration-200${
-        onClick ? " cursor-pointer hover:-translate-y-0.5 hover:shadow-md" : ""
-      }`}
-      onClick={() => onClick?.(id)}
-      role={onClick ? "button" : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      onKeyDown={(e) => {
-        if (onClick && (e.key === "Enter" || e.key === " ")) {
-          e.preventDefault();
-          onClick(id);
-        }
-      }}
-    >
+  const content = (
+    <>
       {/* Image area */}
       <div className="relative aspect-[16/10] w-full overflow-hidden">
         {imageUrl ? (
@@ -94,6 +85,35 @@ export function TripCard({
           <span className={hasDates ? "" : "italic"}>{dateDisplay}</span>
         </div>
       </div>
+    </>
+  );
+
+  const classes = `group overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-all duration-200${
+    isClickable ? " cursor-pointer hover:-translate-y-0.5 hover:shadow-md" : ""
+  }`;
+
+  if (href) {
+    return (
+      <Link href={href} className={classes}>
+        {content}
+      </Link>
+    );
+  }
+
+  return (
+    <div
+      className={classes}
+      onClick={() => onClick?.(id)}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={(e) => {
+        if (onClick && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          onClick(id);
+        }
+      }}
+    >
+      {content}
     </div>
   );
 }

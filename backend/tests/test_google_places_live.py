@@ -19,6 +19,8 @@ pytestmark = [
 ]
 
 TEST_LINK = "https://maps.app.goo.gl/m42uZygTpKWywZx78"
+# Short link whose long URL uses DMS in /place/... (dropped pin), not a venue name.
+DMS_PIN_LINK = "https://maps.app.goo.gl/rUfiUusr1tq86Sud6"
 
 
 @pytest.fixture(scope="module")
@@ -57,6 +59,16 @@ def test_resolve_short_link_returns_formatted_address(client: GooglePlacesClient
     addr_lower = result.formatted_address.lower()
     assert "cannes" in addr_lower
     assert "france" in addr_lower
+
+
+def test_resolve_dms_style_place_slug_uses_nearby_search(client: GooglePlacesClient):
+    """Dropped-pin links must not send DMS text to searchText (400); nearby works."""
+    result = client.resolve_from_link(DMS_PIN_LINK)
+
+    assert result.place_id, "place_id must not be empty"
+    assert result.latitude is not None and result.longitude is not None
+    assert 45.75 < result.latitude < 45.90
+    assert 6.10 < result.longitude < 6.30
 
 
 def test_url_parsing_extracts_name_and_coords(client: GooglePlacesClient):

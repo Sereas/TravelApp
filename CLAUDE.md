@@ -23,6 +23,9 @@ pytest backend/tests/test_trips_create.py
 # Lint / format
 ruff check .
 ruff format .
+
+# Playwright (Google list scraper in backend): after pip install, download Chromium once
+playwright install chromium
 ```
 
 ### Frontend (run from `frontend/`)

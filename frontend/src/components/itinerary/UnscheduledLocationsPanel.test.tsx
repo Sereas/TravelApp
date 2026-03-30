@@ -39,6 +39,7 @@ describe("UnscheduledLocationsPanel", () => {
         locations={locations}
         itineraryLocationMap={new Map([["loc-2", ["Jun 1"]]])}
         currentDayId="day-1"
+        currentDayCities={new Set()}
         onScheduleToDay={onScheduleToDay}
       />
     );
@@ -64,6 +65,7 @@ describe("UnscheduledLocationsPanel", () => {
           ])
         }
         currentDayId="day-1"
+        currentDayCities={new Set()}
         onScheduleToDay={vi.fn()}
       />
     );
@@ -80,6 +82,7 @@ describe("UnscheduledLocationsPanel", () => {
         locations={many}
         itineraryLocationMap={new Map()}
         currentDayId="day-1"
+        currentDayCities={new Set()}
         onScheduleToDay={vi.fn()}
       />
     );
@@ -111,6 +114,7 @@ describe("UnscheduledLocationsPanel", () => {
         locations={many}
         itineraryLocationMap={new Map()}
         currentDayId="day-1"
+        currentDayCities={new Set()}
         onScheduleToDay={vi.fn()}
       />
     );
@@ -125,5 +129,35 @@ describe("UnscheduledLocationsPanel", () => {
     expect(screen.getByText("Place 1")).toBeInTheDocument();
     expect(screen.getByText("Place 2")).toBeInTheDocument();
     expect(screen.queryByText("Place 3")).not.toBeInTheDocument();
+  });
+
+  it("sorts locations matching current day cities first with divider", () => {
+    const locs = [
+      makeLocation("loc-a", "Big Ben", "London"),
+      makeLocation("loc-b", "Eiffel Tower", "Paris"),
+      makeLocation("loc-c", "Louvre", "Paris"),
+      makeLocation("loc-d", "Colosseum", "Rome"),
+    ];
+    const { container } = render(
+      <UnscheduledLocationsPanel
+        locations={locs}
+        itineraryLocationMap={new Map()}
+        currentDayId="day-1"
+        currentDayCities={new Set(["paris"])}
+        onScheduleToDay={vi.fn()}
+      />
+    );
+
+    // Paris locations should appear first
+    const names = screen
+      .getAllByText(
+        /^(Eiffel Tower|Louvre|Big Ben|Colosseum)$/
+      )
+      .map((el) => el.textContent);
+    expect(names[0]).toBe("Eiffel Tower");
+    expect(names[1]).toBe("Louvre");
+
+    // "Other cities" divider should appear
+    expect(screen.getByText(/other cities/i)).toBeInTheDocument();
   });
 });

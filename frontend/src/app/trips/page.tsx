@@ -48,7 +48,7 @@ export default function TripsPage() {
   }, []);
 
   function handleTripCreated(trip: Trip) {
-    setTrips((prev) => [trip, ...prev]);
+    router.push(`/trips/${trip.id}`);
   }
 
   const filteredTrips = useMemo(() => {
@@ -153,7 +153,7 @@ export default function TripsPage() {
                   name={trip.name}
                   startDate={trip.start_date}
                   endDate={trip.end_date}
-                  onClick={(id) => router.push(`/trips/${id}`)}
+                  href={`/trips/${trip.id}`}
                 />
               ))}
             </div>

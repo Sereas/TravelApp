@@ -5,7 +5,8 @@ WORKDIR /app
 RUN addgroup --system app && adduser --system --ingroup app app
 
 COPY requirements-prod.txt .
-RUN pip install --no-cache-dir -r requirements-prod.txt
+RUN pip install --no-cache-dir -r requirements-prod.txt \
+    && playwright install --with-deps chromium
 
 COPY backend/ backend/
 

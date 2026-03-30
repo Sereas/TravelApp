@@ -82,19 +82,18 @@ describe("TripsPage", () => {
     });
   });
 
-  it("navigates to trip detail when card is clicked", async () => {
+  it("renders trip card as a link to trip detail", async () => {
     mockListTrips.mockResolvedValue([
       { id: "trip-42", name: "Tokyo", start_date: null, end_date: null },
     ]);
     render(<TripsPage />);
 
     await screen.findByText("Tokyo");
-    await userEvent.click(screen.getByRole("button", { name: /tokyo/i }));
-
-    expect(mockPush).toHaveBeenCalledWith("/trips/trip-42");
+    const link = screen.getByRole("link", { name: /tokyo/i });
+    expect(link).toHaveAttribute("href", "/trips/trip-42");
   });
 
-  it("adds new trip to list after creation via dialog", async () => {
+  it("navigates to new trip after creation via dialog", async () => {
     mockListTrips.mockResolvedValue([]);
     mockCreateTrip.mockResolvedValue({
       id: "new-1",
@@ -112,6 +111,8 @@ describe("TripsPage", () => {
     await userEvent.type(screen.getByLabelText(/trip name/i), "Berlin");
     await userEvent.click(screen.getByRole("button", { name: /create trip/i }));
 
-    expect(await screen.findByText("Berlin")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith("/trips/new-1");
+    });
   });
 });

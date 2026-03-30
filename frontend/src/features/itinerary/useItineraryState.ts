@@ -299,33 +299,35 @@ export function useItineraryState({
       }
 
       setItineraryActionError(null);
+      setItinerary((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          days: prev.days.map((day) =>
+            day.id === dayId
+              ? {
+                  ...day,
+                  options: day.options.map((option) =>
+                    option.id === optionId
+                      ? { ...option, ...updates }
+                      : option
+                  ),
+                }
+              : day
+          ),
+        };
+      });
+
       try {
         await api.itinerary.updateOption(tripId, dayId, optionId, updates);
-        setItinerary((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            days: prev.days.map((day) =>
-              day.id === dayId
-                ? {
-                    ...day,
-                    options: day.options.map((option) =>
-                      option.id === optionId
-                        ? { ...option, ...updates }
-                        : option
-                    ),
-                  }
-                : day
-            ),
-          };
-        });
       } catch (err) {
         setItineraryActionError(
           err instanceof Error ? err.message : "Failed to update option details"
         );
+        await fetchItinerary();
       }
     },
-    [tripId]
+    [fetchItinerary, tripId]
   );
 
   const handleUpdateDayDate = useCallback(
@@ -412,18 +414,35 @@ export function useItineraryState({
   const handleDeleteOption = useCallback(
     async (dayId: string, optionId: string) => {
       setItineraryActionError(null);
+      setSelectedOptionByDay((prev) => {
+        const next = { ...prev };
+        delete next[dayId];
+        return next;
+      });
+      setItinerary((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          days: prev.days.map((day) =>
+            day.id === dayId
+              ? {
+                  ...day,
+                  options: day.options.filter(
+                    (option) => option.id !== optionId
+                  ),
+                }
+              : day
+          ),
+        };
+      });
+
       try {
         await api.itinerary.deleteOption(tripId, dayId, optionId);
-        setSelectedOptionByDay((prev) => {
-          const next = { ...prev };
-          delete next[dayId];
-          return next;
-        });
-        await fetchItinerary();
       } catch (err) {
         setItineraryActionError(
           err instanceof Error ? err.message : "Failed to delete alternative"
         );
+        await fetchItinerary();
       }
     },
     [fetchItinerary, tripId]
@@ -448,6 +467,66 @@ export function useItineraryState({
         time_period: "morning" as const,
       }));
 
+      setItinerary((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          days: prev.days.map((day) =>
+            day.id === dayId
+              ? {
+                  ...day,
+                  options: day.options.map((option) => {
+                    if (option.id !== optionId) return option;
+                    const newLocations = locationIds.map((locationId, index) => {
+                      const loc = locations.find((l) => l.id === locationId);
+                      return {
+                        location_id: locationId,
+                        sort_order: startOrder + index,
+                        time_period: "morning",
+                        location: loc
+                          ? {
+                              id: loc.id,
+                              name: loc.name,
+                              city: loc.city,
+                              address: loc.address,
+                              google_link: loc.google_link,
+                              category: loc.category,
+                              note: loc.note,
+                              working_hours: loc.working_hours,
+                              requires_booking: loc.requires_booking,
+                              image_url: loc.image_url,
+                              user_image_url: loc.user_image_url,
+                              attribution_name: loc.attribution_name,
+                              attribution_uri: loc.attribution_uri,
+                            }
+                          : {
+                              id: locationId,
+                              name: "Loading...",
+                              city: null,
+                              address: null,
+                              google_link: null,
+                              category: null,
+                              note: null,
+                              working_hours: null,
+                              requires_booking: null,
+                              image_url: null,
+                              user_image_url: null,
+                              attribution_name: null,
+                              attribution_uri: null,
+                            },
+                      };
+                    });
+                    return {
+                      ...option,
+                      locations: [...option.locations, ...newLocations],
+                    };
+                  }),
+                }
+              : day
+          ),
+        };
+      });
+
       try {
         await api.itinerary.batchAddLocationsToOption(
           tripId,
@@ -455,15 +534,16 @@ export function useItineraryState({
           optionId,
           items
         );
-        await fetchItinerary();
+        void fetchItinerary();
       } catch (err) {
         setItineraryActionError(
           err instanceof Error ? err.message : "Failed to add locations"
         );
+        await fetchItinerary();
         throw err;
       }
     },
-    [fetchItinerary, itinerary, tripId]
+    [fetchItinerary, itinerary, locations, tripId]
   );
 
   const handleRemoveLocationFromOption = useCallback(

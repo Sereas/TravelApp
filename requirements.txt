@@ -28,6 +28,12 @@ openpyxl>=3.1.0
 pytest>=7.4.0
 pytest-asyncio>=0.21.0
 
+# Browser automation (Google list scraping). Pip installs the driver only; browsers
+# are separate. After pip install -r requirements.txt, run once per machine/venv:
+#   playwright install chromium
+# (use .venv/bin/playwright if the CLI is not on PATH)
+playwright>=1.40.0
+
 # Linting and formatting
 ruff>=0.9.0
 

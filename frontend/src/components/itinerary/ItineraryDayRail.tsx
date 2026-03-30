@@ -161,13 +161,12 @@ export function ItineraryDayRail({
                 </div>
               )}
 
-              {day.options.length > 1 && (
-                <div className="mt-2 border-t border-border/40 pt-2">
-                  <span className="text-[10px] font-medium text-muted-foreground/60">
-                    {day.options.length} plans
-                  </span>
-                </div>
-              )}
+              <div className="mt-2 border-t border-border/40 pt-2">
+                <span className="text-[10px] font-medium text-muted-foreground/60">
+                  {day.options.length}{" "}
+                  {day.options.length === 1 ? "plan" : "plans"}
+                </span>
+              </div>
             </button>
           );
         })}
