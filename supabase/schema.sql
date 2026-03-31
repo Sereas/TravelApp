@@ -982,8 +982,6 @@ CREATE INDEX idx_trip_shares_trip_id ON public.trip_shares USING btree (trip_id)
 
 CREATE INDEX idx_trips_user_id ON public.trips USING btree (user_id);
 
-CREATE INDEX route_segments_route_id_idx ON public.route_segments USING btree (route_id);
-
 CREATE INDEX route_segments_segment_cache_id_idx ON public.route_segments USING btree (segment_cache_id);
 
 CREATE UNIQUE INDEX segment_cache_cache_key_key ON public.segment_cache USING btree (cache_key);
