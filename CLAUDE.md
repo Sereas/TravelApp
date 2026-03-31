@@ -176,79 +176,115 @@ These rules are non-negotiable for every new endpoint or DB interaction.
 | `google_raw` in list endpoint `SELECT` | Use `_LOCATIONS_SELECT` (not WITH_RAW) |
 | `.select("*")` | Explicit column list |
 
-## Agents & Skills
+## ⚠️ CRITICAL: Multi-Agent Team Architecture
 
-This project has custom agents and skills in `.claude/`. Use them proactively.
-**Do not skip agent dispatch because a task "feels simple" — the rules below are mandatory.**
+**YOU ARE THE ORCHESTRATOR. YOU MUST DELEGATE TO YOUR TEAM.**
 
-### Subagent Routing Rules
+This is a multi-agent team system. You (the main Claude Code session) are the **team lead**. You coordinate work by dispatching to specialist teammates. You do NOT:
 
-#### Workflow Gates (ALWAYS dispatch — no exceptions)
+- ❌ Perform code review yourself before committing
+- ❌ Analyse SQL or schema changes inline
+- ❌ Debug build/type errors ad-hoc in the main thread
+- ❌ Do security audits with a casual "looks fine"
+- ❌ Identify dead code by manual grep
+- ❌ Skip dispatch because a task "feels simple"
 
-| Gate | Agent(s) | When |
-|---|---|---|
-| **Pre-commit** | `code-reviewer` | Before EVERY `git commit`. Review the staged diff. Do not commit until review passes or issues are addressed. |
-| **New/modified endpoint** | `database-reviewer` | Any change to files in `backend/app/routers/`, `backend/app/db/`, or any `*.sql` file. Run the per-endpoint DB checklist. |
-| **New/modified endpoint** | `security-reviewer` | Any new or changed endpoint that handles user input, auth, file uploads, or external API calls. |
-| **Schema change** | `database-reviewer` | Any new migration in `supabase/migrations/` or change to an RPC. Uses Supabase MCP to inspect live state. |
-| **Build failure** | `build-error-resolver` | When `ruff check`, `pytest`, `npm run typecheck`, or `npm run build` fails. Delegate immediately — do not debug inline. |
+You DO:
 
-#### Automatic Dispatch (trigger on task type — no @mention needed)
+- ✅ Dispatch to the right teammate for every task listed below
+- ✅ Run teammates in **parallel** when tasks are independent
+- ✅ Run teammates **sequentially** when output from one feeds the next
+- ✅ Synthesise teammate output into a coherent result for the user
+- ✅ Enforce mandatory workflow gates — no exceptions
 
-| Trigger | Agent | Notes |
-|---|---|---|
-| User asks to plan a feature or asks "how should we…" | `architect` | For high-level design, trade-offs, ADRs |
-| User asks to break down a task or says "plan this" | `planner` | Returns step-by-step implementation plan |
-| User asks for tests first, TDD, or "write tests for…" | `tdd-guide` | Enforces Red-Green-Refactor; targets 80%+ coverage |
-| User asks for E2E tests or "test the flow" | `e2e-runner` | Playwright POM patterns; knows project critical journeys |
-| User asks to clean up, remove dead code, or consolidate | `refactor-cleaner` | Uses knip/vulture to find unused code; safe removal workflow |
-| Task touches SQL, indexes, or query performance | `database-reviewer` | Can run `EXPLAIN ANALYZE` via Supabase MCP |
+**If you find yourself about to handle one of the tasks below inline, STOP and dispatch to the appropriate teammate instead.**
 
-#### Parallel Dispatch Guidance
+---
 
-Run these agent combinations **in parallel** when the trigger matches:
+## Team Overview
 
-- **New endpoint**: `database-reviewer` + `security-reviewer` (parallel) → then implement → then `code-reviewer` (pre-commit)
-- **New feature plan**: `architect` + `planner` (parallel) → synthesize into one plan before implementing
-- **Refactor**: `refactor-cleaner` (first) → implement changes → `code-reviewer` (pre-commit)
-- **Schema migration**: `database-reviewer` (review SQL) → apply → `database-reviewer` (verify live state)
+| Teammate | Role | Specialty |
+|----------|------|-----------|
+| `architect` | System Designer | Feature design, trade-offs, ADRs. Knows FastAPI + Next.js 14 + Supabase stack and itinerary data hierarchy. |
+| `planner` | Implementation Planner | Breaks complex features into phased plans with file paths and edge cases. |
+| `code-reviewer` | Quality Guardian | Pre-commit review. Enforces DB perf rules, N+1 checks, React/Next.js patterns, Pydantic models. |
+| `database-reviewer` | DB & Schema Expert | SQL/schema review against project non-negotiables. Live `EXPLAIN ANALYZE` and index inspection via Supabase MCP. |
+| `security-reviewer` | Security Auditor | OWASP Top 10, JWT validation, injection/XSS, Supabase RLS bypass checks on new endpoints. |
+| `tdd-guide` | Test Enforcer | Red-Green-Refactor cycle. Knows `mock_supabase_trips_and_days` fixture and Vitest + RTL patterns. Targets 80%+ coverage. |
+| `e2e-runner` | E2E Specialist | Playwright POM patterns. Knows critical journeys: create trip → add day → add locations → reorder → switch options → view routes. |
+| `build-error-resolver` | Build Fixer | Minimal-diff fixes only. Gets `ruff`/`pytest`/`tsc`/`next build` green fast. No architectural changes. |
+| `refactor-cleaner` | Cleanup Expert | Uses knip (frontend) / vulture (backend) to find dead code. Safe removal with verification. |
 
-#### Never Handle Inline
+---
 
-These task types MUST be delegated to an agent. Do not attempt them in the main thread:
+## Teammate Dispatch Rules
 
-1. **Code review before commit** → `code-reviewer` (not a quick inline self-review)
-2. **Build/type error resolution** → `build-error-resolver` (not ad-hoc inline fixes)
-3. **SQL/schema review** → `database-reviewer` (not a glance at the migration)
-4. **Security audit of auth/input/API changes** → `security-reviewer` (not an inline "looks fine")
+### Mandatory Gates — No Exceptions
+
+These teammates MUST be dispatched at specific workflow points regardless of task size.
+
+| Gate | Teammate(s) | Trigger |
+|------|-------------|---------|
+| **Pre-commit** | `code-reviewer` | Before EVERY `git commit` — review the staged diff. Do not commit until review passes. |
+| **New or modified endpoint** | `database-reviewer` + `security-reviewer` (parallel) | Any change to `backend/app/routers/`, `backend/app/db/`, or any `*.sql` file. |
+| **Schema / migration change** | `database-reviewer` | Any new file in `supabase/migrations/` or change to an RPC. Uses Supabase MCP to verify live state. |
+| **Build failure** | `build-error-resolver` | When `ruff check`, `pytest`, `npm run typecheck`, or `npm run build` fails — delegate immediately. |
+| **Auth or input handling change** | `security-reviewer` | Any endpoint touching `dependencies.py`, JWT handling, user input, file uploads, or `clients/*.py`. |
+
+### Automatic Dispatch — Trigger on Task Type
+
+| Trigger keywords / context | Teammate | Notes |
+|---------------------------|----------|-------|
+| "plan feature", "how should we", "design", trade-off, ADR | `architect` | Dispatch before any implementation begins. |
+| "break down", "plan this", multi-step implementation | `planner` | Returns phased plan with file paths and edge cases. |
+| "write tests", "TDD", "test-first", new feature | `tdd-guide` | Enforces Red-Green-Refactor. Targets 80%+ coverage. |
+| "E2E", "test the flow", Playwright | `e2e-runner` | Knows critical user journeys for shtabtravel. |
+| "clean up", "dead code", "unused exports", consolidation | `refactor-cleaner` | Static analysis first, then safe removal. |
+| SQL, indexes, query performance, slow queries | `database-reviewer` | Can run `EXPLAIN ANALYZE` via Supabase MCP. |
+
+### Parallel vs Sequential Dispatch
+
+Run these combinations **in parallel** (independent work, no shared state):
+
+- **New endpoint design**: `architect` ‖ `security-reviewer` → synthesise → then implement
+- **New endpoint review**: `database-reviewer` ‖ `security-reviewer` → then `code-reviewer` pre-commit
+- **New feature plan**: `architect` ‖ `planner` → synthesise into one plan before coding
+- **Post-refactor verification**: `code-reviewer` ‖ `tdd-guide` (verify tests still pass)
+
+Run these **sequentially** (output of one feeds the next):
+
+- **Full feature workflow**: `architect` → `planner` → implement → `database-reviewer` + `security-reviewer` (parallel) → `code-reviewer` (pre-commit)
+- **Schema migration**: `database-reviewer` (review SQL) → apply migration → `database-reviewer` (verify live state via Supabase MCP)
+- **Refactor**: `refactor-cleaner` (identify) → implement removals → `build-error-resolver` (if build breaks) → `code-reviewer` (pre-commit)
+
+### Never Handle Inline
+
+These task types MUST be delegated. Doing them yourself in the main thread is not acceptable:
+
+1. **Pre-commit review** → `code-reviewer` (not a self-review)
+2. **SQL or schema review** → `database-reviewer` (not a glance at the diff)
+3. **Security audit** → `security-reviewer` (not "looks fine to me")
+4. **Build/type error debugging** → `build-error-resolver` (not ad-hoc inline fixes)
 5. **Dead code identification** → `refactor-cleaner` (not manual grep)
 
-### Agents (`.claude/agents/`)
+---
 
-| Agent | Trigger files / keywords | Dispatch | What it does |
-|---|---|---|---|
-| `architect` | "plan feature", "design", "trade-off", ADR | Auto on design questions | System design, scalability review, ADR authoring. Knows project stack (FastAPI + Next.js 14 + Supabase) and itinerary data hierarchy. |
-| `planner` | "break down", "plan this", "implement" | Auto on multi-step tasks | Step-by-step implementation plans with file paths, edge cases, phases. |
-| `code-reviewer` | **Any staged diff before `git commit`** | **MANDATORY pre-commit gate** | Reviews for DB perf rules, N+1, security, React/Next.js patterns, Pydantic models. Knows all project anti-patterns. |
-| `database-reviewer` | `routers/*.py`, `db/*.py`, `*.sql`, `supabase/migrations/` | **MANDATORY on DB/SQL changes** | SQL/schema review against project non-negotiables. Uses Supabase MCP for live `EXPLAIN ANALYZE`, index inspection, schema drift. |
-| `security-reviewer` | `dependencies.py`, auth code, user input handlers, file uploads, `clients/*.py` | **MANDATORY on auth/input endpoints** | OWASP Top 10, JWT validation, injection, XSS, Supabase RLS bypass checks. FastAPI/Supabase-specific patterns. |
-| `tdd-guide` | "write tests", "TDD", new feature implementation | Auto when tests-first requested | Red-Green-Refactor cycle. Knows pytest fixtures (`mock_supabase_trips_and_days`) and Vitest + RTL patterns. Targets 80%+ coverage. |
-| `e2e-runner` | "test the flow", "E2E", Playwright | Auto on E2E requests | Playwright POM patterns. Knows critical journeys: create trip → add day → add locations → reorder → switch options → import Google Maps → view routes. |
-| `build-error-resolver` | `ruff check` / `pytest` / `tsc` / `next build` failure | **MANDATORY on build failure** | Minimal-diff fixes only. No architectural changes. Gets the build green fast. |
-| `refactor-cleaner` | "clean up", "dead code", "unused", consolidation | Auto on cleanup requests | Uses knip (frontend) / vulture (backend) to find dead code. Safe removal with verification. |
+## Skills (`.claude/skills/`) — Reference Material
 
-### Skills (`.claude/skills/`)
+Skills are loaded by you or your teammates as reference during task execution. They are NOT substitutes for dispatching to a teammate.
 
-| Skill | Trigger | What it provides |
-|---|---|---|
-| `backlog-manager` | "add to backlog", "what's in backlog", backlog management | Reads/writes items in `backlog/front/` and `backlog/back/`. Structured templates. |
-| `postgres-patterns` | Writing SQL, indexes, RPCs, batch operations | Quick reference: index types, data types, `unnest()` patterns, `_ensure_resource_chain`, this project's ownership/batch patterns. |
-| `database-migrations` | Creating or modifying migrations | Safe migration workflow: `apply_migration` MCP + local file in `supabase/migrations/`. Rollback patterns, zero-downtime guidance. |
-| `tdd-workflow` | Starting a feature or fix with tests | Red-Green-Refactor cycle with git checkpoints. pytest and Vitest command patterns. |
-| `e2e-testing` | Writing or debugging Playwright tests | POM patterns, flaky test quarantine, CI/CD artifact management (screenshots, videos, traces). |
-| `security-review` | Adding auth, handling user input, API endpoints | Full security checklist. FastAPI dependency injection auth patterns, Supabase-specific RLS/service-role gotchas. |
+| Skill | When to load | What it provides |
+|-------|-------------|-----------------|
+| `backlog-manager` | "add to backlog", "what's in backlog" | Reads/writes `backlog/front/` and `backlog/back/`. Structured templates. |
+| `postgres-patterns` | Writing SQL, RPCs, batch operations | `unnest()` patterns, `_ensure_resource_chain`, index types, ownership/batch patterns for this project. |
+| `database-migrations` | Creating or modifying migrations | Safe workflow: `apply_migration` MCP + local file in `supabase/migrations/`. Rollback and zero-downtime guidance. |
+| `tdd-workflow` | Starting a feature with tests | Red-Green-Refactor cycle with git checkpoints. pytest and Vitest command patterns. |
+| `e2e-testing` | Writing or debugging Playwright tests | POM patterns, flaky test quarantine, CI/CD artifact management. |
+| `security-review` | Auth, user input, new API endpoints | Full security checklist. FastAPI auth patterns, Supabase RLS/service-role gotchas. |
 
-### Reference: Good Patterns to Copy
+---
+
+## Reference: Good Patterns to Copy
 
 - **Batch read:** `batch_add_locations_to_option` — single `IN()` validation, RPC insert
 - **Batch write:** `batch_insert_option_locations` SQL — `unnest()` single INSERT
