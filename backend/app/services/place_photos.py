@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
+
+import structlog
 
 from backend.app.clients.google_places import GooglePlacesClient
 
-logger = logging.getLogger(__name__)
+logger: structlog.stdlib.BoundLogger = structlog.get_logger("place_photos")
 
 
 def ensure_place_photo(
@@ -79,5 +80,10 @@ def ensure_place_photo(
         return photo_url
 
     except Exception:
-        logger.exception("Failed to fetch/store photo for place %s", google_place_id)
+        logger.error(
+            "photo_fetch_failed",
+            google_place_id=google_place_id,
+            error_category="external_api",
+            exc_info=True,
+        )
         return None

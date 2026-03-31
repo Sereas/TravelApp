@@ -159,7 +159,7 @@ async def add_location(
         row["longitude"] = lng
     result = supabase.table("locations").insert(row).execute()
     if not result.data or len(result.data) == 0:
-        logger.error("location_insert_failed", trip_id=str(trip_id))
+        logger.error("location_insert_failed", trip_id=str(trip_id), error_category="db")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create location; please try again",
@@ -314,6 +314,7 @@ async def batch_add_locations(
             trip_id=str(trip_id),
             expected=len(body),
             got=len(result.data) if result.data else 0,
+            error_category="db",
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -500,6 +501,7 @@ async def import_google_list(
                 trip_id=str(trip_id),
                 expected=len(db_rows),
                 got=len(result.data) if result.data else 0,
+                error_category="db",
             )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -604,6 +606,7 @@ async def update_location(
             "location_update_fetch_failed",
             location_id=str(location_id),
             trip_id=str(trip_id),
+            error_category="db",
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

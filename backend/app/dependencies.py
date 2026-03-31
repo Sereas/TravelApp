@@ -77,33 +77,34 @@ async def get_current_user_id(
     """
     settings = get_settings()
     if not settings.supabase_jwt_secret and not settings.supabase_url:
-        logger.error("auth_failed", reason="no_jwt_verification_configured")
+        logger.error("auth_failed", reason="no_jwt_verification_configured", error_category="auth")
         raise _auth_error("JWT verification not configured")
 
     if not credentials:
-        logger.info("auth_failed", reason="missing_authorization_header")
+        logger.warning("auth_failed", reason="missing_authorization_header", error_category="auth")
         raise _auth_error("Missing Authorization header")
 
     token = credentials.credentials
     try:
         payload = _verify_token(token)
     except Exception:
-        logger.warning("auth_failed", reason="invalid_or_expired_token")
+        logger.warning("auth_failed", reason="invalid_or_expired_token", error_category="auth")
         raise _auth_error("Invalid or expired token") from None
 
     sub = payload.get("sub")
     if not sub:
-        logger.warning("auth_failed", reason="token_missing_subject")
+        logger.warning("auth_failed", reason="token_missing_subject", error_category="auth")
         raise _auth_error("Token missing subject")
 
     try:
         user_id = UUID(sub)
     except (ValueError, TypeError):
-        logger.warning("auth_failed", reason="invalid_subject", sub=sub)
+        logger.warning("auth_failed", reason="invalid_subject", sub=sub, error_category="auth")
         raise _auth_error("Invalid subject in token") from None
 
     request.state.user_id = user_id
     request.state.user_email = payload.get("email")
+    structlog.contextvars.bind_contextvars(user_id=str(user_id))
     logger.debug("auth_success", user_id=str(user_id))
     return user_id
 

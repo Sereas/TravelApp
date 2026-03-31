@@ -120,7 +120,7 @@ async def preview_location_from_google_link(
     try:
         resolved = places_client.resolve_from_link(google_link)
     except Exception as exc:
-        logger.warning("google_preview_failed", error=str(exc))
+        logger.warning("google_preview_failed", error=str(exc), error_category="external_api")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Could not resolve Google Maps link",

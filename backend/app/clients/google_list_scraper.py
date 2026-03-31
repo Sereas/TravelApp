@@ -203,7 +203,7 @@ class GoogleListScraper:
         page_html = await page.content()
         m = _GETLIST_RE.search(page_html)
         if not m:
-            logger.warning("getlist_url_not_found")
+            logger.warning("getlist_url_not_found", error_category="external_api")
             return []
 
         path = html_mod.unescape(m.group(1))
@@ -220,7 +220,7 @@ class GoogleListScraper:
                 getlist_url,
             )
         except Exception as exc:
-            logger.warning("getlist_fetch_failed", error=str(exc))
+            logger.warning("getlist_fetch_failed", error=str(exc), error_category="external_api")
             return []
 
         return _parse_coords_from_getlist(resp_text)

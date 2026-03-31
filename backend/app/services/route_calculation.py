@@ -6,6 +6,7 @@ Cache is reused when eligible; only missing/stale/retry-eligible segments are re
 
 from __future__ import annotations
 
+import time
 from datetime import UTC, datetime
 from typing import Any
 
@@ -322,6 +323,7 @@ def _compute_one_segment(
             status=status,
             error_type=error_type,
             http_status=http_status,
+            error_category="external_api",
         )
         supabase.table("segment_cache").upsert(row, on_conflict="cache_key").execute()
         again = _fetch_cached_segment(supabase, cache_key)
@@ -397,6 +399,7 @@ def get_route_with_fresh_segments(
     status allows retry and cooldown expired.
     Update option_routes totals and route_segments; return route with segment status.
     """
+    start = time.perf_counter()
     route_row = (
         supabase.table("option_routes")
         .select("route_id, option_id, label, transport_mode, sort_order")
@@ -446,7 +449,7 @@ def get_route_with_fresh_segments(
     )
     loc_by_id = {str(r["location_id"]): r for r in (loc_rows.data or [])}
 
-    return _get_route_segments_impl(
+    result = _get_route_segments_impl(
         supabase,
         route_id,
         route,
@@ -458,6 +461,19 @@ def get_route_with_fresh_segments(
         google_routes_client,
         force_refresh,
     )
+    duration_ms = round((time.perf_counter() - start) * 1000, 1)
+    successful = sum(1 for s in result.segments if s.status == "success")
+    logger.info(
+        "route_segments_computed",
+        route_id=route_id,
+        transport_mode=mode,
+        segments=len(result.segments),
+        successful_segments=successful,
+        force_refresh=force_refresh,
+        route_status=result.route_status,
+        duration_ms=duration_ms,
+    )
+    return result
 
 
 def _get_route_segments_impl(

@@ -4,6 +4,7 @@ import base64
 from datetime import UTC, datetime
 
 import jwt
+import structlog
 from fastapi.testclient import TestClient
 
 from backend.app.db.supabase import get_supabase_client
@@ -178,4 +179,39 @@ def test_jwt_malformed_token_returns_401(client: TestClient, monkeypatch):
         )
         assert resp.status_code == 401
     finally:
+        _clear_caches()
+
+
+def test_successful_auth_binds_user_id_to_structlog_context(client: TestClient, monkeypatch):
+    """After successful auth, user_id is bound to structlog contextvars."""
+    secret = "test-plain-secret"
+    monkeypatch.setenv("SUPABASE_JWT_SECRET", secret)
+    monkeypatch.setenv("SUPABASE_URL", "")
+    _clear_caches()
+
+    now = datetime.now(UTC)
+    token = jwt.encode(
+        {"sub": TEST_USER_ID, "exp": datetime(now.year + 1, 1, 1, tzinfo=UTC)},
+        secret,
+        algorithm="HS256",
+    )
+
+    captured_user_id = {}
+
+    class _CapturingSupabase(_StubSupabase):
+        def execute(self):
+            ctx = structlog.contextvars.get_contextvars()
+            captured_user_id.update(ctx)
+            return type("R", (), {"data": []})()
+
+    app.dependency_overrides[get_supabase_client] = _CapturingSupabase
+    try:
+        resp = client.get(
+            "/api/v1/trips",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code != 401
+        assert captured_user_id.get("user_id") == TEST_USER_ID
+    finally:
+        app.dependency_overrides.clear()
         _clear_caches()

@@ -30,11 +30,29 @@ setup_logging()
 
 _logger = structlog.get_logger("lifespan")
 
+_cors_origins = [
+    o.strip()
+    for o in os.getenv(
+        "CORS_ALLOWED_ORIGINS",
+        "http://localhost:3000,http://localhost:3001,https://shtabtravel.vercel.app",
+    ).split(",")
+]
+
 
 @asynccontextmanager
 async def _lifespan(application: FastAPI) -> AsyncGenerator[None]:
     """Create singleton Google API clients at startup, close on shutdown."""
     settings = get_settings()
+    _logger.info(
+        "app_startup",
+        log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
+        log_format=os.getenv("LOG_FORMAT", "json").lower(),
+        supabase_url_set=bool(settings.supabase_url),
+        google_places_configured=bool(settings.google_places_api_key),
+        google_routes_configured=bool(settings.google_routes_api_key),
+        jwt_secret_set=bool(settings.supabase_jwt_secret),
+        cors_origin_count=len(_cors_origins),
+    )
 
     # Google Places client
     places_client: GooglePlacesClient | None = None
@@ -78,19 +96,17 @@ app = FastAPI(
 async def _google_places_disabled_handler(request, exc):
     from fastapi.responses import JSONResponse
 
+    _logger.warning(
+        "google_places_disabled_request",
+        path=request.url.path,
+        error_category="external_api",
+    )
     return JSONResponse(
         status_code=503,
         content={"detail": "Google integration is not configured"},
     )
 
 
-_cors_origins = [
-    o.strip()
-    for o in os.getenv(
-        "CORS_ALLOWED_ORIGINS",
-        "http://localhost:3000,http://localhost:3001,https://shtabtravel.vercel.app",
-    ).split(",")
-]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,

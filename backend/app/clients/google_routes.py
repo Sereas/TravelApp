@@ -6,10 +6,14 @@ treat the client as disabled.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Any
 
 import httpx
+import structlog
+
+logger: structlog.stdlib.BoundLogger = structlog.get_logger("google_routes")
 
 
 class GoogleRoutesDisabledError(RuntimeError):
@@ -85,24 +89,48 @@ class GoogleRoutesClient:
             "travelMode": mode,
             "polylineQuality": "OVERVIEW",
         }
-        resp = self._http.post(
-            _COMPUTE_ROUTES_URL,
-            json=body,
-            headers={
-                "X-Goog-Api-Key": self._api_key,
-                "X-Goog-FieldMask": _FIELD_MASK,
-            },
-        )
-        resp.raise_for_status()
+        start = time.perf_counter()
+        try:
+            resp = self._http.post(
+                _COMPUTE_ROUTES_URL,
+                json=body,
+                headers={
+                    "X-Goog-Api-Key": self._api_key,
+                    "X-Goog-FieldMask": _FIELD_MASK,
+                },
+            )
+            resp.raise_for_status()
+        except Exception:
+            duration_ms = round((time.perf_counter() - start) * 1000, 1)
+            logger.warning(
+                "routes_compute_failed",
+                duration_ms=duration_ms,
+                travel_mode=travel_mode,
+                error_category="external_api",
+            )
+            raise
+        duration_ms = round((time.perf_counter() - start) * 1000, 1)
         data: dict[str, Any] = resp.json()
         routes = data.get("routes") or []
         if not routes:
+            logger.warning(
+                "routes_no_results",
+                duration_ms=duration_ms,
+                travel_mode=travel_mode,
+                error_category="external_api",
+            )
             raise ValueError("Google Routes API returned no routes")
         route = routes[0]
         duration_str = route.get("duration") or "0s"
         duration_seconds = _parse_duration_seconds(duration_str)
         distance_meters = int(route.get("distanceMeters", 0))
         polyline = (route.get("polyline") or {}).get("encodedPolyline")
+        logger.debug(
+            "routes_compute_ok",
+            duration_ms=duration_ms,
+            travel_mode=travel_mode,
+            distance_meters=distance_meters,
+        )
         return RouteLegResult(
             distance_meters=distance_meters,
             duration_seconds=duration_seconds,

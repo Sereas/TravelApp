@@ -118,6 +118,7 @@ async def create_route(
             trip_id=str(trip_id),
             day_id=str(day_id),
             option_id=str(option_id),
+            error_category="db",
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -108,7 +108,7 @@ async def create_option(
     # postgrest-py insert() uses Prefer: return=representation by default (full inserted row).
     result = supabase.table("day_options").insert(row).execute()
     if not result.data or len(result.data) == 0:
-        logger.error("option_insert_failed", day_id=str(day_id))
+        logger.error("option_insert_failed", day_id=str(day_id), error_category="db")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create option; please try again",
@@ -131,6 +131,7 @@ async def create_option(
             day_id=str(day_id),
             sent_to_db=data.created_by,
             returned_by_postgrest=persisted,
+            error_category="db",
         )
     return _option_row_to_response(option)
 

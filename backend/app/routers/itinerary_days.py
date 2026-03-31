@@ -114,7 +114,7 @@ async def create_day(
     }
     result = supabase.table("trip_days").insert(row).execute()
     if not result.data or len(result.data) == 0:
-        logger.error("day_insert_failed", trip_id=str(trip_id))
+        logger.error("day_insert_failed", trip_id=str(trip_id), error_category="db")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create day; please try again",
@@ -487,7 +487,7 @@ async def generate_days(
         return [_day_row_to_response(r) for r in items]
     insert_result = supabase.table("trip_days").insert(rows).execute()
     if not insert_result.data or len(insert_result.data) == 0:
-        logger.error("days_generate_insert_failed", trip_id=str(trip_id))
+        logger.error("days_generate_insert_failed", trip_id=str(trip_id), error_category="db")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to generate days; please try again",

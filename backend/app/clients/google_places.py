@@ -8,11 +8,15 @@ calling Google to preserve quotas.
 from __future__ import annotations
 
 import re
+import time
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import unquote, urlparse
 
 import httpx
+import structlog
+
+logger: structlog.stdlib.BoundLogger = structlog.get_logger("google_places")
 
 
 class GooglePlacesDisabledError(RuntimeError):
@@ -95,17 +99,39 @@ class GooglePlacesClient:
            use places:searchNearby at the parsed lat/lng when available.
         6. Fallback: call places:searchText with a truncated URL as textQuery.
         """
+        start = time.perf_counter()
         long_url = self._follow_redirects_if_needed(google_link)
         name, lat, lng = self._extract_name_and_location_from_url(long_url)
         if name and self._is_coordinate_style_place_slug(name):
             name = None
-        if name and lat is not None and lng is not None:
-            return self._search_place_by_text(name, latitude=lat, longitude=lng, radius_m=500.0)
-        if name:
-            return self._search_place_by_text(name)
-        if lat is not None and lng is not None:
-            return self._search_place_nearby(lat, lng)
-        return self._search_place_by_text(self._truncate_text_query(long_url))
+        try:
+            if name and lat is not None and lng is not None:
+                result = self._search_place_by_text(
+                    name, latitude=lat, longitude=lng, radius_m=500.0
+                )
+            elif name:
+                result = self._search_place_by_text(name)
+            elif lat is not None and lng is not None:
+                result = self._search_place_nearby(lat, lng)
+            else:
+                result = self._search_place_by_text(self._truncate_text_query(long_url))
+        except Exception:
+            duration_ms = round((time.perf_counter() - start) * 1000, 1)
+            logger.warning(
+                "places_resolve_failed",
+                duration_ms=duration_ms,
+                error_category="external_api",
+                exc_info=True,
+            )
+            raise
+        duration_ms = round((time.perf_counter() - start) * 1000, 1)
+        logger.info(
+            "places_resolve_ok",
+            duration_ms=duration_ms,
+            place_id=result.place_id,
+            resolved_name=result.name,
+        )
+        return result
 
     def _follow_redirects_if_needed(self, url: str) -> str:
         parsed = urlparse(url)
@@ -248,10 +274,18 @@ class GooglePlacesClient:
                 "maxResultCount": 20,
                 "rankPreference": "DISTANCE",
             }
+            start = time.perf_counter()
             resp = self._http.post(self._NEARBY_URL, json=payload, headers=headers)
             resp.raise_for_status()
+            duration_ms = round((time.perf_counter() - start) * 1000, 1)
             data = resp.json()
             places = data.get("places") or []
+            logger.debug(
+                "places_nearby_search",
+                duration_ms=duration_ms,
+                radius=radius,
+                results=len(places),
+            )
             if places:
                 return self._place_to_resolution(places[0], raw=data)
         raise RuntimeError("Places nearby search returned no candidates near coordinates")
@@ -296,10 +330,17 @@ class GooglePlacesClient:
                     "radius": radius_m,
                 }
             }
+        start = time.perf_counter()
         resp = self._http.post(self._SEARCH_URL, json=payload, headers=headers)
         resp.raise_for_status()
+        duration_ms = round((time.perf_counter() - start) * 1000, 1)
         data = resp.json()
         places = data.get("places") or []
+        logger.debug(
+            "places_text_search",
+            duration_ms=duration_ms,
+            results=len(places),
+        )
         if not places:
             raise RuntimeError("Places search returned no candidates")
         return self._place_to_resolution(places[0] or {}, raw=data)

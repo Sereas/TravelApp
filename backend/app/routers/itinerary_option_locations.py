@@ -202,6 +202,7 @@ async def add_location_to_option(
             day_id=str(day_id),
             option_id=str(option_id),
             location_id=str(body.location_id),
+            error_category="db",
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -517,6 +518,7 @@ async def batch_add_locations_to_option(
             trip_id=trip_id_str,
             day_id=str(day_id),
             option_id=option_id_str,
+            error_category="db",
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
