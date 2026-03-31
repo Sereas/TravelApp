@@ -137,34 +137,34 @@ export function UnscheduledLocationsPanel({
                     </div>
                   )}
                 <div className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-primary/5">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5 text-[13px] leading-tight">
-                    <span className="truncate font-bold text-foreground">
-                      {location.name}
-                    </span>
-                    {location.city && (
-                      <span className="inline-flex shrink-0 items-center gap-0.5 text-[11px] text-muted-foreground/60">
-                        <MapPin size={9} />
-                        {location.city}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 text-[13px] leading-tight">
+                      <span className="truncate font-bold text-foreground">
+                        {location.name}
                       </span>
-                    )}
+                      {location.city && (
+                        <span className="inline-flex shrink-0 items-center gap-0.5 text-[11px] text-muted-foreground/60">
+                          <MapPin size={9} />
+                          {location.city}
+                        </span>
+                      )}
+                    </div>
                   </div>
+                  {!readOnly && currentDayId && (
+                    <button
+                      type="button"
+                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-primary/30 text-primary transition-colors hover:border-primary hover:bg-primary hover:text-white"
+                      aria-label={`Add ${location.name}`}
+                      title="Add to current day"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onScheduleToDay(location.id, currentDayId);
+                      }}
+                    >
+                      <Plus size={12} />
+                    </button>
+                  )}
                 </div>
-                {!readOnly && currentDayId && (
-                  <button
-                    type="button"
-                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-primary/30 text-primary transition-colors hover:border-primary hover:bg-primary hover:text-white"
-                    aria-label={`Add ${location.name}`}
-                    title="Add to current day"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onScheduleToDay(location.id, currentDayId);
-                    }}
-                  >
-                    <Plus size={12} />
-                  </button>
-                )}
-              </div>
               </div>
             ))}
           </div>

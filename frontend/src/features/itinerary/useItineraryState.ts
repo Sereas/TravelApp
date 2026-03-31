@@ -308,9 +308,7 @@ export function useItineraryState({
               ? {
                   ...day,
                   options: day.options.map((option) =>
-                    option.id === optionId
-                      ? { ...option, ...updates }
-                      : option
+                    option.id === optionId ? { ...option, ...updates } : option
                   ),
                 }
               : day
@@ -477,45 +475,47 @@ export function useItineraryState({
                   ...day,
                   options: day.options.map((option) => {
                     if (option.id !== optionId) return option;
-                    const newLocations = locationIds.map((locationId, index) => {
-                      const loc = locations.find((l) => l.id === locationId);
-                      return {
-                        location_id: locationId,
-                        sort_order: startOrder + index,
-                        time_period: "morning",
-                        location: loc
-                          ? {
-                              id: loc.id,
-                              name: loc.name,
-                              city: loc.city,
-                              address: loc.address,
-                              google_link: loc.google_link,
-                              category: loc.category,
-                              note: loc.note,
-                              working_hours: loc.working_hours,
-                              requires_booking: loc.requires_booking,
-                              image_url: loc.image_url,
-                              user_image_url: loc.user_image_url,
-                              attribution_name: loc.attribution_name,
-                              attribution_uri: loc.attribution_uri,
-                            }
-                          : {
-                              id: locationId,
-                              name: "Loading...",
-                              city: null,
-                              address: null,
-                              google_link: null,
-                              category: null,
-                              note: null,
-                              working_hours: null,
-                              requires_booking: null,
-                              image_url: null,
-                              user_image_url: null,
-                              attribution_name: null,
-                              attribution_uri: null,
-                            },
-                      };
-                    });
+                    const newLocations = locationIds.map(
+                      (locationId, index) => {
+                        const loc = locations.find((l) => l.id === locationId);
+                        return {
+                          location_id: locationId,
+                          sort_order: startOrder + index,
+                          time_period: "morning",
+                          location: loc
+                            ? {
+                                id: loc.id,
+                                name: loc.name,
+                                city: loc.city,
+                                address: loc.address,
+                                google_link: loc.google_link,
+                                category: loc.category,
+                                note: loc.note,
+                                working_hours: loc.working_hours,
+                                requires_booking: loc.requires_booking,
+                                image_url: loc.image_url,
+                                user_image_url: loc.user_image_url,
+                                attribution_name: loc.attribution_name,
+                                attribution_uri: loc.attribution_uri,
+                              }
+                            : {
+                                id: locationId,
+                                name: "Loading...",
+                                city: null,
+                                address: null,
+                                google_link: null,
+                                category: null,
+                                note: null,
+                                working_hours: null,
+                                requires_booking: null,
+                                image_url: null,
+                                user_image_url: null,
+                                attribution_name: null,
+                                attribution_uri: null,
+                              },
+                        };
+                      }
+                    );
                     return {
                       ...option,
                       locations: [...option.locations, ...newLocations],

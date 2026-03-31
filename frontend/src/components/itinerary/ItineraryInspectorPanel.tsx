@@ -1,7 +1,14 @@
 "use client";
 
 import type { ItineraryDay, ItineraryOption } from "@/lib/api";
-import { Car, Compass, Footprints, LayoutList, MapPin, Route } from "lucide-react";
+import {
+  Car,
+  Compass,
+  Footprints,
+  LayoutList,
+  MapPin,
+  Route,
+} from "lucide-react";
 
 interface ItineraryInspectorPanelProps {
   day: ItineraryDay | null;

@@ -150,9 +150,7 @@ describe("UnscheduledLocationsPanel", () => {
 
     // Paris locations should appear first
     const names = screen
-      .getAllByText(
-        /^(Eiffel Tower|Louvre|Big Ben|Colosseum)$/
-      )
+      .getAllByText(/^(Eiffel Tower|Louvre|Big Ben|Colosseum)$/)
       .map((el) => el.textContent);
     expect(names[0]).toBe("Eiffel Tower");
     expect(names[1]).toBe("Louvre");
