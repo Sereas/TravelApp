@@ -1,5 +1,7 @@
 """Live backend performance test and report generation."""
 
+import pytest
+
 from tests.perf.workspace_perf import (
     backend_available,
     get_perf_backend_url,
@@ -9,6 +11,7 @@ from tests.perf.workspace_perf import (
 )
 
 
+@pytest.mark.skip(reason="Live perf benchmark — run manually, not on push")
 def test_backend_trip_workspace_performance():
     load_env()
     backend_url = get_perf_backend_url()
