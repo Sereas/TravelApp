@@ -179,33 +179,74 @@ These rules are non-negotiable for every new endpoint or DB interaction.
 ## Agents & Skills
 
 This project has custom agents and skills in `.claude/`. Use them proactively.
+**Do not skip agent dispatch because a task "feels simple" — the rules below are mandatory.**
+
+### Subagent Routing Rules
+
+#### Workflow Gates (ALWAYS dispatch — no exceptions)
+
+| Gate | Agent(s) | When |
+|---|---|---|
+| **Pre-commit** | `code-reviewer` | Before EVERY `git commit`. Review the staged diff. Do not commit until review passes or issues are addressed. |
+| **New/modified endpoint** | `database-reviewer` | Any change to files in `backend/app/routers/`, `backend/app/db/`, or any `*.sql` file. Run the per-endpoint DB checklist. |
+| **New/modified endpoint** | `security-reviewer` | Any new or changed endpoint that handles user input, auth, file uploads, or external API calls. |
+| **Schema change** | `database-reviewer` | Any new migration in `supabase/migrations/` or change to an RPC. Uses Supabase MCP to inspect live state. |
+| **Build failure** | `build-error-resolver` | When `ruff check`, `pytest`, `npm run typecheck`, or `npm run build` fails. Delegate immediately — do not debug inline. |
+
+#### Automatic Dispatch (trigger on task type — no @mention needed)
+
+| Trigger | Agent | Notes |
+|---|---|---|
+| User asks to plan a feature or asks "how should we…" | `architect` | For high-level design, trade-offs, ADRs |
+| User asks to break down a task or says "plan this" | `planner` | Returns step-by-step implementation plan |
+| User asks for tests first, TDD, or "write tests for…" | `tdd-guide` | Enforces Red-Green-Refactor; targets 80%+ coverage |
+| User asks for E2E tests or "test the flow" | `e2e-runner` | Playwright POM patterns; knows project critical journeys |
+| User asks to clean up, remove dead code, or consolidate | `refactor-cleaner` | Uses knip/vulture to find unused code; safe removal workflow |
+| Task touches SQL, indexes, or query performance | `database-reviewer` | Can run `EXPLAIN ANALYZE` via Supabase MCP |
+
+#### Parallel Dispatch Guidance
+
+Run these agent combinations **in parallel** when the trigger matches:
+
+- **New endpoint**: `database-reviewer` + `security-reviewer` (parallel) → then implement → then `code-reviewer` (pre-commit)
+- **New feature plan**: `architect` + `planner` (parallel) → synthesize into one plan before implementing
+- **Refactor**: `refactor-cleaner` (first) → implement changes → `code-reviewer` (pre-commit)
+- **Schema migration**: `database-reviewer` (review SQL) → apply → `database-reviewer` (verify live state)
+
+#### Never Handle Inline
+
+These task types MUST be delegated to an agent. Do not attempt them in the main thread:
+
+1. **Code review before commit** → `code-reviewer` (not a quick inline self-review)
+2. **Build/type error resolution** → `build-error-resolver` (not ad-hoc inline fixes)
+3. **SQL/schema review** → `database-reviewer` (not a glance at the migration)
+4. **Security audit of auth/input/API changes** → `security-reviewer` (not an inline "looks fine")
+5. **Dead code identification** → `refactor-cleaner` (not manual grep)
 
 ### Agents (`.claude/agents/`)
 
-| Agent | When to use |
-|---|---|
-| `architect` | Planning new features, evaluating architectural trade-offs, ADRs |
-| `planner` | Breaking down complex features into step-by-step implementation plans |
-| `code-reviewer` | Reviewing code changes before commit; knows project DB rules and patterns |
-| `database-reviewer` | SQL/schema review; uses live Supabase MCP to inspect actual DB state |
-| `database-optimizer` | Performance analysis, index recommendations, query plan analysis via Supabase MCP |
-| `security-reviewer` | Security audit of new endpoints, auth code, input handling |
-| `security-engineer` | Deep threat modeling, OWASP review, CI/CD security pipeline design |
-| `tdd-guide` | Enforces test-first workflow; knows pytest (backend) and Vitest (frontend) patterns |
-| `e2e-runner` | Writing and running Playwright E2E tests; knows project critical journeys |
-| `build-error-resolver` | Fixing TypeScript/build errors (frontend) and ruff/pytest errors (backend) |
-| `refactor-cleaner` | Removing dead code, unused exports, consolidating duplicates |
+| Agent | Trigger files / keywords | Dispatch | What it does |
+|---|---|---|---|
+| `architect` | "plan feature", "design", "trade-off", ADR | Auto on design questions | System design, scalability review, ADR authoring. Knows project stack (FastAPI + Next.js 14 + Supabase) and itinerary data hierarchy. |
+| `planner` | "break down", "plan this", "implement" | Auto on multi-step tasks | Step-by-step implementation plans with file paths, edge cases, phases. |
+| `code-reviewer` | **Any staged diff before `git commit`** | **MANDATORY pre-commit gate** | Reviews for DB perf rules, N+1, security, React/Next.js patterns, Pydantic models. Knows all project anti-patterns. |
+| `database-reviewer` | `routers/*.py`, `db/*.py`, `*.sql`, `supabase/migrations/` | **MANDATORY on DB/SQL changes** | SQL/schema review against project non-negotiables. Uses Supabase MCP for live `EXPLAIN ANALYZE`, index inspection, schema drift. |
+| `security-reviewer` | `dependencies.py`, auth code, user input handlers, file uploads, `clients/*.py` | **MANDATORY on auth/input endpoints** | OWASP Top 10, JWT validation, injection, XSS, Supabase RLS bypass checks. FastAPI/Supabase-specific patterns. |
+| `tdd-guide` | "write tests", "TDD", new feature implementation | Auto when tests-first requested | Red-Green-Refactor cycle. Knows pytest fixtures (`mock_supabase_trips_and_days`) and Vitest + RTL patterns. Targets 80%+ coverage. |
+| `e2e-runner` | "test the flow", "E2E", Playwright | Auto on E2E requests | Playwright POM patterns. Knows critical journeys: create trip → add day → add locations → reorder → switch options → import Google Maps → view routes. |
+| `build-error-resolver` | `ruff check` / `pytest` / `tsc` / `next build` failure | **MANDATORY on build failure** | Minimal-diff fixes only. No architectural changes. Gets the build green fast. |
+| `refactor-cleaner` | "clean up", "dead code", "unused", consolidation | Auto on cleanup requests | Uses knip (frontend) / vulture (backend) to find dead code. Safe removal with verification. |
 
 ### Skills (`.claude/skills/`)
 
-| Skill | When to use |
-|---|---|
-| `backlog-manager` | Add, read, or execute items in `backlog/front/` and `backlog/back/` |
-| `postgres-patterns` | Quick reference for indexes, data types, RPC patterns, this project's batch/ownership patterns |
-| `database-migrations` | Safe migration patterns; includes Supabase workflow with `apply_migration` MCP + local file requirement |
-| `tdd-workflow` | Red-Green-Refactor cycle with git checkpoints; includes pytest and Vitest patterns |
-| `e2e-testing` | Playwright POM patterns, flaky test handling, CI/CD integration |
-| `security-review` | Full security checklist; includes FastAPI/Supabase-specific patterns |
+| Skill | Trigger | What it provides |
+|---|---|---|
+| `backlog-manager` | "add to backlog", "what's in backlog", backlog management | Reads/writes items in `backlog/front/` and `backlog/back/`. Structured templates. |
+| `postgres-patterns` | Writing SQL, indexes, RPCs, batch operations | Quick reference: index types, data types, `unnest()` patterns, `_ensure_resource_chain`, this project's ownership/batch patterns. |
+| `database-migrations` | Creating or modifying migrations | Safe migration workflow: `apply_migration` MCP + local file in `supabase/migrations/`. Rollback patterns, zero-downtime guidance. |
+| `tdd-workflow` | Starting a feature or fix with tests | Red-Green-Refactor cycle with git checkpoints. pytest and Vitest command patterns. |
+| `e2e-testing` | Writing or debugging Playwright tests | POM patterns, flaky test quarantine, CI/CD artifact management (screenshots, videos, traces). |
+| `security-review` | Adding auth, handling user input, API endpoints | Full security checklist. FastAPI dependency injection auth patterns, Supabase-specific RLS/service-role gotchas. |
 
 ### Reference: Good Patterns to Copy
 
