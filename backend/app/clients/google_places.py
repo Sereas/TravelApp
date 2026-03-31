@@ -303,5 +303,3 @@ class GooglePlacesClient:
         if not places:
             raise RuntimeError("Places search returned no candidates")
         return self._place_to_resolution(places[0] or {}, raw=data)
-
-

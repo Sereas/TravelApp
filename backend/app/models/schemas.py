@@ -150,7 +150,6 @@ class LocationResponse(BaseModel):
     attribution_uri: str | None = None
 
 
-
 class UpdateTripBody(BaseModel):
     """Request body for PATCH update-trip."""
 
