@@ -1,10 +1,16 @@
 """FastAPI application: auth and trips (MVP Slice 2)."""
 
 import os
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
+import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.app.clients.google_places import GooglePlacesClient, GooglePlacesDisabledError
+from backend.app.clients.google_routes import GoogleRoutesClient, GoogleRoutesDisabledError
+from backend.app.core.config import get_settings
 from backend.app.core.logging import setup_logging
 from backend.app.middleware import RequestLoggingMiddleware
 from backend.app.routers import (
@@ -22,10 +28,61 @@ from backend.app.routers import (
 
 setup_logging()
 
+_logger = structlog.get_logger("lifespan")
+
+
+@asynccontextmanager
+async def _lifespan(application: FastAPI) -> AsyncGenerator[None]:
+    """Create singleton Google API clients at startup, close on shutdown."""
+    settings = get_settings()
+
+    # Google Places client
+    places_client: GooglePlacesClient | None = None
+    try:
+        api_key = settings.google_places_api_key or ""
+        places_client = GooglePlacesClient(api_key)
+        _logger.info("google_places_client_ready")
+    except GooglePlacesDisabledError:
+        _logger.info("google_places_client_disabled")
+
+    # Google Routes client
+    routes_client: GoogleRoutesClient | None = None
+    try:
+        api_key = settings.google_routes_api_key or ""
+        routes_client = GoogleRoutesClient(api_key)
+        _logger.info("google_routes_client_ready")
+    except GoogleRoutesDisabledError:
+        _logger.info("google_routes_client_disabled")
+
+    application.state.google_places_client = places_client
+    application.state.google_routes_client = routes_client
+
+    yield
+
+    if places_client is not None:
+        places_client.close()
+        _logger.info("google_places_client_closed")
+    if routes_client is not None:
+        routes_client.close()
+        _logger.info("google_routes_client_closed")
+
+
 app = FastAPI(
     title="Travel App API",
     description="MVP Core Trip Planning",
+    lifespan=_lifespan,
 )
+
+
+@app.exception_handler(GooglePlacesDisabledError)
+async def _google_places_disabled_handler(request, exc):
+    from fastapi.responses import JSONResponse
+
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Google integration is not configured"},
+    )
+
 
 _cors_origins = [
     o.strip()

@@ -14,8 +14,6 @@ from urllib.parse import unquote, urlparse
 
 import httpx
 
-from backend.app.core.config import get_settings
-
 
 class GooglePlacesDisabledError(RuntimeError):
     """Raised when Google Places integration is not configured."""
@@ -307,8 +305,3 @@ class GooglePlacesClient:
         return self._place_to_resolution(places[0] or {}, raw=data)
 
 
-def get_google_places_client() -> GooglePlacesClient:
-    """Return a GooglePlacesClient or raise GooglePlacesDisabledError if not configured."""
-    settings = get_settings()
-    api_key = settings.google_places_api_key or ""
-    return GooglePlacesClient(api_key)

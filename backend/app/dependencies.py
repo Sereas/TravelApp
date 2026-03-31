@@ -10,6 +10,8 @@ from fastapi import Depends, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import PyJWKClient
 
+from backend.app.clients.google_places import GooglePlacesClient, GooglePlacesDisabledError
+from backend.app.clients.google_routes import GoogleRoutesClient
 from backend.app.core.config import get_settings
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger("auth")
@@ -109,6 +111,24 @@ async def get_current_user_id(
 async def get_current_user_email(request: Request) -> str | None:
     """Return the authenticated user's email from request state (set by get_current_user_id)."""
     return getattr(request.state, "user_email", None)
+
+
+def get_google_places_client(request: Request) -> GooglePlacesClient:
+    """Return the singleton GooglePlacesClient from app state, or raise if not configured."""
+    client = getattr(request.app.state, "google_places_client", None)
+    if client is None:
+        raise GooglePlacesDisabledError("Google Places API not configured")
+    return client
+
+
+def get_google_places_client_optional(request: Request) -> GooglePlacesClient | None:
+    """Return the singleton GooglePlacesClient from app state, or None if not configured."""
+    return getattr(request.app.state, "google_places_client", None)
+
+
+def get_google_routes_client(request: Request) -> GoogleRoutesClient | None:
+    """Return the singleton GoogleRoutesClient from app state, or None if not configured."""
+    return getattr(request.app.state, "google_routes_client", None)
 
 
 def _auth_error(detail: str):

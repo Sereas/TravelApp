@@ -10,14 +10,13 @@ from backend.app.db.supabase import get_supabase_client
 from backend.app.dependencies import get_current_user_id
 from backend.app.models.schemas import (
     ItineraryResponse,
-    ItineraryRoute,
-    RouteSegmentSummary,
     SharedLocationSummary,
     SharedTripInfo,
     SharedTripResponse,
     ShareTripResponse,
 )
 from backend.app.routers.itinerary_tree import (
+    _attach_routes_to_itinerary,
     _build_itinerary_response,
     _rpc_rows_to_tree_data,
 )
@@ -63,42 +62,7 @@ async def get_shared_trip(
         itinerary = _build_itinerary_response(
             day_rows, option_rows, ol_rows, locations_by_id, include_empty_options=False
         )
-        # Attach routes (same logic as itinerary_tree.get_itinerary)
-        all_option_ids = [opt.id for d in itinerary.days for opt in d.options]
-        if all_option_ids:
-            routes_rpc = supabase.rpc(
-                "get_itinerary_routes", {"p_option_ids": all_option_ids}
-            ).execute()
-            routes_by_option: dict[str, list[ItineraryRoute]] = {}
-            for r in routes_rpc.data or []:
-                oid = str(r["option_id"])
-                dur = r.get("duration_seconds")
-                dist = r.get("distance_meters")
-                route_status = "pending" if (dur is None and dist is None) else "ok"
-                segments = [
-                    RouteSegmentSummary(
-                        segment_order=int(s["segment_order"]),
-                        duration_seconds=s.get("duration_seconds"),
-                        distance_meters=s.get("distance_meters"),
-                        encoded_polyline=s.get("encoded_polyline"),
-                    )
-                    for s in (r.get("segments") or [])
-                ]
-                route = ItineraryRoute(
-                    route_id=str(r["route_id"]),
-                    label=r.get("label"),
-                    transport_mode=r.get("transport_mode", "walk"),
-                    duration_seconds=dur,
-                    distance_meters=dist,
-                    sort_order=int(r.get("sort_order", 0)),
-                    location_ids=[str(lid) for lid in (r.get("stop_location_ids") or [])],
-                    route_status=route_status,
-                    segments=segments,
-                )
-                routes_by_option.setdefault(oid, []).append(route)
-            for d in itinerary.days:
-                for opt in d.options:
-                    opt.routes = routes_by_option.get(opt.id, [])
+        _attach_routes_to_itinerary(supabase, itinerary)
     else:
         itinerary = ItineraryResponse(days=[])
 

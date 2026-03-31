@@ -10,11 +10,14 @@ from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, sta
 from backend.app.clients.google_list_scraper import GoogleListScraper
 from backend.app.clients.google_places import (
     GoogleListParseError,
-    GooglePlacesDisabledError,
-    get_google_places_client,
+    GooglePlacesClient,
 )
 from backend.app.db.supabase import get_supabase_client
-from backend.app.dependencies import get_current_user_email, get_current_user_id
+from backend.app.dependencies import (
+    get_current_user_email,
+    get_current_user_id,
+    get_google_places_client_optional,
+)
 from backend.app.models.schemas import (
     AddLocationBody,
     ImportedLocationSummary,
@@ -105,6 +108,7 @@ async def add_location(
     user_id: UUID = Depends(get_current_user_id),
     user_email: str | None = Depends(get_current_user_email),
     supabase=Depends(get_supabase_client),
+    places_client: GooglePlacesClient | None = Depends(get_google_places_client_optional),
 ):
     """
     Add a location to a trip. Requires valid JWT.
@@ -175,27 +179,23 @@ async def add_location(
             loc = fetch.data[0]
     # Fetch photo if this location has a google_place_id and photos in raw data
     gp_id = loc.get("google_place_id")
-    if gp_id:
+    if gp_id and places_client:
         raw = loc.get("google_raw") or body.google_raw or {}
         photos = (raw.get("places") or [{}])[0].get("photos") or [] if raw else []
         if photos:
-            try:
-                client = get_google_places_client()
-                url = ensure_place_photo(supabase, client, gp_id, photos)
-                if url:
-                    loc["image_url"] = url
-                    # Fetch attribution from the cached row
-                    attr_row = (
-                        supabase.table("place_photos")
-                        .select("attribution_name, attribution_uri")
-                        .eq("google_place_id", gp_id)
-                        .execute()
-                    )
-                    if attr_row.data:
-                        loc["attribution_name"] = attr_row.data[0].get("attribution_name")
-                        loc["attribution_uri"] = attr_row.data[0].get("attribution_uri")
-            except GooglePlacesDisabledError:
-                pass
+            url = ensure_place_photo(supabase, places_client, gp_id, photos)
+            if url:
+                loc["image_url"] = url
+                # Fetch attribution from the cached row
+                attr_row = (
+                    supabase.table("place_photos")
+                    .select("attribution_name, attribution_uri")
+                    .eq("google_place_id", gp_id)
+                    .execute()
+                )
+                if attr_row.data:
+                    loc["attribution_name"] = attr_row.data[0].get("attribution_name")
+                    loc["attribution_uri"] = attr_row.data[0].get("attribution_uri")
     logger.info(
         "location_added",
         location_id=str(loc["location_id"]),
@@ -270,6 +270,7 @@ async def batch_add_locations(
     user_id: UUID = Depends(get_current_user_id),
     user_email: str | None = Depends(get_current_user_email),
     supabase=Depends(get_supabase_client),
+    places_client: GooglePlacesClient | None = Depends(get_google_places_client_optional),
 ):
     """
     Add multiple locations to a trip in one request. Requires valid JWT.
@@ -350,15 +351,12 @@ async def batch_add_locations(
         )
         cached_map: dict[str, dict] = {row["google_place_id"]: row for row in (cached.data or [])}
         # 3. Fetch and cache photos for misses
-        try:
-            client = get_google_places_client()
+        if places_client:
             for gp_id, photos in place_id_to_photos.items():
                 if gp_id not in cached_map:
-                    url = ensure_place_photo(supabase, client, gp_id, photos)
+                    url = ensure_place_photo(supabase, places_client, gp_id, photos)
                     if url:
                         cached_map[gp_id] = {"photo_url": url}
-        except GooglePlacesDisabledError:
-            pass
         # 4. Attach image_url to response rows
         for loc in final_locs:
             gp_id = loc.get("google_place_id")
@@ -382,6 +380,7 @@ async def import_google_list(
     user_id: UUID = Depends(get_current_user_id),
     user_email: str | None = Depends(get_current_user_email),
     supabase=Depends(get_supabase_client),
+    places_client: GooglePlacesClient | None = Depends(get_google_places_client_optional),
 ):
     """Import locations from a Google Maps shared list into a trip.
 
@@ -391,13 +390,11 @@ async def import_google_list(
     """
     _ensure_resource_chain(supabase, trip_id, user_id)
 
-    try:
-        client = get_google_places_client()
-    except GooglePlacesDisabledError:
+    if places_client is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Google integration is not configured",
-        ) from None
+        )
 
     scraper = GoogleListScraper()
     try:
@@ -435,7 +432,7 @@ async def import_google_list(
         has_coords = place.latitude != 0.0 and place.longitude != 0.0
 
         try:
-            resolved = client._search_place_by_text(
+            resolved = places_client._search_place_by_text(
                 place.name if place.name else f"{place.latitude},{place.longitude}",
                 latitude=place.latitude if has_coords else None,
                 longitude=place.longitude if has_coords else None,
@@ -514,7 +511,7 @@ async def import_google_list(
             gp_id = row.get("google_place_id")
             if gp_id and photos:
                 with contextlib.suppress(Exception):
-                    ensure_place_photo(supabase, client, gp_id, photos)
+                    ensure_place_photo(supabase, places_client, gp_id, photos)
 
     logger.info(
         "google_list_imported",
@@ -544,6 +541,7 @@ async def update_location(
     body: UpdateLocationBody,
     user_id: UUID = Depends(get_current_user_id),
     supabase=Depends(get_supabase_client),
+    places_client: GooglePlacesClient | None = Depends(get_google_places_client_optional),
 ):
     """
     Update a location's user-facing fields for a trip. Requires valid JWT.
@@ -628,18 +626,14 @@ async def update_location(
             loc["image_url"] = photo_row.data[0]["photo_url"]
             loc["attribution_name"] = photo_row.data[0].get("attribution_name")
             loc["attribution_uri"] = photo_row.data[0].get("attribution_uri")
-        elif gp_id_changed or raw_changed:
+        elif (gp_id_changed or raw_changed) and places_client:
             # New google_place_id or updated raw with photos — warm the cache
             raw = body.google_raw or {}
             photos = (raw.get("places") or [{}])[0].get("photos") or [] if raw else []
             if photos:
-                try:
-                    client = get_google_places_client()
-                    url = ensure_place_photo(supabase, client, gp_id, photos)
-                    if url:
-                        loc["image_url"] = url
-                except GooglePlacesDisabledError:
-                    pass
+                url = ensure_place_photo(supabase, places_client, gp_id, photos)
+                if url:
+                    loc["image_url"] = url
     logger.info(
         "location_updated",
         location_id=str(location_id),

@@ -12,11 +12,8 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from backend.app.clients.google_places import (
-    GooglePlacesDisabledError,
-    get_google_places_client,
-)
-from backend.app.dependencies import get_current_user_id
+from backend.app.clients.google_places import GooglePlacesClient
+from backend.app.dependencies import get_current_user_id, get_google_places_client
 from backend.app.models.schemas import LocationPreviewResponse
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger("locations-google")
@@ -104,6 +101,7 @@ class GoogleLinkPreviewBody(BaseModel):
 async def preview_location_from_google_link(
     body: GoogleLinkPreviewBody,
     _: UUID = Depends(get_current_user_id),
+    places_client: GooglePlacesClient = Depends(get_google_places_client),
 ):
     """Resolve a Google Maps link into normalized location data (no DB write).
 
@@ -120,13 +118,7 @@ async def preview_location_from_google_link(
             detail="google_link must not be empty",
         )
     try:
-        client = get_google_places_client()
-        resolved = client.resolve_from_link(google_link)
-    except GooglePlacesDisabledError:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Google integration is not configured",
-        ) from None
+        resolved = places_client.resolve_from_link(google_link)
     except Exception as exc:
         logger.warning("google_preview_failed", error=str(exc))
         raise HTTPException(

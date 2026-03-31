@@ -44,19 +44,6 @@ def _option_row_to_response(row: dict) -> OptionResponse:
     )
 
 
-def _ensure_day_in_trip(supabase, trip_id: UUID, day_id: UUID) -> None:
-    """Raise 404 if day does not exist or does not belong to trip."""
-    result = (
-        supabase.table("trip_days")
-        .select("day_id")
-        .eq("day_id", str(day_id))
-        .eq("trip_id", str(trip_id))
-        .execute()
-    )
-    if not result.data or len(result.data) == 0:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Day not found")
-
-
 @router.get("/{trip_id}/days/{day_id}/options", response_model=list[OptionResponse])
 async def list_options(
     trip_id: UUID,

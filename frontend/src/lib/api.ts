@@ -180,7 +180,7 @@ export interface ItineraryDay {
 }
 
 /** Flat day from days API (create/generate/list); no options. */
-export interface DayResponse {
+interface DayResponse {
   id: string;
   trip_id: string;
   date: string | null;
@@ -189,7 +189,7 @@ export interface DayResponse {
 }
 
 /** Flat option from options API (create/update); no locations. */
-export interface OptionResponse {
+interface OptionResponse {
   id: string;
   day_id: string;
   option_index: number;
@@ -199,7 +199,7 @@ export interface OptionResponse {
   created_at: string | null;
 }
 
-export interface OptionLocationResponse {
+interface OptionLocationResponse {
   option_id: string;
   location_id: string;
   sort_order: number;

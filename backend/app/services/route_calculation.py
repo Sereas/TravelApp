@@ -11,10 +11,7 @@ from typing import Any
 
 import structlog
 
-from backend.app.clients.google_routes import (
-    GoogleRoutesClient,
-    get_google_routes_client,
-)
+from backend.app.clients.google_routes import GoogleRoutesClient
 from backend.app.models.schemas import (
     RouteSegmentResponse,
     RouteWithSegmentsResponse,
@@ -392,6 +389,7 @@ def get_route_with_fresh_segments(
     route_id: str,
     transport_mode: str | None = None,
     force_refresh: bool = False,
+    google_routes_client: GoogleRoutesClient | None = None,
 ) -> RouteWithSegmentsResponse:
     """
     Load route and segments; for each segment decide reuse vs recompute (retry-on-view).
@@ -448,8 +446,33 @@ def get_route_with_fresh_segments(
     )
     loc_by_id = {str(r["location_id"]): r for r in (loc_rows.data or [])}
 
-    google_client = get_google_routes_client()
+    return _get_route_segments_impl(
+        supabase,
+        route_id,
+        route,
+        option_id,
+        mode,
+        ordered,
+        location_ids,
+        loc_by_id,
+        google_routes_client,
+        force_refresh,
+    )
 
+
+def _get_route_segments_impl(
+    supabase: Any,
+    route_id: str,
+    route: dict,
+    option_id: str,
+    mode: str,
+    ordered: list,
+    location_ids: list[str],
+    loc_by_id: dict,
+    google_client: GoogleRoutesClient | None,
+    force_refresh: bool,
+) -> RouteWithSegmentsResponse:
+    """Inner implementation for route segment computation."""
     # Load existing route_segments and their cache rows
     rs_rows = (
         supabase.table("route_segments")

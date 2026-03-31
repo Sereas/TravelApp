@@ -86,19 +86,6 @@ def _option_location_row_to_response(
     )
 
 
-def _ensure_option_in_day(supabase, day_id: UUID, option_id: UUID) -> None:
-    """Raise 404 if option does not exist or does not belong to day."""
-    result = (
-        supabase.table("day_options")
-        .select("option_id, day_id")
-        .eq("option_id", str(option_id))
-        .eq("day_id", str(day_id))
-        .execute()
-    )
-    if not result.data or len(result.data) == 0:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Option not found")
-
-
 def _ensure_location_in_trip(supabase, trip_id: UUID, location_id: UUID) -> None:
     """Raise 400 if location does not belong to trip."""
     result = (

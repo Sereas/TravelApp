@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from backend.app.db.supabase import get_supabase_client
 from backend.app.dependencies import get_current_user_id
 from backend.app.models.schemas import CreateTripBody, TripResponse, UpdateTripBody
+from backend.app.routers.trip_ownership import _ensure_trip_owned
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger("trips")
 
@@ -91,24 +92,14 @@ async def get_trip(
     Get a trip by id. Requires valid JWT.
     Trip must exist and be owned by the authenticated user; else 404.
     """
+    _ensure_trip_owned(supabase, trip_id, user_id)
     result = (
         supabase.table("trips")
-        .select("trip_id, trip_name, start_date, end_date, user_id")
+        .select("trip_id, trip_name, start_date, end_date")
         .eq("trip_id", str(trip_id))
         .execute()
     )
-    if not result.data or len(result.data) == 0:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Trip not found",
-        )
     trip = result.data[0]
-    if trip.get("user_id") != str(user_id):
-        logger.warning("trip_access_denied", trip_id=str(trip_id), user_id=str(user_id))
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Trip not owned by user",
-        )
     logger.info("trip_retrieved", trip_id=str(trip_id), user_id=str(user_id))
     return _trip_row_to_response(trip)
 
@@ -125,24 +116,7 @@ async def update_trip(
     Trip must exist and be owned by the authenticated user; else 404 with
     a descriptive message.
     """
-    # Ownership check
-    result = (
-        supabase.table("trips")
-        .select("trip_id, trip_name, start_date, end_date, user_id")
-        .eq("trip_id", str(trip_id))
-        .execute()
-    )
-    if not result.data or len(result.data) == 0:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Trip not found",
-        )
-    trip = result.data[0]
-    if trip.get("user_id") != str(user_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Trip not owned by user",
-        )
+    _ensure_trip_owned(supabase, trip_id, user_id)
 
     if not body.model_fields_set:
         raise HTTPException(
@@ -190,21 +164,7 @@ async def delete_trip(
     Trip must exist and be owned by the authenticated user; else 404.
     Returns 204 No Content on success.
     """
-    result = (
-        supabase.table("trips").select("trip_id, user_id").eq("trip_id", str(trip_id)).execute()
-    )
-    if not result.data or len(result.data) == 0:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Trip not found",
-        )
-    trip = result.data[0]
-    if trip.get("user_id") != str(user_id):
-        logger.warning("trip_delete_denied", trip_id=str(trip_id), user_id=str(user_id))
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Trip not owned by user",
-        )
+    _ensure_trip_owned(supabase, trip_id, user_id)
 
     supabase.table("locations").delete().eq("trip_id", str(trip_id)).execute()
     supabase.table("trips").delete().eq("trip_id", str(trip_id)).execute()

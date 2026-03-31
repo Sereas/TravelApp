@@ -7,9 +7,8 @@ from fastapi.testclient import TestClient
 
 from backend.app.clients.google_places import GooglePlacesClient, PlaceResolution
 from backend.app.db.supabase import get_supabase_client
-from backend.app.dependencies import get_current_user_id
+from backend.app.dependencies import get_current_user_id, get_google_places_client
 from backend.app.main import app
-from backend.app.routers import locations_google
 
 
 class _DummySupabase:
@@ -52,7 +51,7 @@ def test_preview_location_from_google_link_returns_200(client: TestClient, monke
         def resolve_from_link(self, _link: str) -> PlaceResolution:
             return fake_resolve_from_link(_link)
 
-    monkeypatch.setattr(locations_google, "get_google_places_client", lambda: FakeClient())
+    app.dependency_overrides[get_google_places_client] = lambda: FakeClient()
     try:
         r = client.post(
             "/api/v1/locations/google/preview",
@@ -112,11 +111,12 @@ def test_preview_location_missing_google_link_returns_422(client: TestClient, mo
     user_id = uuid4()
     _override_auth_and_supabase(client, user_id)
 
-    # Prevent accidental real HTTP calls if the handler changes
-    def fake_get_client():
-        raise AssertionError("get_google_places_client should not be called for empty link")
+    # Provide a dummy client; the handler should reject empty links before using it
+    class DummyClient:
+        def resolve_from_link(self, _link: str):
+            raise AssertionError("resolve_from_link should not be called for empty link")
 
-    monkeypatch.setattr(locations_google, "get_google_places_client", fake_get_client)
+    app.dependency_overrides[get_google_places_client] = lambda: DummyClient()
     try:
         r = client.post("/api/v1/locations/google/preview", json={})
         assert r.status_code == 422

@@ -150,9 +150,6 @@ class LocationResponse(BaseModel):
     attribution_uri: str | None = None
 
 
-# Batch add: same shape as AddLocationBody per item
-BatchAddLocationItem = AddLocationBody
-
 
 class UpdateTripBody(BaseModel):
     """Request body for PATCH update-trip."""
@@ -488,9 +485,6 @@ class UpdateRouteBody(BaseModel):
             msg = f"transport_mode must be one of {sorted(TRANSPORT_MODE_VALUES)}"
             raise ValueError(msg)
         return v
-
-
-ROUTE_STATUS_VALUES = frozenset({"pending", "ok", "error"})
 
 
 class RouteResponse(BaseModel):

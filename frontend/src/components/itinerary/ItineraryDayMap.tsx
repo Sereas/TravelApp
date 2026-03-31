@@ -8,7 +8,7 @@ import { CategoryIcon } from "@/components/locations/CategoryIcon";
 import { CATEGORY_OPTIONS, type CategoryKey } from "@/lib/location-constants";
 import { cn } from "@/lib/utils";
 
-export interface ItineraryDayMapLocation {
+interface ItineraryDayMapLocation {
   id: string;
   name: string;
   address: string | null;

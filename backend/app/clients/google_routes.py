@@ -11,8 +11,6 @@ from typing import Any
 
 import httpx
 
-from backend.app.core.config import get_settings
-
 
 class GoogleRoutesDisabledError(RuntimeError):
     """Raised when Google Routes integration is not configured."""
@@ -127,10 +125,3 @@ def _parse_duration_seconds(s: str) -> int:
     return int(float(s))
 
 
-def get_google_routes_client() -> GoogleRoutesClient | None:
-    """Return a GoogleRoutesClient if GOOGLE_ROUTES_API_KEY is set; else None."""
-    settings = get_settings()
-    api_key = getattr(settings, "google_routes_api_key", None)
-    if not api_key:
-        return None
-    return GoogleRoutesClient(api_key)

@@ -176,6 +176,37 @@ These rules are non-negotiable for every new endpoint or DB interaction.
 | `google_raw` in list endpoint `SELECT` | Use `_LOCATIONS_SELECT` (not WITH_RAW) |
 | `.select("*")` | Explicit column list |
 
+## Agents & Skills
+
+This project has custom agents and skills in `.claude/`. Use them proactively.
+
+### Agents (`.claude/agents/`)
+
+| Agent | When to use |
+|---|---|
+| `architect` | Planning new features, evaluating architectural trade-offs, ADRs |
+| `planner` | Breaking down complex features into step-by-step implementation plans |
+| `code-reviewer` | Reviewing code changes before commit; knows project DB rules and patterns |
+| `database-reviewer` | SQL/schema review; uses live Supabase MCP to inspect actual DB state |
+| `database-optimizer` | Performance analysis, index recommendations, query plan analysis via Supabase MCP |
+| `security-reviewer` | Security audit of new endpoints, auth code, input handling |
+| `security-engineer` | Deep threat modeling, OWASP review, CI/CD security pipeline design |
+| `tdd-guide` | Enforces test-first workflow; knows pytest (backend) and Vitest (frontend) patterns |
+| `e2e-runner` | Writing and running Playwright E2E tests; knows project critical journeys |
+| `build-error-resolver` | Fixing TypeScript/build errors (frontend) and ruff/pytest errors (backend) |
+| `refactor-cleaner` | Removing dead code, unused exports, consolidating duplicates |
+
+### Skills (`.claude/skills/`)
+
+| Skill | When to use |
+|---|---|
+| `backlog-manager` | Add, read, or execute items in `backlog/front/` and `backlog/back/` |
+| `postgres-patterns` | Quick reference for indexes, data types, RPC patterns, this project's batch/ownership patterns |
+| `database-migrations` | Safe migration patterns; includes Supabase workflow with `apply_migration` MCP + local file requirement |
+| `tdd-workflow` | Red-Green-Refactor cycle with git checkpoints; includes pytest and Vitest patterns |
+| `e2e-testing` | Playwright POM patterns, flaky test handling, CI/CD integration |
+| `security-review` | Full security checklist; includes FastAPI/Supabase-specific patterns |
+
 ### Reference: Good Patterns to Copy
 
 - **Batch read:** `batch_add_locations_to_option` — single `IN()` validation, RPC insert

@@ -182,6 +182,46 @@ def _rpc_rows_to_tree_data(
     return day_rows, option_rows, ol_rows, locations_by_id
 
 
+def _attach_routes_to_itinerary(supabase, itinerary: ItineraryResponse) -> None:
+    """Fetch routes via RPC and attach them to each option in the itinerary tree."""
+    all_option_ids = [opt.id for d in itinerary.days for opt in d.options]
+    if all_option_ids:
+        routes_rpc = supabase.rpc(
+            "get_itinerary_routes", {"p_option_ids": all_option_ids}
+        ).execute()
+        routes_by_option: dict[str, list[ItineraryRoute]] = {}
+        for r in routes_rpc.data or []:
+            oid = str(r["option_id"])
+            rid = str(r["route_id"])
+            dur = r.get("duration_seconds")
+            dist = r.get("distance_meters")
+            route_status = "pending" if (dur is None and dist is None) else "ok"
+            segments = [
+                RouteSegmentSummary(
+                    segment_order=int(s["segment_order"]),
+                    duration_seconds=s.get("duration_seconds"),
+                    distance_meters=s.get("distance_meters"),
+                    encoded_polyline=s.get("encoded_polyline"),
+                )
+                for s in (r.get("segments") or [])
+            ]
+            route = ItineraryRoute(
+                route_id=rid,
+                label=r.get("label"),
+                transport_mode=r.get("transport_mode", "walk"),
+                duration_seconds=dur,
+                distance_meters=dist,
+                sort_order=int(r.get("sort_order", 0)),
+                location_ids=[str(lid) for lid in (r.get("stop_location_ids") or [])],
+                route_status=route_status,
+                segments=segments,
+            )
+            routes_by_option.setdefault(oid, []).append(route)
+        for d in itinerary.days:
+            for opt in d.options:
+                opt.routes = routes_by_option.get(opt.id, [])
+
+
 @router.get(
     "/{trip_id}/itinerary",
     response_model=ItineraryResponse,
@@ -228,42 +268,7 @@ async def get_itinerary(
         day_rows, option_rows, ol_rows, locations_by_id, include_empty_options
     )
     # Attach routes via single RPC (replaces 4 sequential queries)
-    all_option_ids = [opt.id for d in itinerary_response.days for opt in d.options]
-    if all_option_ids:
-        routes_rpc = supabase.rpc(
-            "get_itinerary_routes", {"p_option_ids": all_option_ids}
-        ).execute()
-        routes_by_option: dict[str, list[ItineraryRoute]] = {}
-        for r in routes_rpc.data or []:
-            oid = str(r["option_id"])
-            rid = str(r["route_id"])
-            dur = r.get("duration_seconds")
-            dist = r.get("distance_meters")
-            route_status = "pending" if (dur is None and dist is None) else "ok"
-            segments = [
-                RouteSegmentSummary(
-                    segment_order=int(s["segment_order"]),
-                    duration_seconds=s.get("duration_seconds"),
-                    distance_meters=s.get("distance_meters"),
-                    encoded_polyline=s.get("encoded_polyline"),
-                )
-                for s in (r.get("segments") or [])
-            ]
-            route = ItineraryRoute(
-                route_id=rid,
-                label=r.get("label"),
-                transport_mode=r.get("transport_mode", "walk"),
-                duration_seconds=dur,
-                distance_meters=dist,
-                sort_order=int(r.get("sort_order", 0)),
-                location_ids=[str(lid) for lid in (r.get("stop_location_ids") or [])],
-                route_status=route_status,
-                segments=segments,
-            )
-            routes_by_option.setdefault(oid, []).append(route)
-        for d in itinerary_response.days:
-            for opt in d.options:
-                opt.routes = routes_by_option.get(opt.id, [])
+    _attach_routes_to_itinerary(supabase, itinerary_response)
     build_ms = round((time.perf_counter() - t2) * 1000, 1)
 
     response.headers["X-Itinerary-Rpc-Ms"] = str(rpc_ms)

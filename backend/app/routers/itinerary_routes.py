@@ -5,8 +5,9 @@ from uuid import UUID
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from backend.app.clients.google_routes import GoogleRoutesClient
 from backend.app.db.supabase import get_supabase_client
-from backend.app.dependencies import get_current_user_id
+from backend.app.dependencies import get_current_user_id, get_google_routes_client
 from backend.app.models.schemas import (
     CreateRouteBody,
     RecalculateRouteBody,
@@ -150,6 +151,7 @@ async def get_route(
     ),
     user_id: UUID = Depends(get_current_user_id),
     supabase=Depends(get_supabase_client),
+    routes_client: GoogleRoutesClient | None = Depends(get_google_routes_client),
 ):
     """
     Get one route by id. If include_segments=true, returns segment data and geometry for MapLibre.
@@ -171,7 +173,11 @@ async def get_route(
         # Retry-on-view: reuse cache or recompute only eligible segments
         try:
             with_segments = get_route_with_fresh_segments(
-                supabase, str(route_id), transport_mode=None, force_refresh=False
+                supabase,
+                str(route_id),
+                transport_mode=None,
+                force_refresh=False,
+                google_routes_client=routes_client,
             )
         except LookupError:
             raise HTTPException(
@@ -292,6 +298,7 @@ async def recalculate_route_endpoint(
     body: RecalculateRouteBody | None = None,
     user_id: UUID = Depends(get_current_user_id),
     supabase=Depends(get_supabase_client),
+    routes_client: GoogleRoutesClient | None = Depends(get_google_routes_client),
 ):
     """
     Refresh route segments (retry-on-view). Recomputes only segments eligible for retry
@@ -313,7 +320,11 @@ async def recalculate_route_endpoint(
     force_refresh = bool(body and body.force_refresh)
     try:
         result = get_route_with_fresh_segments(
-            supabase, str(route_id), transport_mode=transport_mode, force_refresh=force_refresh
+            supabase,
+            str(route_id),
+            transport_mode=transport_mode,
+            force_refresh=force_refresh,
+            google_routes_client=routes_client,
         )
     except LookupError:
         raise HTTPException(

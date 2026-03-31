@@ -12,7 +12,11 @@ from backend.app.clients.google_places import (
     PlaceResolution,
 )
 from backend.app.db.supabase import get_supabase_client
-from backend.app.dependencies import get_current_user_email, get_current_user_id
+from backend.app.dependencies import (
+    get_current_user_email,
+    get_current_user_id,
+    get_google_places_client_optional,
+)
 from backend.app.main import app
 
 TRIP_ID = str(uuid4())
@@ -71,7 +75,7 @@ def client():
     return TestClient(app)
 
 
-def _setup_overrides(supabase):
+def _setup_overrides(supabase, places_client=None):
     async def override_user():
         return USER_ID
 
@@ -81,12 +85,13 @@ def _setup_overrides(supabase):
     app.dependency_overrides[get_current_user_id] = override_user
     app.dependency_overrides[get_current_user_email] = override_email
     app.dependency_overrides[get_supabase_client] = lambda: supabase
+    if places_client is not None:
+        app.dependency_overrides[get_google_places_client_optional] = lambda: places_client
 
 
 def test_import_happy_path_mix_of_new_and_existing(client: TestClient):
     """Happy path: 3 places scraped, 1 already exists, 2 imported."""
     sb = _mock_supabase(existing_place_ids=["existing_place_1"])
-    _setup_overrides(sb)
 
     scraped = [
         ScrapedPlace(name="Place A", latitude=1.28, longitude=103.85),
@@ -101,15 +106,13 @@ def test_import_happy_path_mix_of_new_and_existing(client: TestClient):
             return _make_resolution("new_place_2", "Place B")
         return _make_resolution("new_place_3", "Place C")
 
-    with (
-        patch("backend.app.routers.trip_locations.GoogleListScraper") as MockScraper,
-        patch("backend.app.routers.trip_locations.get_google_places_client") as mock_get_client,
-    ):
+    mock_client = MagicMock()
+    mock_client._search_place_by_text.side_effect = fake_search
+    _setup_overrides(sb, places_client=mock_client)
+
+    with patch("backend.app.routers.trip_locations.GoogleListScraper") as MockScraper:
         scraper_instance = MockScraper.return_value
         scraper_instance.extract_places = AsyncMock(return_value=scraped)
-        mock_client = MagicMock()
-        mock_client._search_place_by_text.side_effect = fake_search
-        mock_get_client.return_value = mock_client
 
         try:
             r = client.post(
@@ -130,7 +133,6 @@ def test_import_happy_path_mix_of_new_and_existing(client: TestClient):
 def test_import_all_duplicates(client: TestClient):
     """All scraped places already exist in the trip."""
     sb = _mock_supabase(existing_place_ids=["p1", "p2"])
-    _setup_overrides(sb)
 
     scraped = [
         ScrapedPlace(name="Place A", latitude=1.28, longitude=103.85),
@@ -142,15 +144,13 @@ def test_import_all_duplicates(client: TestClient):
             return _make_resolution("p1", "Place A")
         return _make_resolution("p2", "Place B")
 
-    with (
-        patch("backend.app.routers.trip_locations.GoogleListScraper") as MockScraper,
-        patch("backend.app.routers.trip_locations.get_google_places_client") as mock_get_client,
-    ):
+    mock_client = MagicMock()
+    mock_client._search_place_by_text.side_effect = fake_search
+    _setup_overrides(sb, places_client=mock_client)
+
+    with patch("backend.app.routers.trip_locations.GoogleListScraper") as MockScraper:
         scraper_instance = MockScraper.return_value
         scraper_instance.extract_places = AsyncMock(return_value=scraped)
-        mock_client = MagicMock()
-        mock_client._search_place_by_text.side_effect = fake_search
-        mock_get_client.return_value = mock_client
 
         try:
             r = client.post(
@@ -169,7 +169,6 @@ def test_import_all_duplicates(client: TestClient):
 def test_import_partial_resolve_failures(client: TestClient):
     """Some places fail to resolve — they show up as failed, rest still imported."""
     sb = _mock_supabase()
-    _setup_overrides(sb)
 
     scraped = [
         ScrapedPlace(name="Good Place", latitude=1.28, longitude=103.85),
@@ -181,15 +180,13 @@ def test_import_partial_resolve_failures(client: TestClient):
             raise RuntimeError("Places search returned no candidates")
         return _make_resolution("good_place", "Good Place")
 
-    with (
-        patch("backend.app.routers.trip_locations.GoogleListScraper") as MockScraper,
-        patch("backend.app.routers.trip_locations.get_google_places_client") as mock_get_client,
-    ):
+    mock_client = MagicMock()
+    mock_client._search_place_by_text.side_effect = fake_search
+    _setup_overrides(sb, places_client=mock_client)
+
+    with patch("backend.app.routers.trip_locations.GoogleListScraper") as MockScraper:
         scraper_instance = MockScraper.return_value
         scraper_instance.extract_places = AsyncMock(return_value=scraped)
-        mock_client = MagicMock()
-        mock_client._search_place_by_text.side_effect = fake_search
-        mock_get_client.return_value = mock_client
 
         try:
             r = client.post(
@@ -208,17 +205,13 @@ def test_import_partial_resolve_failures(client: TestClient):
 def test_import_scraper_captcha_error(client: TestClient):
     """Scraper raises CAPTCHA error → 400."""
     sb = _mock_supabase()
-    _setup_overrides(sb)
+    _setup_overrides(sb, places_client=MagicMock())
 
-    with (
-        patch("backend.app.routers.trip_locations.GoogleListScraper") as MockScraper,
-        patch("backend.app.routers.trip_locations.get_google_places_client") as mock_get_client,
-    ):
+    with patch("backend.app.routers.trip_locations.GoogleListScraper") as MockScraper:
         scraper_instance = MockScraper.return_value
         scraper_instance.extract_places = AsyncMock(
             side_effect=GoogleListParseError("Google returned a CAPTCHA")
         )
-        mock_get_client.return_value = MagicMock()
 
         try:
             r = client.post(
@@ -253,7 +246,6 @@ def test_import_passes_notes_to_db(client: TestClient):
         return t
 
     sb.table.side_effect = _table_with_capture
-    _setup_overrides(sb)
 
     scraped = [
         ScrapedPlace(name="Café Pierre", latitude=48.86, longitude=2.34, note="Best macarons"),
@@ -265,15 +257,13 @@ def test_import_passes_notes_to_db(client: TestClient):
             return _make_resolution("place_1", "Café Pierre Hermé")
         return _make_resolution("place_2", "No Note Place")
 
-    with (
-        patch("backend.app.routers.trip_locations.GoogleListScraper") as MockScraper,
-        patch("backend.app.routers.trip_locations.get_google_places_client") as mock_get_client,
-    ):
+    mock_client = MagicMock()
+    mock_client._search_place_by_text.side_effect = fake_search
+    _setup_overrides(sb, places_client=mock_client)
+
+    with patch("backend.app.routers.trip_locations.GoogleListScraper") as MockScraper:
         scraper_instance = MockScraper.return_value
         scraper_instance.extract_places = AsyncMock(return_value=scraped)
-        mock_client = MagicMock()
-        mock_client._search_place_by_text.side_effect = fake_search
-        mock_get_client.return_value = mock_client
 
         try:
             r = client.post(
@@ -296,22 +286,19 @@ def test_import_passes_notes_to_db(client: TestClient):
 def test_import_deduplicates_within_batch(client: TestClient):
     """If two scraped places resolve to the same place_id, only import once."""
     sb = _mock_supabase()
-    _setup_overrides(sb)
 
     scraped = [
         ScrapedPlace(name="Same Place", latitude=1.28, longitude=103.85),
         ScrapedPlace(name="Same Place Again", latitude=1.28, longitude=103.85),
     ]
 
-    with (
-        patch("backend.app.routers.trip_locations.GoogleListScraper") as MockScraper,
-        patch("backend.app.routers.trip_locations.get_google_places_client") as mock_get_client,
-    ):
+    mock_client = MagicMock()
+    mock_client._search_place_by_text.return_value = _make_resolution("same_id", "Same Place")
+    _setup_overrides(sb, places_client=mock_client)
+
+    with patch("backend.app.routers.trip_locations.GoogleListScraper") as MockScraper:
         scraper_instance = MockScraper.return_value
         scraper_instance.extract_places = AsyncMock(return_value=scraped)
-        mock_client = MagicMock()
-        mock_client._search_place_by_text.return_value = _make_resolution("same_id", "Same Place")
-        mock_get_client.return_value = mock_client
 
         try:
             r = client.post(
