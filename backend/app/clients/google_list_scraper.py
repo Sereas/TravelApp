@@ -81,12 +81,22 @@ class ScrapedPlace:
 
 
 async def _block_non_google_requests(route) -> None:
-    """Playwright route handler: abort requests to non-Google domains."""
+    """Playwright route handler: abort requests to non-Google domains.
+
+    Allows ``data:`` and ``blob:`` schemes through — these are in-page content
+    (inline images, map tiles) with no hostname and no SSRF risk.
+    """
     url = route.request.url
     parsed = urlparse(url)
-    hostname = (parsed.hostname or "").lower()
+    scheme = parsed.scheme.lower()
 
-    if parsed.scheme != "https" or not is_allowed_navigation_host(hostname):
+    # data: and blob: are in-page content, not network requests — allow them
+    if scheme in ("data", "blob"):
+        await route.continue_()
+        return
+
+    hostname = (parsed.hostname or "").lower()
+    if scheme != "https" or not is_allowed_navigation_host(hostname):
         logger.debug(
             "playwright_request_blocked",
             url=url,
