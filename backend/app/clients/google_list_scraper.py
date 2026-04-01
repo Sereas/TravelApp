@@ -9,38 +9,16 @@ from __future__ import annotations
 
 import asyncio
 import html as html_mod
-import os
 import re
 from dataclasses import dataclass
-from urllib.parse import urlparse
 
 import structlog
 
 from backend.app.clients.google_places import GoogleListParseError
 from backend.app.utils.url_validation import (
     URLValidationError,
-    is_allowed_navigation_host,
     validate_google_maps_url,
 )
-
-# MED-04: Allowlist of env vars for the Playwright browser process.
-# Strips application secrets while keeping OS-level vars Chromium needs.
-_BROWSER_ENV_ALLOWLIST = {
-    "HOME",
-    "TMPDIR",
-    "PATH",
-    "DISPLAY",
-    "LANG",
-    "LC_ALL",
-    "XDG_RUNTIME_DIR",
-    "XDG_CONFIG_HOME",
-    "XDG_CACHE_HOME",
-    "DBUS_SESSION_BUS_ADDRESS",
-    "FONTCONFIG_PATH",
-    "LD_LIBRARY_PATH",
-    "DYLD_LIBRARY_PATH",
-}
-_browser_env = {k: v for k, v in os.environ.items() if k in _BROWSER_ENV_ALLOWLIST}
 
 logger = structlog.get_logger("google_list_scraper")
 
@@ -52,6 +30,16 @@ _HEADLINE_SEL = "div.fontHeadlineSmall"
 _MAX_SCROLL_ITERATIONS = 50
 _SCROLL_PAUSE_S = 0.8
 _NO_GROWTH_LIMIT = 3
+
+# Google cookie consent button selectors (varies by locale).
+_CONSENT_SELECTORS = [
+    'form[action*="consent"] button',
+    'button[aria-label*="Accept"]',
+    'button:has-text("Accept all")',
+    'button:has-text("Alles accepteren")',
+    'button:has-text("Tout accepter")',
+    'button:has-text("I agree")',
+]
 
 # Regex to find the preloaded getlist URL in rendered HTML.
 _GETLIST_RE = re.compile(r'href="(/maps/preview/entitylist/getlist[^"]+)"')
@@ -78,32 +66,6 @@ class ScrapedPlace:
     latitude: float
     longitude: float
     note: str | None = None
-
-
-async def _block_non_google_requests(route) -> None:
-    """Playwright route handler: abort requests to non-Google domains.
-
-    Allows ``data:`` and ``blob:`` schemes through — these are in-page content
-    (inline images, map tiles) with no hostname and no SSRF risk.
-    """
-    url = route.request.url
-    parsed = urlparse(url)
-    scheme = parsed.scheme.lower()
-
-    # data: and blob: are in-page content, not network requests — allow them
-    if scheme in ("data", "blob"):
-        await route.continue_()
-        return
-
-    hostname = (parsed.hostname or "").lower()
-    if scheme != "https" or not is_allowed_navigation_host(hostname):
-        logger.warning(
-            "playwright_request_would_block",
-            url=url[:200],
-            hostname=hostname,
-            scheme=scheme,
-        )
-    await route.continue_()
 
 
 class GoogleListScraper:
@@ -139,9 +101,6 @@ class GoogleListScraper:
 
         try:
             async with async_playwright() as p:
-                # MED-04: env filtering deferred — Chromium needs more env
-                # vars than the allowlist provides. Route interception already
-                # blocks network exfiltration from the browser process.
                 browser = await p.chromium.launch(headless=True)
                 try:
                     ctx = await browser.new_context(
@@ -239,16 +198,7 @@ class GoogleListScraper:
 
         logger.info("google_consent_page_detected", url=page.url)
 
-        # Try common consent button selectors (Google varies by locale)
-        _consent_selectors = [
-            'form[action*="consent"] button',
-            'button[aria-label*="Accept"]',
-            'button:has-text("Accept all")',
-            'button:has-text("Alles accepteren")',
-            'button:has-text("Tout accepter")',
-            'button:has-text("I agree")',
-        ]
-        for sel in _consent_selectors:
+        for sel in _CONSENT_SELECTORS:
             try:
                 btn = await page.wait_for_selector(sel, timeout=3000)
                 if btn:
