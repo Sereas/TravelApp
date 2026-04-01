@@ -94,9 +94,7 @@ def _setup_overrides(supabase, places_client=None):
     app.dependency_overrides[get_current_user_email] = override_email
     app.dependency_overrides[get_supabase_client] = lambda: supabase
     if places_client is not None:
-        app.dependency_overrides[get_google_places_client_optional] = (
-            lambda: places_client
-        )
+        app.dependency_overrides[get_google_places_client_optional] = lambda: places_client
 
 
 def _parse_sse_events(text: str) -> list[dict]:
@@ -142,9 +140,7 @@ def test_stream_happy_path_event_sequence(client: TestClient):
     mock_places._search_place_by_text.side_effect = fake_search
     _setup_overrides(sb, places_client=mock_places)
 
-    with patch(
-        "backend.app.routers.trip_locations.GoogleListScraper"
-    ) as MockScraper:
+    with patch("backend.app.routers.trip_locations.GoogleListScraper") as MockScraper:
         scraper_instance = MockScraper.return_value
         scraper_instance.extract_places = AsyncMock(return_value=scraped)
 
@@ -200,13 +196,9 @@ def test_stream_scraper_error_yields_error_event(client: TestClient):
     sb = _mock_supabase()
     _setup_overrides(sb, places_client=MagicMock())
 
-    with patch(
-        "backend.app.routers.trip_locations.GoogleListScraper"
-    ) as MockScraper:
+    with patch("backend.app.routers.trip_locations.GoogleListScraper") as MockScraper:
         scraper_instance = MockScraper.return_value
-        scraper_instance.extract_places = AsyncMock(
-            side_effect=GoogleListParseError("CAPTCHA")
-        )
+        scraper_instance.extract_places = AsyncMock(side_effect=GoogleListParseError("CAPTCHA"))
 
         try:
             resp = client.post(STREAM_URL, json=REQUEST_BODY)
@@ -257,9 +249,7 @@ def test_stream_enrichment_failure_continues(client: TestClient):
     mock_places._search_place_by_text.side_effect = fake_search
     _setup_overrides(sb, places_client=mock_places)
 
-    with patch(
-        "backend.app.routers.trip_locations.GoogleListScraper"
-    ) as MockScraper:
+    with patch("backend.app.routers.trip_locations.GoogleListScraper") as MockScraper:
         scraper_instance = MockScraper.return_value
         scraper_instance.extract_places = AsyncMock(return_value=scraped)
 
@@ -318,9 +308,7 @@ def test_stream_all_duplicates_no_saving_event(client: TestClient):
     )
     _setup_overrides(sb, places_client=mock_places)
 
-    with patch(
-        "backend.app.routers.trip_locations.GoogleListScraper"
-    ) as MockScraper:
+    with patch("backend.app.routers.trip_locations.GoogleListScraper") as MockScraper:
         scraper_instance = MockScraper.return_value
         scraper_instance.extract_places = AsyncMock(return_value=scraped)
 
