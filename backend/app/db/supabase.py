@@ -53,7 +53,8 @@ class _InstrumentedRequestBuilder:
             start = time.perf_counter()
             result = original_execute()
             duration_ms = round((time.perf_counter() - start) * 1000, 1)
-            rows = len(result.data) if result.data else 0
+            data = result.data
+            rows = len(data) if isinstance(data, list) else (1 if data else 0)
             logger.debug(
                 "db_execute",
                 table=self._table_name,
@@ -80,7 +81,8 @@ class _InstrumentedRpcBuilder:
             start = time.perf_counter()
             result = original_execute()
             duration_ms = round((time.perf_counter() - start) * 1000, 1)
-            rows = len(result.data) if result.data else 0
+            data = result.data
+            rows = len(data) if isinstance(data, list) else (1 if data else 0)
             logger.debug(
                 "db_execute",
                 table=rpc_name,
