@@ -2,6 +2,28 @@ import { createBrowserClient } from "@/lib/supabase";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+export type ImportSSEEvent =
+  | { event: "scraping"; message: string }
+  | { event: "scraping_done"; total: number; message: string }
+  | {
+      event: "enriching";
+      current: number;
+      total: number;
+      name: string;
+      status: "imported" | "existing" | "failed";
+    }
+  | { event: "saving"; message: string }
+  | {
+      event: "complete";
+      imported_count: number;
+      existing_count: number;
+      failed_count: number;
+      imported: Array<{ name: string; status: string; detail: string | null }>;
+      existing: Array<{ name: string; status: string; detail: string | null }>;
+      failed: Array<{ name: string; status: string; detail: string | null }>;
+    }
+  | { event: "error"; message: string };
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -446,6 +468,70 @@ export const api = {
         method: "POST",
         body: JSON.stringify(body),
       }),
+
+    importGoogleListStream: async (
+      tripId: string,
+      body: { google_list_url: string },
+      onEvent: (event: ImportSSEEvent) => void,
+      signal?: AbortSignal
+    ): Promise<void> => {
+      const token = await getAccessToken();
+      const res = await fetch(
+        `${API_BASE}/api/v1/trips/${tripId}/locations/import-google-list-stream`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(body),
+          signal,
+        }
+      );
+
+      if (!res.ok) {
+        const errBody = await res
+          .json()
+          .catch(() => ({ detail: "Import failed" }));
+        throw new ApiError(
+          errBody.detail || `HTTP ${res.status}`,
+          res.status,
+          errBody.detail
+        );
+      }
+
+      if (!res.body) {
+        throw new ApiError("Response body is not streamable", res.status);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() ?? "";
+
+        for (const part of parts) {
+          const trimmed = part.trim();
+          if (!trimmed) continue;
+          for (const line of trimmed.split("\n")) {
+            if (line.startsWith("data: ")) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                onEvent(data as ImportSSEEvent);
+              } catch {
+                // skip malformed events
+              }
+            }
+          }
+        }
+      }
+    },
   },
 
   google: {

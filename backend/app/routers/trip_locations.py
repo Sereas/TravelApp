@@ -1,11 +1,14 @@
 """Trip locations API: add, list, batch-add, update locations for a trip."""
 
+import asyncio
 import contextlib
+import json
 import time
 from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile, status
+from starlette.responses import StreamingResponse
 
 from backend.app.clients.google_list_scraper import GoogleListScraper
 from backend.app.clients.google_places import (
@@ -541,6 +544,257 @@ async def import_google_list(
         imported=imported,
         existing=existing,
         failed=failed,
+    )
+
+
+# ---------------------------------------------------------------------------
+# SSE streaming variant of Google list import (BACK-003)
+# ---------------------------------------------------------------------------
+
+
+def _sse_event(data: dict) -> str:
+    """Format a single SSE data line."""
+    return f"data: {json.dumps(data)}\n\n"
+
+
+@router.post(
+    "/{trip_id}/locations/import-google-list-stream",
+    response_class=StreamingResponse,
+)
+@limiter.limit("3/minute")
+async def import_google_list_stream(
+    request: Request,
+    trip_id: UUID,
+    body: ImportGoogleListBody,
+    user_id: UUID = Depends(get_current_user_id),
+    user_email: str | None = Depends(get_current_user_email),
+    supabase=Depends(get_supabase_client),
+    places_client: GooglePlacesClient | None = Depends(get_google_places_client_optional),
+):
+    """SSE streaming variant of import-google-list.
+
+    Streams progress events as each place is processed, allowing the
+    frontend to show a real-time progress bar.
+    """
+    # Pre-stream checks (return proper HTTP errors, not SSE events)
+    _ensure_resource_chain(supabase, trip_id, user_id)
+
+    if places_client is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Google integration is not configured",
+        )
+
+    async def event_generator():
+        try:
+            # Phase 1: Scraping
+            yield _sse_event(
+                {
+                    "event": "scraping",
+                    "message": "Exploring the list and having a look at the places",
+                }
+            )
+
+            scraper = GoogleListScraper()
+            try:
+                scraped_places = await scraper.extract_places(body.google_list_url)
+            except GoogleListParseError as exc:
+                logger.warning(
+                    "google_list_parse_error", error=str(exc), error_category="external_api"
+                )
+                yield _sse_event(
+                    {
+                        "event": "error",
+                        "message": "Failed to parse Google Maps list. "
+                        "Please check the URL and try again.",
+                    }
+                )
+                return
+
+            total = len(scraped_places)
+            yield _sse_event(
+                {
+                    "event": "scraping_done",
+                    "total": total,
+                    "message": f"Found {total} places",
+                }
+            )
+
+            logger.info("google_list_scraped", trip_id=str(trip_id), count=total)
+
+            # Fetch existing place_ids for dedup (single DB query)
+            existing_rows = (
+                supabase.table("locations")
+                .select("google_place_id")
+                .eq("trip_id", str(trip_id))
+                .execute()
+            ).data or []
+            existing_place_ids: set[str] = {
+                r["google_place_id"] for r in existing_rows if r.get("google_place_id")
+            }
+
+            imported: list[ImportedLocationSummary] = []
+            existing_list: list[ImportedLocationSummary] = []
+            failed: list[ImportedLocationSummary] = []
+            rows_to_insert: list[tuple[dict, list]] = []
+            seen_place_ids: set[str] = set()
+
+            # Phase 2: Enrichment (per-place progress)
+            for i, place in enumerate(scraped_places, 1):
+                if await request.is_disconnected():
+                    logger.info("import_stream_client_disconnected", trip_id=str(trip_id))
+                    return
+
+                display_name = place.name or f"({place.latitude}, {place.longitude})"
+                has_coords = place.latitude != 0.0 and place.longitude != 0.0
+
+                try:
+                    resolved = await asyncio.to_thread(
+                        places_client._search_place_by_text,
+                        place.name if place.name else f"{place.latitude},{place.longitude}",
+                        latitude=place.latitude if has_coords else None,
+                        longitude=place.longitude if has_coords else None,
+                        radius_m=500.0 if has_coords else None,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "google_list_enrichment_failed",
+                        place_name=display_name,
+                        error=str(exc),
+                        error_category="external_api",
+                    )
+                    failed.append(
+                        ImportedLocationSummary(
+                            name=display_name,
+                            status="failed",
+                            detail="Places API lookup failed",
+                        )
+                    )
+                    yield _sse_event(
+                        {
+                            "event": "enriching",
+                            "current": i,
+                            "total": total,
+                            "name": display_name,
+                            "status": "failed",
+                        }
+                    )
+                    continue
+
+                if resolved.place_id in existing_place_ids or resolved.place_id in seen_place_ids:
+                    existing_list.append(
+                        ImportedLocationSummary(
+                            name=resolved.name or display_name, status="existing"
+                        )
+                    )
+                    yield _sse_event(
+                        {
+                            "event": "enriching",
+                            "current": i,
+                            "total": total,
+                            "name": resolved.name or display_name,
+                            "status": "existing",
+                        }
+                    )
+                    continue
+
+                seen_place_ids.add(resolved.place_id)
+                suggested_category = _suggest_category(resolved.types)
+                city = _extract_city(resolved.formatted_address)
+                clean_hours = _clean_working_hours(resolved.opening_hours_text)
+                google_link = f"https://www.google.com/maps/place/?q=place_id:{resolved.place_id}"
+
+                row = {
+                    "trip_id": str(trip_id),
+                    "name": resolved.name or display_name,
+                    "address": resolved.formatted_address,
+                    "google_link": google_link,
+                    "google_place_id": resolved.place_id,
+                    "google_source_type": "google_list_import",
+                    "google_raw": resolved.raw,
+                    "added_by_user_id": str(user_id),
+                    "added_by_email": user_email,
+                    "city": city,
+                    "working_hours": " | ".join(clean_hours) if clean_hours else None,
+                    "category": suggested_category,
+                    "latitude": resolved.latitude,
+                    "longitude": resolved.longitude,
+                    "note": place.note,
+                }
+                rows_to_insert.append((row, resolved.photos))
+                imported.append(
+                    ImportedLocationSummary(name=resolved.name or display_name, status="imported")
+                )
+                yield _sse_event(
+                    {
+                        "event": "enriching",
+                        "current": i,
+                        "total": total,
+                        "name": resolved.name or display_name,
+                        "status": "imported",
+                    }
+                )
+
+            # Phase 3: Batch insert + photos
+            if rows_to_insert:
+                yield _sse_event(
+                    {
+                        "event": "saving",
+                        "message": "Almost there — saving your places...",
+                    }
+                )
+
+                db_rows = [row for row, _ in rows_to_insert]
+                insert_result = supabase.table("locations").insert(db_rows).execute()
+                if not insert_result.data or len(insert_result.data) != len(db_rows):
+                    yield _sse_event(
+                        {"event": "error", "message": "Failed to save locations. Please try again."}
+                    )
+                    return
+
+                for (row, photos), _inserted in zip(
+                    rows_to_insert, insert_result.data, strict=True
+                ):
+                    gp_id = row.get("google_place_id")
+                    if gp_id and photos:
+                        with contextlib.suppress(Exception):
+                            await asyncio.to_thread(
+                                ensure_place_photo, supabase, places_client, gp_id, photos
+                            )
+
+            logger.info(
+                "google_list_imported",
+                trip_id=str(trip_id),
+                imported=len(imported),
+                existing=len(existing_list),
+                failed=len(failed),
+            )
+
+            # Phase 4: Complete
+            yield _sse_event(
+                {
+                    "event": "complete",
+                    "imported_count": len(imported),
+                    "existing_count": len(existing_list),
+                    "failed_count": len(failed),
+                    "imported": [s.model_dump() for s in imported],
+                    "existing": [s.model_dump() for s in existing_list],
+                    "failed": [s.model_dump() for s in failed],
+                }
+            )
+
+        except Exception as exc:
+            logger.error("import_stream_error", error=str(exc), error_category="internal")
+            yield _sse_event({"event": "error", "message": "An unexpected error occurred."})
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 
