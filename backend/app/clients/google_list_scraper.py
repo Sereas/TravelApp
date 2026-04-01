@@ -153,6 +153,10 @@ class GoogleListScraper:
 
                     await page.goto(list_url, wait_until="domcontentloaded", timeout=30000)
 
+                    # Short-URL redirects (goo.gl → google.com) happen via JS
+                    # after domcontentloaded.  Wait for the URL to settle.
+                    await self._wait_for_redirect(page)
+
                     # Handle Google cookie consent page if it appears
                     await self._handle_consent_if_present(page)
 
@@ -213,6 +217,20 @@ class GoogleListScraper:
             raise
         except Exception as exc:
             raise GoogleListParseError(f"Failed to scrape Google Maps list: {exc}") from exc
+
+    @staticmethod
+    async def _wait_for_redirect(page, timeout_s: float = 8.0) -> None:
+        """Wait for JS-driven redirects (goo.gl → consent or google.com/maps)."""
+        initial_url = page.url
+        elapsed = 0.0
+        while elapsed < timeout_s:
+            await asyncio.sleep(0.5)
+            elapsed += 0.5
+            if page.url != initial_url:
+                # URL changed — wait a moment more for the target to load
+                await asyncio.sleep(1)
+                return
+        # Timeout — URL didn't change, proceed anyway (may be a direct link)
 
     async def _handle_consent_if_present(self, page) -> None:
         """Click through Google's cookie consent page if it appears."""
