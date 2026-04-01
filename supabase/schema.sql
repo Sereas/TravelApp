@@ -1190,43 +1190,33 @@ GRANT USAGE ON SCHEMA public TO anon;
 GRANT USAGE ON SCHEMA public TO authenticated;
 GRANT USAGE ON SCHEMA public TO service_role;
 
-GRANT ALL ON TABLE public.option_locations TO anon;
 GRANT ALL ON TABLE public.option_locations TO authenticated;
 GRANT ALL ON TABLE public.option_locations TO service_role;
 
-GRANT ALL ON FUNCTION public.batch_insert_option_locations(p_option_id uuid, p_location_ids uuid[], p_sort_orders integer[], p_time_periods text[]) TO anon;
 GRANT ALL ON FUNCTION public.batch_insert_option_locations(p_option_id uuid, p_location_ids uuid[], p_sort_orders integer[], p_time_periods text[]) TO authenticated;
 GRANT ALL ON FUNCTION public.batch_insert_option_locations(p_option_id uuid, p_location_ids uuid[], p_sort_orders integer[], p_time_periods text[]) TO service_role;
 
-GRANT ALL ON FUNCTION public.create_route_with_stops(p_option_id uuid, p_transport_mode character varying, p_label character varying, p_location_ids uuid[]) TO anon;
 GRANT ALL ON FUNCTION public.create_route_with_stops(p_option_id uuid, p_transport_mode character varying, p_label character varying, p_location_ids uuid[]) TO authenticated;
 GRANT ALL ON FUNCTION public.create_route_with_stops(p_option_id uuid, p_transport_mode character varying, p_label character varying, p_location_ids uuid[]) TO service_role;
 
-GRANT ALL ON FUNCTION public.delete_days_batch(p_trip_id uuid, p_day_ids uuid[]) TO anon;
 GRANT ALL ON FUNCTION public.delete_days_batch(p_trip_id uuid, p_day_ids uuid[]) TO authenticated;
 GRANT ALL ON FUNCTION public.delete_days_batch(p_trip_id uuid, p_day_ids uuid[]) TO service_role;
 
-GRANT ALL ON FUNCTION public.delete_empty_dateless_days(p_trip_id uuid) TO anon;
 GRANT ALL ON FUNCTION public.delete_empty_dateless_days(p_trip_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.delete_empty_dateless_days(p_trip_id uuid) TO service_role;
 
-GRANT ALL ON FUNCTION public.delete_location_cascade(p_trip_id uuid, p_location_id uuid) TO anon;
 GRANT ALL ON FUNCTION public.delete_location_cascade(p_trip_id uuid, p_location_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.delete_location_cascade(p_trip_id uuid, p_location_id uuid) TO service_role;
 
-GRANT ALL ON FUNCTION public.get_itinerary_routes(p_option_ids uuid[]) TO anon;
 GRANT ALL ON FUNCTION public.get_itinerary_routes(p_option_ids uuid[]) TO authenticated;
 GRANT ALL ON FUNCTION public.get_itinerary_routes(p_option_ids uuid[]) TO service_role;
 
-GRANT ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid) TO anon;
 GRANT ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid) TO service_role;
 
-GRANT ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid, p_user_id uuid) TO anon;
 GRANT ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid, p_user_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid, p_user_id uuid) TO service_role;
 
-GRANT ALL ON FUNCTION public.get_option_routes(p_option_id uuid) TO anon;
 GRANT ALL ON FUNCTION public.get_option_routes(p_option_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.get_option_routes(p_option_id uuid) TO service_role;
 
@@ -1234,87 +1224,66 @@ GRANT ALL ON FUNCTION public.get_shared_trip_data(p_share_token text) TO anon;
 GRANT ALL ON FUNCTION public.get_shared_trip_data(p_share_token text) TO authenticated;
 GRANT ALL ON FUNCTION public.get_shared_trip_data(p_share_token text) TO service_role;
 
-GRANT ALL ON FUNCTION public.move_option_to_day(p_option_id uuid, p_source_day_id uuid, p_target_day_id uuid) TO anon;
 GRANT ALL ON FUNCTION public.move_option_to_day(p_option_id uuid, p_source_day_id uuid, p_target_day_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.move_option_to_day(p_option_id uuid, p_source_day_id uuid, p_target_day_id uuid) TO service_role;
 
-GRANT ALL ON FUNCTION public.reconcile_clear_dates(p_trip_id uuid, p_day_ids uuid[]) TO anon;
 GRANT ALL ON FUNCTION public.reconcile_clear_dates(p_trip_id uuid, p_day_ids uuid[]) TO authenticated;
 GRANT ALL ON FUNCTION public.reconcile_clear_dates(p_trip_id uuid, p_day_ids uuid[]) TO service_role;
 
-GRANT ALL ON FUNCTION public.remove_location_from_option(p_option_id uuid, p_location_id uuid) TO anon;
 GRANT ALL ON FUNCTION public.remove_location_from_option(p_option_id uuid, p_location_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.remove_location_from_option(p_option_id uuid, p_location_id uuid) TO service_role;
 
-GRANT ALL ON FUNCTION public.reorder_day_options(p_day_id uuid, p_option_ids uuid[]) TO anon;
 GRANT ALL ON FUNCTION public.reorder_day_options(p_day_id uuid, p_option_ids uuid[]) TO authenticated;
 GRANT ALL ON FUNCTION public.reorder_day_options(p_day_id uuid, p_option_ids uuid[]) TO service_role;
 
-GRANT ALL ON FUNCTION public.reorder_days_by_date(p_trip_id uuid) TO anon;
 GRANT ALL ON FUNCTION public.reorder_days_by_date(p_trip_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.reorder_days_by_date(p_trip_id uuid) TO service_role;
 
-GRANT ALL ON FUNCTION public.reorder_option_locations(p_option_id uuid, p_location_ids uuid[]) TO anon;
 GRANT ALL ON FUNCTION public.reorder_option_locations(p_option_id uuid, p_location_ids uuid[]) TO authenticated;
 GRANT ALL ON FUNCTION public.reorder_option_locations(p_option_id uuid, p_location_ids uuid[]) TO service_role;
 
-GRANT ALL ON FUNCTION public.reorder_trip_days(p_trip_id uuid, p_day_ids uuid[]) TO anon;
 GRANT ALL ON FUNCTION public.reorder_trip_days(p_trip_id uuid, p_day_ids uuid[]) TO authenticated;
 GRANT ALL ON FUNCTION public.reorder_trip_days(p_trip_id uuid, p_day_ids uuid[]) TO service_role;
 
-GRANT ALL ON FUNCTION public.set_updated_at() TO anon;
 GRANT ALL ON FUNCTION public.set_updated_at() TO authenticated;
 GRANT ALL ON FUNCTION public.set_updated_at() TO service_role;
 
-GRANT ALL ON FUNCTION public.shift_day_dates(p_trip_id uuid, p_offset_days integer) TO anon;
 GRANT ALL ON FUNCTION public.shift_day_dates(p_trip_id uuid, p_offset_days integer) TO authenticated;
 GRANT ALL ON FUNCTION public.shift_day_dates(p_trip_id uuid, p_offset_days integer) TO service_role;
 
-GRANT ALL ON FUNCTION public.update_route_with_stops(p_route_id uuid, p_option_id uuid, p_transport_mode text, p_label text, p_location_ids uuid[]) TO anon;
 GRANT ALL ON FUNCTION public.update_route_with_stops(p_route_id uuid, p_option_id uuid, p_transport_mode text, p_label text, p_location_ids uuid[]) TO authenticated;
 GRANT ALL ON FUNCTION public.update_route_with_stops(p_route_id uuid, p_option_id uuid, p_transport_mode text, p_label text, p_location_ids uuid[]) TO service_role;
 
-GRANT ALL ON FUNCTION public.verify_resource_chain(p_trip_id uuid, p_user_id uuid, p_day_id uuid, p_option_id uuid) TO anon;
 GRANT ALL ON FUNCTION public.verify_resource_chain(p_trip_id uuid, p_user_id uuid, p_day_id uuid, p_option_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.verify_resource_chain(p_trip_id uuid, p_user_id uuid, p_day_id uuid, p_option_id uuid) TO service_role;
 
-GRANT ALL ON TABLE public.day_options TO anon;
 GRANT ALL ON TABLE public.day_options TO authenticated;
 GRANT ALL ON TABLE public.day_options TO service_role;
 
-GRANT ALL ON TABLE public.locations TO anon;
 GRANT ALL ON TABLE public.locations TO authenticated;
 GRANT ALL ON TABLE public.locations TO service_role;
 
-GRANT ALL ON TABLE public.option_routes TO anon;
 GRANT ALL ON TABLE public.option_routes TO authenticated;
 GRANT ALL ON TABLE public.option_routes TO service_role;
 
-GRANT ALL ON TABLE public.place_photos TO anon;
 GRANT ALL ON TABLE public.place_photos TO authenticated;
 GRANT ALL ON TABLE public.place_photos TO service_role;
 
-GRANT ALL ON TABLE public.route_segments TO anon;
 GRANT ALL ON TABLE public.route_segments TO authenticated;
 GRANT ALL ON TABLE public.route_segments TO service_role;
 
-GRANT ALL ON TABLE public.route_stops TO anon;
 GRANT ALL ON TABLE public.route_stops TO authenticated;
 GRANT ALL ON TABLE public.route_stops TO service_role;
 
-GRANT ALL ON TABLE public.segment_cache TO anon;
 GRANT ALL ON TABLE public.segment_cache TO authenticated;
 GRANT ALL ON TABLE public.segment_cache TO service_role;
 
-GRANT ALL ON TABLE public.trip_days TO anon;
 GRANT ALL ON TABLE public.trip_days TO authenticated;
 GRANT ALL ON TABLE public.trip_days TO service_role;
 
-GRANT ALL ON TABLE public.trip_shares TO anon;
 GRANT ALL ON TABLE public.trip_shares TO authenticated;
 GRANT ALL ON TABLE public.trip_shares TO service_role;
 
-GRANT ALL ON TABLE public.trips TO anon;
 GRANT ALL ON TABLE public.trips TO authenticated;
 GRANT ALL ON TABLE public.trips TO service_role;
 

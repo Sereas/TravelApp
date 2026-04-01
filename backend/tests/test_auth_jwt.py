@@ -359,6 +359,7 @@ def test_jwks_connection_error_does_not_fallback_to_hs256(client: TestClient, mo
 
     secret = "test-secret"
     monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "test-service-key")
     monkeypatch.setenv("SUPABASE_JWT_SECRET", secret)
     _clear_caches()
 
@@ -406,6 +407,7 @@ def test_jwks_timeout_wrapped_error_does_not_fallback_to_hs256(client: TestClien
 
     secret = "test-secret"
     monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "test-service-key")
     monkeypatch.setenv("SUPABASE_JWT_SECRET", secret)
     _clear_caches()
 
