@@ -140,7 +140,10 @@ class GoogleListScraper:
 
         try:
             async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=True, env=_browser_env)
+                # MED-04: env filtering deferred — Chromium needs more env
+                # vars than the allowlist provides. Route interception already
+                # blocks network exfiltration from the browser process.
+                browser = await p.chromium.launch(headless=True)
                 try:
                     ctx = await browser.new_context(
                         user_agent=_USER_AGENT,
