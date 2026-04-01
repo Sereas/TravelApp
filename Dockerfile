@@ -8,6 +8,12 @@ COPY requirements-prod.txt .
 RUN pip install --no-cache-dir -r requirements-prod.txt \
     && playwright install --with-deps chromium
 
+# Playwright installs browsers to /root/.cache/ms-playwright as root.
+# Make them accessible to the non-root app user at runtime.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
+RUN mv /root/.cache/ms-playwright "$PLAYWRIGHT_BROWSERS_PATH" \
+    && chmod -R o+rx "$PLAYWRIGHT_BROWSERS_PATH"
+
 COPY backend/ backend/
 
 RUN chown -R app:app /app
