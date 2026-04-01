@@ -9,5 +9,6 @@ pydantic[email]>=2.5.0
 supabase>=2.0.0
 python-dotenv>=1.0.0
 structlog>=24.1.0
+slowapi>=0.1.9
 # Browser binaries: Docker runs `playwright install --with-deps chromium` (see Dockerfile).
 playwright>=1.40.0

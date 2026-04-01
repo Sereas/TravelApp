@@ -1,7 +1,7 @@
 """Supabase client for server-side operations.
 
-Uses SUPABASE_SERVICE_ROLE_KEY (preferred) or SUPABASE_ANON_KEY from env.
-See docs/design/backend-and-supabase.md for when to use each key.
+Uses SUPABASE_SERVICE_ROLE_KEY exclusively. Anon key fallback was removed
+(CRIT-03): the backend must never run with the anon key.
 
 Includes lightweight instrumentation: every .execute() call is logged at DEBUG
 level with table/rpc name, operation type, and duration.
@@ -127,11 +127,13 @@ class InstrumentedClient:
 
 @lru_cache
 def get_supabase_client():
-    """Create and cache instrumented Supabase client. Prefer service_role key for backend."""
+    """Create and cache instrumented Supabase client (process lifetime).
+
+    LOW-03: Cached for the process lifetime. Rotating SUPABASE_SERVICE_ROLE_KEY
+    requires a process restart (container redeploy) for the new key to take effect.
+    """
     settings = get_settings()
     if not settings.supabase_url or not settings.supabase_key:
-        raise RuntimeError(
-            "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_ANON_KEY) must be set"
-        )
+        raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set")
     raw_client = create_client(settings.supabase_url, settings.supabase_key)
     return InstrumentedClient(raw_client)

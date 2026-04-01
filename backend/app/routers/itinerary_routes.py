@@ -185,7 +185,11 @@ async def get_route(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Route not found"
             ) from None
         except ValueError as e:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+            logger.warning("route_calculation_error", error=str(e), error_category="internal")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Route calculation failed",
+            ) from e
         return with_segments
     stops = (
         supabase.table("route_stops")
@@ -332,7 +336,11 @@ async def recalculate_route_endpoint(
             status_code=status.HTTP_404_NOT_FOUND, detail="Route not found"
         ) from None
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        logger.warning("route_calculation_error", error=str(e), error_category="internal")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Route calculation failed",
+        ) from e
     return result
 
 

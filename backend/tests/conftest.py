@@ -18,6 +18,7 @@ def make_test_jwt(sub: str = TEST_USER_ID, secret: str = "test-jwt-secret") -> s
     now = datetime.now(UTC)
     payload = {
         "sub": sub,
+        "aud": "authenticated",
         "exp": datetime(now.year + 1, 1, 1, tzinfo=UTC),
         "iat": now,
     }
@@ -164,10 +165,11 @@ def mock_supabase_trips_and_locations():
     trips_store = []
 
     class _TripsTable:
-        def __init__(self, trip_owners, user_id, store):
+        def __init__(self, trip_owners, user_id, store, locs_store=None):
             self._trip_owners = {str(k): str(v) for k, v in trip_owners.items()}
             self._user_id = str(user_id)
             self._store = store
+            self._locs_store = locs_store
             self._trip_id = None
             self._user_id_filter = None
             self._is_delete = False
@@ -199,6 +201,10 @@ def mock_supabase_trips_and_locations():
                 tid = self._trip_id
                 if tid is not None:
                     self._store[:] = [t for t in self._store if str(t.get("trip_id")) != tid]
+                    if self._locs_store is not None:
+                        self._locs_store[:] = [
+                            loc for loc in self._locs_store if str(loc.get("trip_id")) != tid
+                        ]
                 return type("Result", (), {"data": []})()
             if self._user_id_filter is not None:
                 out = [t for t in self._store if t.get("user_id") == self._user_id_filter]
@@ -420,7 +426,9 @@ def mock_supabase_trips_and_locations():
 
         def table(self, name):
             if name == "trips":
-                return _TripsTable(self._trip_owners, self._user_id, self._trips_store)
+                return _TripsTable(
+                    self._trip_owners, self._user_id, self._trips_store, locations_inserted
+                )
             if name == "locations":
                 return _LocationsTable(locations_inserted)
             return None
@@ -1405,3 +1413,25 @@ def mock_supabase_trips_and_days():
             return type("RpcChain", (), {"execute": lambda _: _RpcResult([])})()
 
     return trip_days_store, trips_store, MockSupabaseTripsAndDays
+
+
+# ---------------------------------------------------------------------------
+# Rate limiting — disable globally so existing tests are unaffected.
+# The try/except guard allows this fixture to run even before the
+# rate_limit module is created (Red phase).
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _disable_rate_limits():
+    """Disable slowapi rate limiting for the duration of every test."""
+    try:
+        from backend.app.core.rate_limit import limiter
+    except ImportError:
+        yield
+        return
+    limiter.enabled = False
+    try:
+        yield
+    finally:
+        limiter.enabled = True

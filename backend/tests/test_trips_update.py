@@ -48,6 +48,14 @@ class _TripsTableMock:
         return type("Result", (), {"data": []})()
 
 
+class _RpcResult:
+    def __init__(self, data):
+        self.data = data
+
+    def execute(self):
+        return self
+
+
 class MockSupabaseTrips:
     def __init__(self, trips_store: dict[str, dict]):
         self._trips_store = trips_store
@@ -56,6 +64,16 @@ class MockSupabaseTrips:
         if name == "trips":
             return _TripsTableMock(self._trips_store)
         raise AssertionError(f"Unexpected table: {name}")
+
+    def rpc(self, fn_name, params=None):
+        if fn_name == "verify_resource_chain":
+            trip_id = params.get("p_trip_id")
+            user_id = params.get("p_user_id")
+            trip = self._trips_store.get(trip_id)
+            if trip and trip.get("user_id") == user_id:
+                return _RpcResult(True)
+            return _RpcResult(None)
+        raise AssertionError(f"Unexpected RPC: {fn_name}")
 
 
 def _make_trip(trip_id: str, user_id: UUID):
@@ -233,7 +251,7 @@ def test_update_trip_nonexistent_returns_404(
             json={"name": "New name"},
         )
         assert r.status_code == 404
-        assert r.json().get("detail") == "Trip not found"
+        assert r.json().get("detail") == "Resource not found or not owned"
     finally:
         app.dependency_overrides.clear()
 
@@ -259,7 +277,7 @@ def test_update_trip_other_users_trip_returns_404(
             json={"name": "New name"},
         )
         assert r.status_code == 404
-        assert r.json().get("detail") == "Trip not owned by user"
+        assert r.json().get("detail") == "Resource not found or not owned"
     finally:
         app.dependency_overrides.clear()
 

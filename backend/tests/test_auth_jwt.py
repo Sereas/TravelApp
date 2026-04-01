@@ -2,6 +2,7 @@
 
 import base64
 from datetime import UTC, datetime
+from unittest.mock import MagicMock, patch
 
 import jwt
 import structlog
@@ -51,7 +52,11 @@ def test_jwt_with_plain_string_secret(client: TestClient, monkeypatch):
 
     now = datetime.now(UTC)
     token = jwt.encode(
-        {"sub": TEST_USER_ID, "exp": datetime(now.year + 1, 1, 1, tzinfo=UTC)},
+        {
+            "sub": TEST_USER_ID,
+            "aud": "authenticated",
+            "exp": datetime(now.year + 1, 1, 1, tzinfo=UTC),
+        },
         secret,
         algorithm="HS256",
     )
@@ -78,7 +83,11 @@ def test_jwt_with_base64_encoded_secret(client: TestClient, monkeypatch):
 
     now = datetime.now(UTC)
     token = jwt.encode(
-        {"sub": TEST_USER_ID, "exp": datetime(now.year + 1, 1, 1, tzinfo=UTC)},
+        {
+            "sub": TEST_USER_ID,
+            "aud": "authenticated",
+            "exp": datetime(now.year + 1, 1, 1, tzinfo=UTC),
+        },
         raw_secret,
         algorithm="HS256",
     )
@@ -151,7 +160,7 @@ def test_jwt_missing_sub_returns_401(client: TestClient, monkeypatch):
 
     now = datetime.now(UTC)
     token = jwt.encode(
-        {"exp": datetime(now.year + 1, 1, 1, tzinfo=UTC), "role": "authenticated"},
+        {"exp": datetime(now.year + 1, 1, 1, tzinfo=UTC), "aud": "authenticated"},
         secret,
         algorithm="HS256",
     )
@@ -191,7 +200,11 @@ def test_successful_auth_binds_user_id_to_structlog_context(client: TestClient, 
 
     now = datetime.now(UTC)
     token = jwt.encode(
-        {"sub": TEST_USER_ID, "exp": datetime(now.year + 1, 1, 1, tzinfo=UTC)},
+        {
+            "sub": TEST_USER_ID,
+            "aud": "authenticated",
+            "exp": datetime(now.year + 1, 1, 1, tzinfo=UTC),
+        },
         secret,
         algorithm="HS256",
     )
@@ -215,3 +228,244 @@ def test_successful_auth_binds_user_id_to_structlog_context(client: TestClient, 
     finally:
         app.dependency_overrides.clear()
         _clear_caches()
+
+
+# ---------------------------------------------------------------------------
+# CRIT-01: Audience enforcement in the HS256 path
+# ---------------------------------------------------------------------------
+
+
+def test_hs256_without_audience_returns_401(client: TestClient, monkeypatch):
+    """[RED] Token with NO aud claim must be rejected with 401.
+
+    Currently fails because _verify_token uses options={"verify_aud": False}
+    on both HS256 decode attempts, so tokens without aud are accepted.
+    """
+    secret = "test-aud-secret"
+    monkeypatch.setenv("SUPABASE_JWT_SECRET", secret)
+    monkeypatch.setenv("SUPABASE_URL", "")
+    _clear_caches()
+
+    now = datetime.now(UTC)
+    # Deliberately omit "aud" so the token carries no audience claim.
+    token = jwt.encode(
+        {"sub": TEST_USER_ID, "exp": datetime(now.year + 1, 1, 1, tzinfo=UTC)},
+        secret,
+        algorithm="HS256",
+    )
+
+    app.dependency_overrides[get_supabase_client] = _StubSupabase
+    try:
+        resp = client.get(
+            "/api/v1/trips",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 401, (
+            "Expected 401 for token without aud claim, "
+            f"got {resp.status_code}. "
+            "Fix: remove options={'verify_aud': False} from HS256 decode path."
+        )
+    finally:
+        app.dependency_overrides.clear()
+        _clear_caches()
+
+
+def test_hs256_with_wrong_audience_returns_401(client: TestClient, monkeypatch):
+    """[RED] Token with aud='wrong-audience' must be rejected with 401.
+
+    Currently fails because verify_aud is disabled for both HS256 attempts.
+    """
+    secret = "test-aud-secret"
+    monkeypatch.setenv("SUPABASE_JWT_SECRET", secret)
+    monkeypatch.setenv("SUPABASE_URL", "")
+    _clear_caches()
+
+    now = datetime.now(UTC)
+    token = jwt.encode(
+        {
+            "sub": TEST_USER_ID,
+            "aud": "wrong-audience",
+            "exp": datetime(now.year + 1, 1, 1, tzinfo=UTC),
+        },
+        secret,
+        algorithm="HS256",
+    )
+
+    app.dependency_overrides[get_supabase_client] = _StubSupabase
+    try:
+        resp = client.get(
+            "/api/v1/trips",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 401, (
+            "Expected 401 for token with wrong audience, "
+            f"got {resp.status_code}. "
+            "Fix: enforce aud='authenticated' in HS256 decode path."
+        )
+    finally:
+        app.dependency_overrides.clear()
+        _clear_caches()
+
+
+def test_hs256_with_correct_audience_succeeds(client: TestClient, monkeypatch):
+    """[GREEN baseline] Token with aud='authenticated' must be accepted.
+
+    This test must pass both before AND after the CRIT-01 fix — it confirms
+    that tightening audience validation does not break valid tokens.
+    """
+    secret = "test-aud-secret"
+    monkeypatch.setenv("SUPABASE_JWT_SECRET", secret)
+    monkeypatch.setenv("SUPABASE_URL", "")
+    _clear_caches()
+
+    now = datetime.now(UTC)
+    token = jwt.encode(
+        {
+            "sub": TEST_USER_ID,
+            "aud": "authenticated",
+            "exp": datetime(now.year + 1, 1, 1, tzinfo=UTC),
+        },
+        secret,
+        algorithm="HS256",
+    )
+
+    app.dependency_overrides[get_supabase_client] = _StubSupabase
+    try:
+        resp = client.get(
+            "/api/v1/trips",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code != 401, (
+            f"Expected success for token with aud='authenticated', got {resp.status_code}."
+        )
+    finally:
+        app.dependency_overrides.clear()
+        _clear_caches()
+
+
+# ---------------------------------------------------------------------------
+# CRIT-02: JWKS error handling — network errors must NOT fall through to HS256
+# ---------------------------------------------------------------------------
+
+
+def test_jwks_connection_error_does_not_fallback_to_hs256(client: TestClient, monkeypatch):
+    """PyJWKClientConnectionError from JWKS must result in 401, not HS256 fallback.
+
+    PyJWT wraps network errors in PyJWKClientConnectionError (a subclass of
+    PyJWTError).  The fix must re-raise this specific exception before the
+    general PyJWTError catch, so the HS256 path is never reached.
+    """
+    from jwt.exceptions import PyJWKClientConnectionError
+
+    secret = "test-secret"
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_JWT_SECRET", secret)
+    _clear_caches()
+
+    now = datetime.now(UTC)
+    token = jwt.encode(
+        {
+            "sub": TEST_USER_ID,
+            "aud": "authenticated",
+            "exp": datetime(now.year + 1, 1, 1, tzinfo=UTC),
+        },
+        secret,
+        algorithm="HS256",
+    )
+
+    mock_jwk_client = MagicMock()
+    mock_jwk_client.get_signing_key_from_jwt.side_effect = PyJWKClientConnectionError(
+        'Fail to fetch data from the url, err: "Connection refused"'
+    )
+
+    app.dependency_overrides[get_supabase_client] = _StubSupabase
+    try:
+        with patch("backend.app.dependencies._get_jwk_client", return_value=mock_jwk_client):
+            resp = client.get(
+                "/api/v1/trips",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 401, (
+            "Expected 401 when JWKS raises PyJWKClientConnectionError, "
+            f"got {resp.status_code}. "
+            "Fix: re-raise PyJWKClientConnectionError before the PyJWTError catch."
+        )
+    finally:
+        app.dependency_overrides.clear()
+        _clear_caches()
+
+
+def test_jwks_timeout_wrapped_error_does_not_fallback_to_hs256(client: TestClient, monkeypatch):
+    """PyJWKClientConnectionError wrapping a timeout must also result in 401.
+
+    PyJWT catches TimeoutError internally and wraps it in
+    PyJWKClientConnectionError.  This test confirms the wrapper is also
+    handled correctly.
+    """
+    from jwt.exceptions import PyJWKClientConnectionError
+
+    secret = "test-secret"
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_JWT_SECRET", secret)
+    _clear_caches()
+
+    now = datetime.now(UTC)
+    token = jwt.encode(
+        {
+            "sub": TEST_USER_ID,
+            "aud": "authenticated",
+            "exp": datetime(now.year + 1, 1, 1, tzinfo=UTC),
+        },
+        secret,
+        algorithm="HS256",
+    )
+
+    mock_jwk_client = MagicMock()
+    mock_jwk_client.get_signing_key_from_jwt.side_effect = PyJWKClientConnectionError(
+        'Fail to fetch data from the url, err: "timed out"'
+    )
+
+    app.dependency_overrides[get_supabase_client] = _StubSupabase
+    try:
+        with patch("backend.app.dependencies._get_jwk_client", return_value=mock_jwk_client):
+            resp = client.get(
+                "/api/v1/trips",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 401, (
+            "Expected 401 when JWKS raises TimeoutError, "
+            f"got {resp.status_code}. "
+            "Fix: catch only jwt exceptions in the JWKS block, not bare Exception."
+        )
+    finally:
+        app.dependency_overrides.clear()
+        _clear_caches()
+
+
+# ---------------------------------------------------------------------------
+# CRIT-03: Settings must not silently fall back to anon key
+# ---------------------------------------------------------------------------
+
+
+def test_missing_service_role_key_raises_error(monkeypatch):
+    """[RED] Settings() must raise when SUPABASE_URL is set but SERVICE_ROLE_KEY is absent.
+
+    Currently fails because Settings.__init__ silently assigns
+    supabase_key = service_key or anon_key with no error or warning.
+    Fix: raise ValueError (or similar) when supabase_url is non-empty and
+    SUPABASE_SERVICE_ROLE_KEY resolves to an empty string.
+    """
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "")
+    monkeypatch.setenv("SUPABASE_ANON_KEY", "anon-key-value")
+
+    from backend.app.core.config import Settings, get_settings
+
+    get_settings.cache_clear()
+    try:
+        import pytest
+
+        with pytest.raises((ValueError, RuntimeError)):
+            Settings()
+    finally:
+        get_settings.cache_clear()

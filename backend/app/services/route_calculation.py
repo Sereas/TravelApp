@@ -297,10 +297,18 @@ def _compute_one_segment(
         )
     except Exception as e:
         http_status = getattr(getattr(e, "response", None), "status_code", None)
-        msg = str(e)
+        raw_msg = str(e)
+        logger.warning(
+            "route_segment_calculation_error",
+            error=raw_msg,
+            cache_key=cache_key,
+            error_category="external_api",
+        )
+        # Sanitize: do not store raw exception text (may contain API keys, project IDs)
+        msg = "Route calculation failed for this segment"
         status, error_type, cooldown_minutes = classify_provider_error(
             http_status,
-            msg,
+            raw_msg,
             transport_mode,
         )
         next_retry = _add_minutes(now, cooldown_minutes) if cooldown_minutes else None

@@ -18,7 +18,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     """Log every HTTP request with method, path, status, and duration."""
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        request_id = str(uuid.uuid4())[:8]
+        request_id = str(uuid.uuid4())
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(request_id=request_id)
 
@@ -64,4 +64,15 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         )
 
         response.headers["X-Request-ID"] = request_id
+        return response
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Inject HTTP security headers on every response."""
+
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         return response

@@ -1,10 +1,13 @@
 """Request/response schemas for trips and locations APIs (including itinerary)."""
 
+import json
 from datetime import date as date_type
 from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+from backend.app.utils.url_validation import URLValidationError, validate_google_maps_url
 
 
 class CreateTripBody(BaseModel):
@@ -72,6 +75,9 @@ _LOCATION_CITY_MAX = 255
 _LOCATION_WORKING_HOURS_MAX = 500
 
 
+_GOOGLE_RAW_MAX_BYTES = 50_000
+
+
 class _LocationFieldsMixin(BaseModel):
     """Shared validators for location write schemas."""
 
@@ -98,6 +104,13 @@ class _LocationFieldsMixin(BaseModel):
     def validate_category(cls, v):
         if v is not None and v not in CATEGORY_VALUES:
             raise ValueError(f"must be one of: {sorted(CATEGORY_VALUES)}")
+        return v
+
+    @field_validator("google_raw", check_fields=False)
+    @classmethod
+    def validate_google_raw_size(cls, v: dict | None) -> dict | None:
+        if v is not None and len(json.dumps(v).encode()) >= _GOOGLE_RAW_MAX_BYTES:
+            raise ValueError(f"google_raw exceeds {_GOOGLE_RAW_MAX_BYTES // 1000}KB size limit")
         return v
 
 
@@ -620,6 +633,14 @@ class ImportGoogleListBody(BaseModel):
     """Request body for importing locations from a Google Maps shared list."""
 
     google_list_url: str = Field(..., min_length=1, description="Google Maps shared list URL")
+
+    @field_validator("google_list_url")
+    @classmethod
+    def validate_url_safety(cls, v: str) -> str:
+        try:
+            return validate_google_maps_url(v)
+        except URLValidationError as exc:
+            raise ValueError(str(exc)) from exc
 
 
 class ImportedLocationSummary(BaseModel):

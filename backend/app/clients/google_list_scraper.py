@@ -9,12 +9,38 @@ from __future__ import annotations
 
 import asyncio
 import html as html_mod
+import os
 import re
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 import structlog
 
 from backend.app.clients.google_places import GoogleListParseError
+from backend.app.utils.url_validation import (
+    URLValidationError,
+    is_allowed_navigation_host,
+    validate_google_maps_url,
+)
+
+# MED-04: Allowlist of env vars for the Playwright browser process.
+# Strips application secrets while keeping OS-level vars Chromium needs.
+_BROWSER_ENV_ALLOWLIST = {
+    "HOME",
+    "TMPDIR",
+    "PATH",
+    "DISPLAY",
+    "LANG",
+    "LC_ALL",
+    "XDG_RUNTIME_DIR",
+    "XDG_CONFIG_HOME",
+    "XDG_CACHE_HOME",
+    "DBUS_SESSION_BUS_ADDRESS",
+    "FONTCONFIG_PATH",
+    "LD_LIBRARY_PATH",
+    "DYLD_LIBRARY_PATH",
+}
+_browser_env = {k: v for k, v in os.environ.items() if k in _BROWSER_ENV_ALLOWLIST}
 
 logger = structlog.get_logger("google_list_scraper")
 
@@ -54,6 +80,23 @@ class ScrapedPlace:
     note: str | None = None
 
 
+async def _block_non_google_requests(route) -> None:
+    """Playwright route handler: abort requests to non-Google domains."""
+    url = route.request.url
+    parsed = urlparse(url)
+    hostname = (parsed.hostname or "").lower()
+
+    if parsed.scheme != "https" or not is_allowed_navigation_host(hostname):
+        logger.debug(
+            "playwright_request_blocked",
+            url=url,
+            hostname=hostname,
+        )
+        await route.abort("blockedbyclient")
+    else:
+        await route.continue_()
+
+
 class GoogleListScraper:
     """Extracts places from a Google Maps shared list using Playwright.
 
@@ -71,6 +114,12 @@ class GoogleListScraper:
 
         Raises ``GoogleListParseError`` on CAPTCHA, empty results, or failure.
         """
+        # Layer 2: pre-navigation URL validation (defense in depth)
+        try:
+            list_url = validate_google_maps_url(list_url)
+        except URLValidationError as exc:
+            raise GoogleListParseError(f"Invalid URL: {exc}") from exc
+
         try:
             from playwright.async_api import async_playwright
         except ImportError as exc:
@@ -81,7 +130,7 @@ class GoogleListScraper:
 
         try:
             async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=True)
+                browser = await p.chromium.launch(headless=True, env=_browser_env)
                 try:
                     ctx = await browser.new_context(
                         user_agent=_USER_AGENT,
@@ -89,7 +138,17 @@ class GoogleListScraper:
                         extra_http_headers={"Accept-Language": "en-US,en;q=0.9"},
                     )
                     page = await ctx.new_page()
+
+                    # Layer 3: block network requests to non-Google domains
+                    await page.route("**/*", _block_non_google_requests)
+
                     await page.goto(list_url, wait_until="domcontentloaded", timeout=30000)
+
+                    # Layer 2: post-redirect URL validation
+                    try:
+                        validate_google_maps_url(page.url)
+                    except URLValidationError as exc:
+                        raise GoogleListParseError(f"Redirect to disallowed URL: {exc}") from exc
 
                     if "/sorry/" in page.url:
                         raise GoogleListParseError(

@@ -1,11 +1,14 @@
 """Public shared trip access + owner share management endpoints."""
 
-import os
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from slowapi.util import get_remote_address
 
+from backend.app.core.config import get_settings
+from backend.app.core.rate_limit import limiter
 from backend.app.db.supabase import get_supabase_client
 from backend.app.dependencies import get_current_user_id
 from backend.app.models.schemas import (
@@ -20,13 +23,14 @@ from backend.app.routers.itinerary_tree import (
     _build_itinerary_response,
     _rpc_rows_to_tree_data,
 )
-from backend.app.routers.trip_ownership import _ensure_trip_owned
+from backend.app.routers.trip_ownership import _ensure_resource_chain
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger("shared_trips")
 
 router = APIRouter(tags=["sharing"])
 
-_FRONTEND_BASE = os.getenv("FRONTEND_BASE_URL", "https://shtabtravel.vercel.app")
+_FRONTEND_BASE = get_settings().frontend_base_url
+_SHARE_TOKEN_EXPIRY_DAYS = 180
 
 
 # ---------------------------------------------------------------------------
@@ -35,7 +39,9 @@ _FRONTEND_BASE = os.getenv("FRONTEND_BASE_URL", "https://shtabtravel.vercel.app"
 
 
 @router.get("/shared/{share_token}", response_model=SharedTripResponse)
+@limiter.limit("60/minute", key_func=get_remote_address)
 async def get_shared_trip(
+    request: Request,
     share_token: str,
     supabase=Depends(get_supabase_client),
 ) -> SharedTripResponse:
@@ -81,7 +87,7 @@ async def create_trip_share(
     supabase=Depends(get_supabase_client),
 ) -> ShareTripResponse:
     """Create or return existing share link for a trip. Idempotent."""
-    _ensure_trip_owned(supabase, trip_id, user_id)
+    _ensure_resource_chain(supabase, trip_id, user_id)
 
     existing = (
         supabase.table("trip_shares")
@@ -100,9 +106,16 @@ async def create_trip_share(
             expires_at=row.get("expires_at"),
         )
 
+    expires_at = (datetime.now(UTC) + timedelta(days=_SHARE_TOKEN_EXPIRY_DAYS)).isoformat()
     insert_result = (
         supabase.table("trip_shares")
-        .insert({"trip_id": str(trip_id), "created_by": str(user_id)})
+        .insert(
+            {
+                "trip_id": str(trip_id),
+                "created_by": str(user_id),
+                "expires_at": expires_at,
+            }
+        )
         .execute()
     )
     row = insert_result.data[0]
@@ -121,7 +134,7 @@ async def get_trip_share(
     supabase=Depends(get_supabase_client),
 ) -> ShareTripResponse:
     """Get current active share for a trip, or 404."""
-    _ensure_trip_owned(supabase, trip_id, user_id)
+    _ensure_resource_chain(supabase, trip_id, user_id)
 
     result = (
         supabase.table("trip_shares")
@@ -152,7 +165,7 @@ async def revoke_trip_share(
     supabase=Depends(get_supabase_client),
 ) -> None:
     """Revoke all active shares for a trip."""
-    _ensure_trip_owned(supabase, trip_id, user_id)
+    _ensure_resource_chain(supabase, trip_id, user_id)
 
     supabase.table("trip_shares").update({"is_active": False}).eq("trip_id", str(trip_id)).eq(
         "is_active", True

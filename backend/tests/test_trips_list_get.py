@@ -151,7 +151,7 @@ def test_get_trip_nonexistent_returns_404(
             headers={"Authorization": f"Bearer {valid_jwt}"},
         )
         assert r.status_code == 404
-        assert r.json().get("detail") == "Trip not found"
+        assert r.json().get("detail") == "Resource not found or not owned"
     finally:
         app.dependency_overrides.clear()
 
@@ -179,7 +179,7 @@ def test_get_trip_other_users_trip_returns_404(
             headers={"Authorization": f"Bearer {valid_jwt}"},
         )
         assert r.status_code == 404
-        assert r.json().get("detail") == "Trip not owned by user"
+        assert r.json().get("detail") == "Resource not found or not owned"
     finally:
         app.dependency_overrides.clear()
 

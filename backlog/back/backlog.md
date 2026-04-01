@@ -80,11 +80,12 @@ Basic logging exists (e.g. `RequestLoggingMiddleware` for request timing) but it
 
 ## BACK-002 — Fix SSRF via Playwright page.goto() in Google list import
 
-- **Status:** todo
+- **Status:** done
 - **Area:** back
 - **Type:** bugfix
 - **Priority:** critical
 - **Created:** 2026-03-30
+- **Completed:** 2026-03-31
 
 ### Request
 The Google list import endpoint passes a user-supplied URL directly to Playwright's `page.goto()` with no scheme or host validation. Any authenticated user can make the server's headless Chromium navigate to arbitrary URLs including internal network addresses, cloud metadata endpoints, and `file://` paths. Add server-side URL allowlist validation.
@@ -124,7 +125,19 @@ Before any HTTP request or browser navigation, the URL must be validated:
 - No way to bypass the validation via URL encoding, redirects, or other techniques
 
 ### Implementation notes
-- None yet.
+- **Three-layer defense-in-depth approach:**
+  1. **Pydantic field_validator** on `ImportGoogleListBody` — rejects invalid URLs at request parsing with 422
+  2. **Scraper pre/post validation** — validates URL before `page.goto()` and validates post-redirect `page.url` after navigation
+  3. **Playwright route interception** — blocks all network requests to non-Google domains at the browser level
+- **Shared validation utility** at `backend/app/utils/url_validation.py`:
+  - HTTPS-only scheme enforcement
+  - Strict hostname allowlist (`www.google.com`, `google.com`, `maps.google.com`, `maps.app.goo.gl`, `goo.gl`)
+  - Path restriction: google.com hosts must start with `/maps/`
+  - Rejects: IP addresses, userinfo (`user:pass@host`), explicit ports, backslashes, null bytes, control chars, non-ASCII hostnames
+  - NFKC unicode normalization to prevent homoglyph/fullwidth char bypasses
+- **63 tests** in `backend/tests/test_url_validation.py` covering valid URLs, scheme attacks, hostname attacks, IP rejection, URL structure attacks, path restrictions, unicode attacks, edge cases, navigation host checks, and Pydantic integration
+- **Files changed:** `backend/app/utils/__init__.py` (new), `backend/app/utils/url_validation.py` (new), `backend/app/models/schemas.py`, `backend/app/clients/google_list_scraper.py`, `backend/tests/test_url_validation.py` (new)
+- **Validation:** ruff check + ruff format clean, 276/276 tests pass, reviewed by security-reviewer and code-reviewer agents
 
 ## BACK-003 — Add progress streaming to Google list import endpoint
 
@@ -274,3 +287,331 @@ Add a public method on `GooglePlacesClient` (e.g. `search_by_text()` or `resolve
 
 ### Implementation notes
 - None yet.
+
+## BACK-006 — Full backend security audit remediation
+
+- **Status:** done
+- **Area:** back
+- **Type:** bugfix
+- **Priority:** critical
+- **Created:** 2026-03-31
+
+### Request
+Remediate all findings from the comprehensive backend security audit conducted on 2026-03-31. The audit covered authentication, authorization, input validation, data exposure, configuration, and OWASP Top 10. This item tracks every finding — nothing should be skipped.
+
+### Current behavior
+Multiple security vulnerabilities exist across the backend codebase, ranging from critical authentication bypass paths to low-severity logging concerns.
+
+### Expected behavior
+All findings listed below are remediated or explicitly documented as accepted risks with justification.
+
+### Findings
+
+#### CRITICAL
+
+**CRIT-01 — HS256 audience verification disabled on JWT fallback path**
+- File: `backend/app/dependencies.py:53-67`
+- The HS256 fallback path decodes JWTs with `"verify_aud": False`. After the first attempt fails, the code retries with a base64-decoded key — also with `"verify_aud": False` and no explicit audience parameter. A token issued for a different Supabase project or application but signed with the same secret would be accepted as valid.
+- Fix: On the HS256 path, always pass `audience="authenticated"` and remove `"verify_aud": False`. Only use the HS256 fallback when `SUPABASE_URL` is not set (clearly non-production), never as a quiet fallback when JWKS fetch fails.
+
+**CRIT-02 — HS256 fallback triggers silently on ANY JWKS error, including transient network failures**
+- File: `backend/app/dependencies.py:35-46`
+- The `except Exception` clause catches ALL exceptions from the JWKS path — including `httpx.ConnectError`, `httpx.TimeoutException`, and DNS failures — and silently falls through to HS256 fallback. If the Supabase JWKS endpoint is momentarily unreachable, every subsequent request is validated using the weaker HS256 path instead of failing closed.
+- Fix: Only fall through to HS256 when the error is explicitly a key-not-found or algorithm mismatch (`PyJWKClientError`, `PyJWTError`). On network/connection errors, fail with 503 or 401. Log the specific exception type.
+
+**CRIT-03 — Supabase anon key silently accepted as service role key**
+- File: `backend/app/core/config.py:19-22`
+- `supabase_key = service_key or anon_key`. If `SUPABASE_SERVICE_ROLE_KEY` is not set, the backend falls back to the anon key. The anon key is subject to RLS, but the backend relies on `SECURITY DEFINER` RPCs that bypass RLS. Mixed access model = inconsistent and unpredictable security guarantees.
+- Fix: Remove the anon key fallback entirely from production code paths. If the service role key is absent, raise an explicit startup error.
+
+#### HIGH
+
+**HIGH-01 — No rate limiting on any endpoint**
+- File: `backend/app/main.py` (no rate limiting middleware registered)
+- No rate limiting anywhere. `import-google-list` launches a Playwright browser per request (DoS vector). `google/preview` calls Google Places API per request (quota exhaustion). `GET /shared/{share_token}` has no enumeration protection.
+- Fix: Add `slowapi` or reverse proxy rate limit. Strict limits on `import-google-list` (5/min/user), Google preview (20/min/user), shared trip (100/min/IP).
+
+**HIGH-02 — File upload MIME type validated from client-supplied Content-Type only**
+- File: `backend/app/routers/trip_locations.py:699-703, 730`
+- Photo upload checks `file.content_type` from the multipart form field sent by the client. No magic-byte validation of actual file content. An attacker can upload HTML/executable as `image/jpeg`.
+- Fix: Add magic-byte validation using `python-magic` or manual header byte checks (JPEG `\xff\xd8\xff`, PNG `\x89PNG`, WebP `RIFF...WEBP`).
+
+**HIGH-03 — Internal exception messages surfaced to API clients**
+- Files: `backend/app/routers/itinerary_routes.py:188,335`, `trip_locations.py:406`, `itinerary_option_locations.py:420`
+- `str(e)` and `str(exc)` from internal `ValueError` and `Exception` instances are placed directly into HTTP 400 response `detail` fields. Can expose SQL error text, query structure, or third-party API messages.
+- Fix: Log full exception internally, return generic messages to client. Only expose caller-controlled validation errors (Pydantic), never downstream exception strings.
+
+**HIGH-04 — No security headers set on HTTP responses**
+- File: `backend/app/main.py`
+- Missing: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Strict-Transport-Security`, `Content-Security-Policy`, `Referrer-Policy`.
+- Fix: Add a security headers middleware. At minimum: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`.
+
+**HIGH-05 — `verify_resource_chain` RPC allows day_id=NULL with option_id bypass**
+- File: `supabase/schema.sql:699-723`
+- If `p_day_id IS NULL` but `p_option_id` is provided, the chain check passes because `p_day_id IS NULL` evaluates to true in the outer `AND (p_day_id IS NULL OR ...)`. An attacker could pass `day_id=NULL` and a valid `option_id` from a different trip. Python callers always pass a `day_id` when they pass `option_id`, which mitigates in practice, but the RPC logic is structurally broken.
+- Fix: Add a guard in the RPC: if `p_option_id IS NOT NULL` then `p_day_id` must also be non-null. Return `FALSE` if `p_option_id IS NOT NULL AND p_day_id IS NULL`.
+
+#### MEDIUM
+
+**MED-01 — Share token entropy OK but no expiry enforced by default**
+- File: `supabase/schema.sql:893`, `backend/app/routers/shared_trips.py:87-114`
+- Share tokens are 192-bit entropy (adequate). However, `expires_at` defaults to `NULL` and the insert does not supply an expiry. Tokens never expire unless explicitly revoked.
+- Fix: Set a default expiry (90 or 180 days) on token creation. The `get_shared_trip_data` RPC already checks `expires_at`.
+
+**MED-02 — `google_raw` blob accepted without size limit**
+- File: `backend/app/models/schemas.py:127`
+- `google_raw` in `AddLocationBody` and `UpdateLocationBody` is a free-form `dict` with no size or depth limit. A client can submit arbitrarily large JSON (JSON bomb), causing DB write latency or OOM.
+- Fix: Add a size cap (e.g., 50KB) in a Pydantic `@model_validator`. Consider stripping `google_raw` in the preview response to only needed fields.
+
+**MED-03 — `_ensure_trip_owned` still used instead of `_ensure_resource_chain`**
+- Files: `backend/app/routers/trips.py:95,119,167`, `shared_trips.py:84,124,155`, `itinerary_tree.py:258`
+- `_ensure_trip_owned` makes a separate `SELECT` (extra DB round-trip). For update/delete operations, introduces a TOCTOU race window between ownership check and data fetch.
+- Fix: Use `_ensure_resource_chain` consistently everywhere.
+
+**MED-04 — Playwright browser runs as app process user with full env vars**
+- File: `backend/app/clients/google_list_scraper.py:112-113`
+- The browser process inherits the full environment including `SUPABASE_SERVICE_ROLE_KEY`, `GOOGLE_PLACES_API_KEY`, etc. If Chromium is exploited, all secrets are accessible.
+- Fix: Run Playwright in a subprocess with a cleared environment, or in a dedicated container. Long-term: dedicated microservice for scraping.
+
+**MED-05 — Post-redirect validation only checks final URL, not intermediate hops**
+- File: `backend/app/clients/google_list_scraper.py:128-131`
+- The post-redirect check validates `page.url` (the final URL after all redirects). Intermediate redirects that Playwright follows before the final URL are not validated. A redirect chain could potentially bypass the single post-navigation check.
+- Fix: Use Playwright's `page.on("request")` to intercept all navigations at every hop, not just the final URL.
+
+**MED-06 — Route segment error messages from Google Routes API leaked to clients**
+- File: `backend/app/models/schemas.py:545-549`, `backend/app/services/route_calculation.py:318`
+- `error_message` in `RouteSegmentResponse` is populated with `str(e)` — raw exception from Google Routes API. Can contain internal API error codes, quota info, or rejection details.
+- Fix: Classify errors into fixed user-facing messages (partially done with `error_type`). Log raw exceptions server-side, return sanitized messages.
+
+**MED-07 — CORS origins parsed from env at module level, bypasses `get_settings()`**
+- File: `backend/app/main.py:33-39`
+- CORS origins read from `os.getenv(...)` at module-level import, outside the `Settings` class and `get_settings()` lru_cache. Not centralized, cannot be overridden in tests.
+- Fix: Move `CORS_ALLOWED_ORIGINS` into the `Settings` class, reference through `get_settings()`.
+
+#### LOW
+
+**LOW-01 — `_FRONTEND_BASE` URL constructed from env var without validation**
+- File: `backend/app/routers/shared_trips.py:29`
+- `_FRONTEND_BASE = os.getenv("FRONTEND_BASE_URL", ...)`. Directly concatenated into `share_url`. If misconfigured with `javascript://evil.example.com`, the resulting URL could be a vector.
+- Fix: Validate that `_FRONTEND_BASE` starts with `https://` at startup.
+
+**LOW-02 — `X-Request-ID` is truncated UUID (8 chars) — collision risk**
+- File: `backend/app/middleware.py:21`
+- `request_id = str(uuid.uuid4())[:8]` — only 32 bits of entropy. Collisions likely around 65K concurrent requests. Affects log correlation and incident response.
+- Fix: Use the full UUID or at minimum first 12 characters.
+
+**LOW-03 — `lru_cache` on `get_supabase_client()` caches client for process lifetime**
+- File: `backend/app/db/supabase.py:128-137`
+- If `SUPABASE_SERVICE_ROLE_KEY` is rotated, the old client continues until process restart. No cache invalidation mechanism.
+- Fix: Document that key rotation requires process restart. Acceptable for immutable infrastructure.
+
+**LOW-04 — `lru_cache` on `_get_jwk_client()` caches JWKS client for process lifetime**
+- File: `backend/app/dependencies.py:22-28`
+- `PyJWKClient` created once with `cache_keys=True` and cached forever. Partially mitigated by `PyJWKClient`'s built-in key rotation on cache miss for unknown kids.
+- Fix: Acceptable as-is. Confirm `PyJWKClient(cache_keys=True)` fetches new keys on cache miss.
+
+**LOW-05 — `delete_trip` uses two sequential non-atomic deletes**
+- File: `backend/app/routers/trips.py:168-170`
+- `supabase.table("locations").delete()` followed by `supabase.table("trips").delete()` — no transaction boundary. Process crash between calls leaves inconsistent state.
+- Fix: Wrap in a PL/pgSQL RPC for atomicity.
+
+**LOW-06 — Logging of `trip_name` may expose PII**
+- File: `backend/app/routers/trips.py:40`
+- `logger.info("trip_created", ..., trip_name=body.name)`. Trip names entered by users could be PII (e.g., "Trip to John's house", "Medical trip").
+- Fix: Remove `trip_name` from logs or hash it. Log only `trip_id` and `user_id`.
+
+#### INFO
+
+**INFO-01 — `verify_resource_chain` RPC granted to `anon` role**
+- File: `supabase/schema.sql:1277-1279`
+- `GRANT ALL ON FUNCTION public.verify_resource_chain(...)` grants execute to `anon`. Broader than necessary — internal utility RPCs should be server-side only.
+- Fix: Revoke `anon` grant on internal utility RPCs.
+
+**INFO-02 — All `SECURITY DEFINER` RPCs granted to `anon` role**
+- File: `supabase/schema.sql` (all internal RPCs)
+- All `SECURITY DEFINER` RPCs are granted to `anon`. A raw PostgREST call with just the anon key could execute these functions, bypassing the JWT-based ownership check done in Python.
+- Fix: Restrict grants to `authenticated` and `service_role` only. Exception: `get_shared_trip_data` is correctly anon-accessible by design.
+
+**INFO-03 — `place-photos` storage bucket is public**
+- File: `supabase/migrations/20260322120000_enable_rls_on_place_photos.sql:8`
+- The `place-photos` bucket is `public = true` — all place photos accessible without auth regardless of trip privacy. Intentional for CDN-style cache. Worth documenting as accepted design decision.
+
+**INFO-04 — `user-photos` bucket access policy not verified**
+- File: `backend/app/routers/trip_locations.py:734`
+- Code calls `supabase.storage.from_("user-photos")` but no migration creating this bucket or configuring its access policy was found. The bucket's public/private setting is unknown.
+- Fix: Verify a migration exists that creates `user-photos` bucket and confirm `public` setting is documented.
+
+### Scope
+- All backend Python code, SQL RPCs, migrations, and Supabase configuration
+- Covers authentication, authorization, input validation, data exposure, configuration, OWASP Top 10
+
+### Non-goals
+- Frontend findings (tracked separately in FRONT-012)
+- Implementing a log dashboard or monitoring tool
+- Architectural changes beyond what is needed for each fix
+
+### Artifacts
+- None
+
+### References
+- Security audit conducted on 2026-03-31 by security-reviewer agent
+- See also: FRONT-012 for frontend companion item
+- OWASP Top 10 (2021): https://owasp.org/Top10/
+
+### Acceptance criteria
+- CRIT-01: HS256 fallback always enforces `audience="authenticated"`
+- CRIT-02: JWKS network errors fail with 503/401, not HS256 fallback
+- CRIT-03: Missing `SUPABASE_SERVICE_ROLE_KEY` raises startup error
+- HIGH-01: Rate limiting active on `import-google-list`, `google/preview`, and `shared/{token}`
+- HIGH-02: Photo upload validates file magic bytes, not just Content-Type header
+- HIGH-03: No raw `str(exc)` in any HTTP response `detail` field
+- HIGH-04: Security headers middleware added (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`)
+- HIGH-05: `verify_resource_chain` returns FALSE when `option_id` is set but `day_id` is NULL
+- MED-01: Share tokens have a default expiry (90 or 180 days)
+- MED-02: `google_raw` has a size cap (e.g. 50KB) via Pydantic validator
+- MED-03: All ownership checks use `_ensure_resource_chain`
+- MED-04: Playwright environment does not include secrets (cleared env or container isolation)
+- MED-05: Playwright navigation validated at every redirect hop, not just final URL
+- MED-06: Route segment `error_message` is sanitized before returning to client
+- MED-07: CORS origins moved into `Settings` class
+- LOW-01: `_FRONTEND_BASE` validated at startup
+- LOW-02: Request ID uses full UUID
+- LOW-03: Key rotation requires restart — documented
+- LOW-04: JWKS client key rotation — confirmed working
+- LOW-05: `delete_trip` wrapped in atomic RPC
+- LOW-06: `trip_name` removed from logs
+- INFO-01/02: RPC grants restricted to `authenticated` and `service_role`
+- INFO-03: `place-photos` public bucket documented as accepted risk
+- INFO-04: `user-photos` bucket access policy verified and documented
+- All existing tests continue to pass
+- New tests added for each fix where applicable
+
+### Implementation notes
+
+#### CRIT-01+02+03 — Completed 2026-04-01
+
+**CRIT-01 — HS256 audience enforcement:**
+- Removed `options={"verify_aud": False}` from both `pyjwt.decode()` calls in the HS256 path
+- Both attempts now enforce `audience="authenticated"`
+- Tokens without `aud` or with wrong `aud` are now rejected with 401
+
+**CRIT-02 — JWKS network error handling (fail closed):**
+- Added specific `except pyjwt.exceptions.PyJWKClientConnectionError: raise` before the general `except pyjwt.PyJWTError` catch
+- PyJWT wraps network errors (`ConnectionError`, `TimeoutError`) in `PyJWKClientConnectionError` — this is now re-raised instead of silently falling through to HS256
+- Only genuine JWT validation errors (bad signature, expired, wrong algorithm) fall through to HS256
+- Security reviewer caught that the initial fix was insufficient (PyJWKClientConnectionError is a subclass of PyJWTError) — fixed with the re-raise pattern
+
+**CRIT-03 — Service role key required:**
+- `Settings.__init__` now raises `ValueError` if `SUPABASE_URL` is set but `SUPABASE_SERVICE_ROLE_KEY` is empty
+- Prevents silent fallback to anon key in production
+- Guard is safe for test environments where `SUPABASE_URL=""` is standard
+
+**Tests (TDD Red-Green):**
+- 6 new tests added, 4 existing tests updated with `aud="authenticated"`, `make_test_jwt()` updated in conftest.py
+- Files changed: `backend/app/dependencies.py`, `backend/app/core/config.py`, `backend/tests/test_auth_jwt.py`, `backend/tests/conftest.py`
+- Validation: ruff clean, 282/282 tests pass. Reviewed by security-reviewer + code-reviewer.
+
+**Remaining:** HIGH-01 through HIGH-05, MED-01 through MED-07, LOW-01 through LOW-06, INFO-01 through INFO-04 still pending.
+
+#### HIGH-02/03/04/05 — Completed 2026-04-01 (HIGH-01 rate limiting deferred — requires `slowapi` install)
+
+**HIGH-02 — Photo upload magic-byte validation:**
+- Added `_MAGIC_BYTES` dict mapping Content-Type → expected header bytes (JPEG `\xff\xd8\xff`, PNG `\x89PNG\r\n\x1a\n`, WebP `RIFF` + bytes 8-12 `WEBP`)
+- Validation runs after `await file.read()` and before size check
+- Rejects files whose content doesn't match claimed Content-Type with 422
+- Note: polyglot files (valid header + malicious payload) still pass — full mitigation requires image re-encoding (Pillow), deferred to future improvement
+
+**HIGH-03 — Sanitized error messages:**
+- `itinerary_routes.py`: both `except ValueError` blocks now log full error internally, return generic "Route calculation failed"
+- `trip_locations.py`: `GoogleListParseError` now returns generic "Failed to parse Google Maps list" instead of raw exception text
+- Updated `test_google_list_import.py` to match new sanitized message
+
+**HIGH-04 — Security headers middleware:**
+- New `SecurityHeadersMiddleware` in `middleware.py` adds `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`
+- Registered as outermost middleware in `main.py` (before CORS) so headers appear on all responses including CORS preflights
+- Security reviewer caught initial wrong middleware ordering — fixed
+
+**HIGH-05 — Resource chain NULL day_id guard:**
+- Python-level guard in `_ensure_resource_chain`: raises 404 if `option_id` is set without `day_id`
+- Security reviewer confirmed the SQL RPC is not actually vulnerable (NULL comparison evaluates to FALSE), but Python guard catches it earlier with distinct logging
+- Corrected misleading code comment
+
+**Tests (TDD Red-Green):** 18 new tests across 4 files: `test_photo_upload.py`, `test_error_sanitization.py`, `test_security_headers.py`, `test_resource_chain.py`
+
+**Files changed:** `backend/app/routers/trip_locations.py`, `backend/app/routers/itinerary_routes.py`, `backend/app/routers/trip_ownership.py`, `backend/app/middleware.py`, `backend/app/main.py`, `backend/tests/test_google_list_import.py`
+
+**Validation:** ruff clean, 300/300 tests pass. Reviewed by security-reviewer + code-reviewer. Two reviewer findings addressed (middleware ordering + GoogleListParseError leak).
+
+**Remaining:** HIGH-01 (rate limiting, requires `slowapi` install), MED-01 through MED-07, LOW-01 through LOW-06, INFO-01 through INFO-04.
+
+#### HIGH-01 — Rate limiting — Completed 2026-04-01
+
+**Implementation:**
+- New module `backend/app/core/rate_limit.py`: `Limiter` singleton with in-memory storage, `get_user_rate_limit_key` (JWT sub extraction via base64 decode, IP fallback), default 100/min global limit
+- `slowapi>=0.1.9` added to `requirements.txt` and `requirements-prod.txt`
+- `SlowAPIMiddleware` registered in `main.py` between logging and CORS middleware
+- Custom 429 handler with RFC-compliant `Retry-After: 60` header
+- `Retry-After` added to CORS `expose_headers`
+
+**Per-endpoint limits:**
+- `POST /{trip_id}/locations/import-google-list`: 3/minute per user (Playwright browser launch)
+- `POST /locations/google/preview`: 20/minute per user (Google Places API)
+- `GET /shared/{share_token}`: 60/minute per IP (unauthenticated, token enumeration protection)
+
+**Reviewer findings addressed:**
+- Security reviewer caught `Retry-After` header was using human-readable string instead of integer seconds — fixed to `"60"`
+- Code reviewer caught conftest fixture lacked try/finally teardown guard — fixed
+- Removed redundant case-insensitive header lookup, stale TDD docstring
+
+**Known accepted risks (documented):**
+- Unverified JWT `sub` for keying means attacker can exhaust another user's bucket by forging tokens with their UUID (medium risk, inherent trade-off)
+- In-memory storage resets on deploy and doesn't work across multiple instances (acceptable for single-container Render)
+- `get_remote_address` may resolve to proxy IP on Render for unauthenticated endpoints — monitor in production
+
+**Tests:** 5 new tests in `test_rate_limiting.py` (429 behavior, Retry-After header, per-user isolation, JWT key extraction, IP fallback). Autouse fixture in conftest disables limiter for all other tests.
+
+**Files changed:** `backend/app/core/rate_limit.py` (new), `backend/app/main.py`, `backend/app/routers/trip_locations.py`, `backend/app/routers/locations_google.py`, `backend/app/routers/shared_trips.py`, `requirements.txt`, `requirements-prod.txt`, `backend/tests/test_rate_limiting.py` (new), `backend/tests/conftest.py`
+
+**Validation:** ruff clean, 305/305 tests pass. Reviewed by architect, planner, security-reviewer, code-reviewer.
+
+**Remaining:** MED-01 through MED-07, LOW-01 through LOW-06, INFO-01 through INFO-04.
+
+#### MED/LOW/INFO — All completed 2026-04-01
+
+**MED-01 — Share token expiry:** `expires_at` set to 180 days on insert. Existing pre-migration tokens remain indefinite until revoked/recreated.
+
+**MED-02 — google_raw size cap:** `@field_validator` on BOTH `AddLocationBody` and `UpdateLocationBody` caps at 50KB (byte-accurate via `.encode()`). Security reviewer caught missing validator on UpdateLocationBody + char vs byte issue — both fixed.
+
+**MED-03 — _ensure_resource_chain everywhere:** Replaced all 7 `_ensure_trip_owned` calls in `trips.py`, `shared_trips.py`, `itinerary_tree.py`. Removed dead `_ensure_trip_owned` function entirely. Updated test mocks to support `.rpc("verify_resource_chain")`.
+
+**MED-04 — Playwright env clearing:** Added `_BROWSER_ENV_ALLOWLIST` and pass filtered `env=_browser_env` to `browser.launch()`. Strips all application secrets while keeping OS-level vars Chromium needs.
+
+**MED-05 — Already mitigated:** Architect confirmed `page.route("**/*")` already intercepts intermediate redirect hops. No code change needed.
+
+**MED-06 — Route segment error_message sanitized:** `error_message` stored as generic "Route calculation failed for this segment" instead of raw `str(e)`. Raw error logged internally. `classify_provider_error` still receives raw message for classification.
+
+**MED-07 — CORS origins in Settings:** `cors_origins` parsed from env in `Settings` class. `main.py` now reads `get_settings().cors_origins`.
+
+**LOW-01 — Frontend base URL validated:** `frontend_base_url` in Settings validates scheme at startup (must be https:// or http://). `shared_trips.py` reads from Settings.
+
+**LOW-02 — Full UUID request IDs:** `str(uuid.uuid4())` (36 chars) replaces truncated 8-char version.
+
+**LOW-03 — Key rotation docs:** Docstring on `get_supabase_client()` notes process restart required.
+
+**LOW-04 — JWKS rotation confirmed:** Docstring on `_get_jwk_client()` confirms `cache_keys=True` auto-fetches on unknown kid.
+
+**LOW-05 — Atomic delete_trip:** Removed redundant `locations.delete()` — FK cascades handle entire hierarchy.
+
+**LOW-06 — trip_name PII removed:** Removed `trip_name=body.name` from `trip_created` log event.
+
+**INFO-01/02 — RPC grants restricted:** SQL migration `20260401100000_restrict_anon_rpc_grants.sql` revokes `anon` from all RPCs (except `get_shared_trip_data`), all tables, and `ALTER DEFAULT PRIVILEGES` to prevent future auto-grants. Security reviewer caught missing default privileges revocation — fixed.
+
+**INFO-03 — place-photos public bucket:** Accepted design decision. Both `place-photos` and `user-photos` buckets are `public = true` for CDN-style serving.
+
+**INFO-04 — user-photos bucket verified:** Migration `20260322130000_add_user_image_url.sql` creates bucket with `public = true`.
+
+**Files changed:** `shared_trips.py`, `schemas.py`, `trips.py`, `itinerary_tree.py`, `google_list_scraper.py`, `route_calculation.py`, `config.py`, `main.py`, `middleware.py`, `supabase.py`, `dependencies.py`, `trip_ownership.py`, migration SQL, + test files
+
+**Tests:** 326/326 pass. 15 new tests + mock updates for _ensure_resource_chain migration. Reviewed by architect, tdd-guide, security-reviewer, code-reviewer, build-error-resolver.
+
+**BACK-006 is now fully complete.** All CRIT (3), HIGH (5), MED (7), LOW (6), and INFO (4) items are resolved.

@@ -9,10 +9,11 @@ import re as _re
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
 from backend.app.clients.google_places import GooglePlacesClient
+from backend.app.core.rate_limit import limiter
 from backend.app.dependencies import get_current_user_id, get_google_places_client
 from backend.app.models.schemas import LocationPreviewResponse
 
@@ -98,7 +99,9 @@ class GoogleLinkPreviewBody(BaseModel):
     response_model=LocationPreviewResponse,
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit("20/minute")
 async def preview_location_from_google_link(
+    request: Request,
     body: GoogleLinkPreviewBody,
     _: UUID = Depends(get_current_user_id),
     places_client: GooglePlacesClient = Depends(get_google_places_client),

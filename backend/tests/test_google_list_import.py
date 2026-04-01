@@ -219,7 +219,9 @@ def test_import_scraper_captcha_error(client: TestClient):
                 json={"google_list_url": "https://maps.app.goo.gl/abc"},
             )
             assert r.status_code == 400
-            assert "CAPTCHA" in r.json()["detail"]
+            # Error messages are now sanitized — raw exception text is not
+            # forwarded to the client.  Just verify we get a user-facing message.
+            assert "Failed to parse" in r.json()["detail"]
         finally:
             app.dependency_overrides.clear()
 

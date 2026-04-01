@@ -40,6 +40,10 @@ class MockSupabaseShared:
     def rpc(self, fn_name, params=None):
         if fn_name == "get_shared_trip_data":
             return _Result(self._rpc_shared_data)
+        if fn_name == "verify_resource_chain":
+            user_id = (params or {}).get("p_user_id")
+            valid = self._trip_exists and self._trip_user_id == user_id
+            return _Result(True if valid else None)
         return _Result(None)
 
     def table(self, name):
@@ -408,5 +412,75 @@ def test_revoke_share_not_owned_404(client: TestClient, mock_user_id: UUID):
     try:
         r = client.delete("/api/v1/trips/a1b2c3d4-e5f6-7890-abcd-ef1234567890/share")
         assert r.status_code == 404
+    finally:
+        app.dependency_overrides.clear()
+
+
+# ---------------------------------------------------------------------------
+# MED-01: Share token default expiry
+# ---------------------------------------------------------------------------
+
+
+class _SharesTableTrackingInsert(_SharesTable):
+    """Variant that records the raw dict passed to insert()."""
+
+    def __init__(self, active_share, inserted_list):
+        super().__init__(active_share, inserted_list)
+        self.raw_insert_calls: list[dict] = []
+
+    def insert(self, data):
+        self.raw_insert_calls.append(dict(data))
+        return super().insert(data)
+
+
+class MockSupabaseSharedTrackingInsert(MockSupabaseShared):
+    """Mock that exposes the _SharesTableTrackingInsert so tests can inspect it."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._shares_table = _SharesTableTrackingInsert(self._active_share, self._inserted_shares)
+
+    def table(self, name):
+        if name == "trip_shares":
+            return self._shares_table
+        return super().table(name)
+
+
+def test_create_share_inserts_expires_at(client: TestClient, mock_user_id: UUID):
+    """
+    MED-01 — RED phase.
+
+    When create_trip_share inserts a new row into trip_shares, it MUST include
+    a non-NULL ``expires_at`` value so tokens expire automatically.
+
+    Currently FAILS because the router passes only
+    ``{"trip_id": ..., "created_by": ...}`` with no ``expires_at`` key,
+    relying on a DB default that does not exist — so tokens never expire.
+    """
+    mock_sb = MockSupabaseSharedTrackingInsert()
+
+    async def override_user():
+        return mock_user_id
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        r = client.post("/api/v1/trips/a1b2c3d4-e5f6-7890-abcd-ef1234567890/share")
+        assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
+
+        assert mock_sb._shares_table.raw_insert_calls, (
+            "No insert was made — idempotent branch returned early unexpectedly"
+        )
+        inserted_payload = mock_sb._shares_table.raw_insert_calls[0]
+
+        assert "expires_at" in inserted_payload, (
+            "create_trip_share must pass expires_at to the insert payload. "
+            "Currently the key is missing, meaning tokens never expire. "
+            "Add a default expiry (e.g. now + 30 days) before inserting."
+        )
+        assert inserted_payload["expires_at"] is not None, (
+            "expires_at must not be NULL. "
+            "Provide a concrete future timestamp so tokens have a finite lifetime."
+        )
     finally:
         app.dependency_overrides.clear()

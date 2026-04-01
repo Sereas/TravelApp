@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from backend.app.db.supabase import get_supabase_client
 from backend.app.dependencies import get_current_user_id
 from backend.app.models.schemas import CreateTripBody, TripResponse, UpdateTripBody
-from backend.app.routers.trip_ownership import _ensure_trip_owned
+from backend.app.routers.trip_ownership import _ensure_resource_chain
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger("trips")
 
@@ -37,7 +37,7 @@ async def create_trip(
         raise RuntimeError("Insert did not return row")
     trip = result.data[0]
     trip_id = trip["trip_id"]
-    logger.info("trip_created", trip_id=str(trip_id), user_id=str(user_id), trip_name=body.name)
+    logger.info("trip_created", trip_id=str(trip_id), user_id=str(user_id))
     return TripResponse(
         id=str(trip_id),
         name=trip.get("trip_name", body.name),
@@ -92,7 +92,7 @@ async def get_trip(
     Get a trip by id. Requires valid JWT.
     Trip must exist and be owned by the authenticated user; else 404.
     """
-    _ensure_trip_owned(supabase, trip_id, user_id)
+    _ensure_resource_chain(supabase, trip_id, user_id)
     result = (
         supabase.table("trips")
         .select("trip_id, trip_name, start_date, end_date")
@@ -116,7 +116,7 @@ async def update_trip(
     Trip must exist and be owned by the authenticated user; else 404 with
     a descriptive message.
     """
-    _ensure_trip_owned(supabase, trip_id, user_id)
+    _ensure_resource_chain(supabase, trip_id, user_id)
 
     if not body.model_fields_set:
         raise HTTPException(
@@ -164,8 +164,8 @@ async def delete_trip(
     Trip must exist and be owned by the authenticated user; else 404.
     Returns 204 No Content on success.
     """
-    _ensure_trip_owned(supabase, trip_id, user_id)
+    _ensure_resource_chain(supabase, trip_id, user_id)
 
-    supabase.table("locations").delete().eq("trip_id", str(trip_id)).execute()
+    # FK cascades handle locations, days, options, routes, segments deletion
     supabase.table("trips").delete().eq("trip_id", str(trip_id)).execute()
     logger.info("trip_deleted", trip_id=str(trip_id), user_id=str(user_id))

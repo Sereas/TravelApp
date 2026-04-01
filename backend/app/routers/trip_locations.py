@@ -5,13 +5,14 @@ import time
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile, status
 
 from backend.app.clients.google_list_scraper import GoogleListScraper
 from backend.app.clients.google_places import (
     GoogleListParseError,
     GooglePlacesClient,
 )
+from backend.app.core.rate_limit import limiter
 from backend.app.db.supabase import get_supabase_client
 from backend.app.dependencies import (
     get_current_user_email,
@@ -37,6 +38,13 @@ from backend.app.services.place_photos import ensure_place_photo
 _ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 _MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5 MB
 _EXT_MAP = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+
+# Magic bytes for validating actual file content (not just Content-Type header)
+_MAGIC_BYTES: dict[str, tuple[bytes, ...]] = {
+    "image/jpeg": (b"\xff\xd8\xff",),
+    "image/png": (b"\x89PNG\r\n\x1a\n",),
+    "image/webp": (b"RIFF",),  # full check: RIFF????WEBP
+}
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger("locations")
 
@@ -375,7 +383,9 @@ async def batch_add_locations(
     response_model=ImportGoogleListResponse,
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit("3/minute")
 async def import_google_list(
+    request: Request,
     trip_id: UUID,
     body: ImportGoogleListBody,
     user_id: UUID = Depends(get_current_user_id),
@@ -401,9 +411,10 @@ async def import_google_list(
     try:
         scraped_places = await scraper.extract_places(body.google_list_url)
     except GoogleListParseError as exc:
+        logger.warning("google_list_parse_error", error=str(exc), error_category="external_api")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
+            detail="Failed to parse Google Maps list. Please check the URL and try again.",
         ) from None
 
     logger.info(
@@ -717,8 +728,22 @@ async def upload_location_photo(
             detail="Location not found",
         )
 
-    # Read and validate size
+    # Read and validate content
     content = await file.read()
+
+    # HIGH-02: Validate magic bytes — reject files whose actual content
+    # doesn't match the claimed Content-Type (e.g., HTML uploaded as JPEG).
+    expected_magics = _MAGIC_BYTES.get(file.content_type, ())
+    magic_ok = any(content.startswith(magic) for magic in expected_magics)
+    # WebP: RIFF header + bytes 8-12 must be "WEBP" (not WAV/AVI/etc.)
+    if magic_ok and file.content_type == "image/webp":
+        magic_ok = len(content) >= 12 and content[8:12] == b"WEBP"
+    if not magic_ok:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="File content does not match the declared image type",
+        )
+
     if len(content) > _MAX_IMAGE_SIZE:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

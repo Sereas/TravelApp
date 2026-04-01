@@ -21,6 +21,12 @@ _scheme = HTTPBearer(auto_error=False)
 
 @lru_cache
 def _get_jwk_client() -> PyJWKClient | None:
+    """Create and cache the JWKS client (process lifetime).
+
+    LOW-04: ``cache_keys=True`` caches signing keys but automatically fetches
+    new keys when a token presents an unknown ``kid`` (key ID). This handles
+    Supabase key rotation without needing a process restart.
+    """
     settings = get_settings()
     if settings.supabase_url:
         jwks_url = f"{settings.supabase_url}/auth/v1/.well-known/jwks.json"
@@ -29,7 +35,12 @@ def _get_jwk_client() -> PyJWKClient | None:
 
 
 def _verify_token(token: str) -> dict:
-    """Verify JWT using JWKS (ES256) with HS256 fallback for tests."""
+    """Verify JWT using JWKS (ES256) with HS256 fallback for local/test only.
+
+    CRIT-01: HS256 path always enforces audience="authenticated".
+    CRIT-02: Only JWT-specific errors fall through to HS256; network errors
+    (ConnectionError, TimeoutError, etc.) propagate and cause 401.
+    """
     settings = get_settings()
 
     jwk_client = _get_jwk_client()
@@ -42,8 +53,14 @@ def _verify_token(token: str) -> dict:
                 algorithms=["ES256"],
                 audience="authenticated",
             )
-        except Exception as exc:
-            logger.debug("jwks_verification_failed", error=str(exc))
+        except pyjwt.exceptions.PyJWKClientConnectionError:
+            # Network failure reaching JWKS endpoint — fail closed, do NOT
+            # fall through to HS256.  Let the outer handler return 401.
+            raise
+        except pyjwt.PyJWTError as exc:
+            # Token-level errors (bad signature, expired, wrong algorithm,
+            # key-not-found) — fall through to HS256 for local/test envs.
+            logger.debug("jwks_verification_failed", error=str(exc), error_type=type(exc).__name__)
 
     if not settings.supabase_jwt_secret:
         raise pyjwt.InvalidTokenError("No verification method available")
@@ -54,8 +71,7 @@ def _verify_token(token: str) -> dict:
             token,
             secret,
             algorithms=["HS256"],
-            audience=["authenticated"],
-            options={"verify_aud": False},
+            audience="authenticated",
         )
     except pyjwt.InvalidTokenError:
         raw = base64.b64decode(secret)
@@ -63,7 +79,7 @@ def _verify_token(token: str) -> dict:
             token,
             raw,
             algorithms=["HS256"],
-            options={"verify_aud": False},
+            audience="authenticated",
         )
 
 

@@ -7,12 +7,16 @@ from contextlib import asynccontextmanager
 import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from backend.app.clients.google_places import GooglePlacesClient, GooglePlacesDisabledError
 from backend.app.clients.google_routes import GoogleRoutesClient, GoogleRoutesDisabledError
 from backend.app.core.config import get_settings
 from backend.app.core.logging import setup_logging
-from backend.app.middleware import RequestLoggingMiddleware
+from backend.app.core.rate_limit import limiter
+from backend.app.middleware import RequestLoggingMiddleware, SecurityHeadersMiddleware
 from backend.app.routers import (
     infra,
     itinerary_days,
@@ -30,13 +34,7 @@ setup_logging()
 
 _logger = structlog.get_logger("lifespan")
 
-_cors_origins = [
-    o.strip()
-    for o in os.getenv(
-        "CORS_ALLOWED_ORIGINS",
-        "http://localhost:3000,http://localhost:3001,https://shtabtravel.vercel.app",
-    ).split(",")
-]
+_cors_origins = get_settings().cors_origins
 
 
 @asynccontextmanager
@@ -91,11 +89,24 @@ app = FastAPI(
     lifespan=_lifespan,
 )
 
+# Rate limiting (slowapi)
+app.state.limiter = limiter
+
+
+@app.exception_handler(RateLimitExceeded)
+async def _rate_limit_exceeded_handler(request, exc: RateLimitExceeded):
+    # exc.detail is human-readable (e.g. "3 per 1 minute").
+    # RFC 7231 requires Retry-After to be an integer (seconds) or HTTP-date.
+    retry_after = "60"
+    return JSONResponse(
+        status_code=429,
+        content={"detail": f"Rate limit exceeded: {exc.detail}"},
+        headers={"Retry-After": retry_after},
+    )
+
 
 @app.exception_handler(GooglePlacesDisabledError)
 async def _google_places_disabled_handler(request, exc):
-    from fastapi.responses import JSONResponse
-
     _logger.warning(
         "google_places_disabled_request",
         path=request.url.path,
@@ -107,6 +118,14 @@ async def _google_places_disabled_handler(request, exc):
     )
 
 
+# Middleware stack: Starlette applies add_middleware in LIFO order.
+# SecurityHeadersMiddleware must be outermost (registered first) so it
+# wraps CORS preflight responses that CORSMiddleware short-circuits.
+# SlowAPIMiddleware sits between logging and CORS so 429s are logged
+# and security headers are applied to rate-limited responses.
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestLoggingMiddleware)
+app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
@@ -122,9 +141,9 @@ app.add_middleware(
         "X-Locations-Query-Ms",
         "X-Locations-Photo-Ms",
         "X-Locations-Rows",
+        "Retry-After",
     ],
 )
-app.add_middleware(RequestLoggingMiddleware)
 
 app.include_router(infra.router)
 app.include_router(trips.router, prefix="/api/v1")

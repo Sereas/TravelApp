@@ -17,7 +17,7 @@ from backend.app.models.schemas import (
     LocationSummary,
     RouteSegmentSummary,
 )
-from backend.app.routers.trip_ownership import _ensure_trip_owned
+from backend.app.routers.trip_ownership import _ensure_resource_chain
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger("itinerary_tree")
 
@@ -255,7 +255,7 @@ async def get_itinerary(
     if not rows:
         # Lazy 404: only hit the DB a second time when the result is empty.
         # Common case (trip has days) saves one full round-trip.
-        _ensure_trip_owned(supabase, trip_id, user_id)
+        _ensure_resource_chain(supabase, trip_id, user_id)
         response.headers["X-Itinerary-Rpc-Ms"] = str(rpc_ms)
         logger.info("itinerary_empty", trip_id=trip_id_str, rpc_ms=rpc_ms)
         return ItineraryResponse(days=[])
