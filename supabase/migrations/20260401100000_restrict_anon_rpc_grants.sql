@@ -39,11 +39,10 @@ REVOKE ALL ON TABLE public.trip_shares FROM anon;
 -- Also revoke trigger utility function
 REVOKE ALL ON FUNCTION public.set_updated_at() FROM anon;
 
--- Prevent future functions/tables from auto-granting to anon
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM anon;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM anon;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON TABLES FROM anon;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public REVOKE ALL ON TABLES FROM anon;
+-- Note: ALTER DEFAULT PRIVILEGES FOR ROLE postgres/supabase_admin is not
+-- permitted in Supabase's managed environment.  New RPCs and tables created
+-- in future migrations will auto-grant to anon and must include an explicit
+-- REVOKE in the same migration.
 
 -- Explicitly grant get_shared_trip_data to anon (public shared trips)
 GRANT EXECUTE ON FUNCTION public.get_shared_trip_data(text) TO anon;
