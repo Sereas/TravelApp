@@ -31,14 +31,43 @@ _MAX_SCROLL_ITERATIONS = 50
 _SCROLL_PAUSE_S = 0.8
 _NO_GROWTH_LIMIT = 3
 
-# Google cookie consent button selectors (varies by locale).
+# Google cookie consent button selectors.  The form-action selector is
+# language-independent and matches in all locales; the text selectors are
+# fallbacks for edge cases where the form structure changes.
 _CONSENT_SELECTORS = [
+    # Language-independent (covers all locales)
     'form[action*="consent"] button',
     'button[aria-label*="Accept"]',
+    'button[aria-label*="accept"]',
+    # English
     'button:has-text("Accept all")',
-    'button:has-text("Alles accepteren")',
-    'button:has-text("Tout accepter")',
     'button:has-text("I agree")',
+    # Dutch
+    'button:has-text("Alles accepteren")',
+    # French
+    'button:has-text("Tout accepter")',
+    # German
+    'button:has-text("Alle akzeptieren")',
+    # Spanish
+    'button:has-text("Aceptar todo")',
+    # Italian
+    'button:has-text("Accetta tutto")',
+    # Portuguese
+    'button:has-text("Aceitar tudo")',
+    # Polish
+    'button:has-text("Zaakceptuj wszystko")',
+    # Russian
+    'button:has-text("Принять все")',
+    # Turkish
+    'button:has-text("Tümünü kabul et")',
+    # Japanese
+    'button:has-text("すべて同意")',
+    # Korean
+    'button:has-text("모두 동의")',
+    # Arabic
+    'button:has-text("قبول الكل")',
+    # Hebrew
+    'button:has-text("לאשר הכול")',
 ]
 
 # Regex to find the preloaded getlist URL in rendered HTML.
