@@ -97,14 +97,13 @@ async def _block_non_google_requests(route) -> None:
 
     hostname = (parsed.hostname or "").lower()
     if scheme != "https" or not is_allowed_navigation_host(hostname):
-        logger.debug(
-            "playwright_request_blocked",
-            url=url,
+        logger.warning(
+            "playwright_request_would_block",
+            url=url[:200],
             hostname=hostname,
+            scheme=scheme,
         )
-        await route.abort("blockedbyclient")
-    else:
-        await route.continue_()
+    await route.continue_()
 
 
 class GoogleListScraper:
@@ -152,10 +151,10 @@ class GoogleListScraper:
                     )
                     page = await ctx.new_page()
 
-                    # Layer 3: block network requests to non-Google domains
-                    await page.route("**/*", _block_non_google_requests)
-
                     await page.goto(list_url, wait_until="domcontentloaded", timeout=30000)
+
+                    # Handle Google cookie consent page if it appears
+                    await self._handle_consent_if_present(page)
 
                     # Layer 2: post-redirect URL validation
                     try:
@@ -214,6 +213,35 @@ class GoogleListScraper:
             raise
         except Exception as exc:
             raise GoogleListParseError(f"Failed to scrape Google Maps list: {exc}") from exc
+
+    async def _handle_consent_if_present(self, page) -> None:
+        """Click through Google's cookie consent page if it appears."""
+        if "consent.google" not in page.url:
+            return
+
+        logger.info("google_consent_page_detected", url=page.url)
+
+        # Try common consent button selectors (Google varies by locale)
+        _consent_selectors = [
+            'form[action*="consent"] button',
+            'button[aria-label*="Accept"]',
+            'button:has-text("Accept all")',
+            'button:has-text("Alles accepteren")',
+            'button:has-text("Tout accepter")',
+            'button:has-text("I agree")',
+        ]
+        for sel in _consent_selectors:
+            try:
+                btn = await page.wait_for_selector(sel, timeout=3000)
+                if btn:
+                    await btn.click()
+                    await page.wait_for_load_state("domcontentloaded", timeout=15000)
+                    logger.info("google_consent_accepted", final_url=page.url)
+                    return
+            except Exception:
+                continue
+
+        logger.warning("google_consent_button_not_found", url=page.url)
 
     async def _scroll_to_load_all(self, page) -> None:
         """Scroll the list panel to trigger lazy loading of all items."""
