@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { api } from "@/lib/api";
+import { useRef, useState } from "react";
+import { api, type ImportSSEEvent } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import {
   Dialog,
   DialogContent,
@@ -14,7 +15,7 @@ import {
 import {
   AlertCircle,
   CheckCircle2,
-  ExternalLink,
+  Globe,
   Info,
   List,
   Loader2,
@@ -39,7 +40,7 @@ type ImportResult = {
   failed: LocationSummary[];
 };
 
-type Phase = "input" | "loading" | "result" | "error";
+type Phase = "input" | "scraping" | "enriching" | "saving" | "result" | "error";
 
 interface ImportGoogleListDialogProps {
   tripId: string;
@@ -57,60 +58,96 @@ export function ImportGoogleListDialog({
   const [phase, setPhase] = useState<Phase>("input");
   const [result, setResult] = useState<ImportResult | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
-  const [loadingMessage, setLoadingMessage] = useState("");
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [currentPlace, setCurrentPlace] = useState("");
+  const abortRef = useRef<AbortController | null>(null);
 
   function reset() {
     setUrl("");
     setPhase("input");
     setResult(null);
     setErrorMessage("");
-    setLoadingMessage("");
+    setProgress({ current: 0, total: 0 });
+    setCurrentPlace("");
   }
 
   function handleOpenChange(next: boolean) {
-    if (!next && phase === "loading") return;
-    setOpen(next);
     if (!next) {
+      // Abort any in-flight import when closing the dialog
+      abortRef.current?.abort();
+      abortRef.current = null;
+      if (phase === "result" && result && result.imported_count > 0) {
+        onImported?.();
+      }
       setTimeout(reset, 200);
     }
+    setOpen(next);
   }
 
   function handleClose() {
     if (phase === "result" && result && result.imported_count > 0) {
       onImported?.();
     }
+    abortRef.current?.abort();
+    abortRef.current = null;
     setOpen(false);
     setTimeout(reset, 200);
+  }
+
+  function handleSSEEvent(event: ImportSSEEvent) {
+    switch (event.event) {
+      case "scraping":
+        setPhase("scraping");
+        break;
+      case "scraping_done":
+        setPhase("enriching");
+        setProgress({ current: 0, total: event.total });
+        break;
+      case "enriching":
+        setProgress({ current: event.current, total: event.total });
+        setCurrentPlace(event.name);
+        break;
+      case "saving":
+        setPhase("saving");
+        break;
+      case "complete":
+        setResult({
+          imported_count: event.imported_count,
+          existing_count: event.existing_count,
+          failed_count: event.failed_count,
+          imported: event.imported,
+          existing: event.existing,
+          failed: event.failed,
+        });
+        setPhase("result");
+        break;
+      case "error":
+        setErrorMessage(event.message);
+        setPhase("error");
+        break;
+    }
   }
 
   async function handleImport() {
     const trimmed = url.trim();
     if (!trimmed) return;
 
-    setPhase("loading");
-    setLoadingMessage(
-      "Parsing Google Maps list and resolving places… This may take a moment for large lists."
-    );
+    const abortController = new AbortController();
+    abortRef.current = abortController;
+    setPhase("scraping");
 
     try {
-      const data = await api.locations.importGoogleList(tripId, {
-        google_list_url: trimmed,
-      });
-      setResult(data);
-      setPhase("result");
+      await api.locations.importGoogleListStream(
+        tripId,
+        { google_list_url: trimmed },
+        handleSSEEvent,
+        abortController.signal
+      );
     } catch (err) {
+      if (abortController.signal.aborted) return;
       const msg =
         err instanceof Error ? err.message : "Import failed unexpectedly";
-      if (
-        msg.toLowerCase().includes("captcha") ||
-        msg.toLowerCase().includes("bot")
-      ) {
-        setErrorMessage(
-          "Google is blocking automated access. Try opening the list link in your browser first, then copy the full expanded URL (starting with google.com/maps/...) and paste it here."
-        );
-      } else {
-        setErrorMessage(msg);
-      }
+      setErrorMessage(msg);
       setPhase("error");
     }
   }
@@ -120,6 +157,14 @@ export function ImportGoogleListDialog({
     (url.includes("google.com/maps") ||
       url.includes("maps.app.goo.gl") ||
       url.includes("goo.gl/maps"));
+
+  const isStreaming =
+    phase === "scraping" || phase === "enriching" || phase === "saving";
+
+  const percent =
+    progress.total > 0
+      ? Math.round((progress.current / progress.total) * 100)
+      : 0;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -135,6 +180,7 @@ export function ImportGoogleListDialog({
           </DialogDescription>
         </DialogHeader>
 
+        {/* INPUT PHASE */}
         {phase === "input" && (
           <div className="space-y-4">
             <div className="space-y-2">
@@ -179,20 +225,70 @@ export function ImportGoogleListDialog({
           </div>
         )}
 
-        {phase === "loading" && (
-          <div className="flex flex-col items-center gap-4 py-8">
-            <Loader2 size={32} className="animate-spin text-brand" />
+        {/* SCRAPING PHASE — shimmer animation */}
+        {phase === "scraping" && (
+          <div className="flex flex-col items-center gap-5 py-8">
+            <div className="relative">
+              <Globe size={36} className="animate-pulse text-brand" />
+            </div>
             <div className="text-center">
               <p className="text-sm font-medium text-foreground">
-                Importing places…
+                Exploring the list...
               </p>
-              <p className="mt-1 max-w-xs text-xs text-muted-foreground">
-                {loadingMessage}
+              <p className="mt-1.5 max-w-xs text-xs text-muted-foreground">
+                Having a look at the places and figuring out what&apos;s inside
               </p>
+            </div>
+            {/* Shimmer bar */}
+            <div className="relative h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-muted">
+              <div className="absolute inset-0 h-full w-1/3 animate-[shimmer_1.5s_ease-in-out_infinite] rounded-full bg-brand/40" />
             </div>
           </div>
         )}
 
+        {/* ENRICHING PHASE — progress bar */}
+        {phase === "enriching" && (
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>Resolving places...</span>
+                <span className="tabular-nums font-medium">
+                  {progress.current}/{progress.total}
+                </span>
+              </div>
+              <Progress value={percent} />
+            </div>
+            {currentPlace && (
+              <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-muted/30 px-3 py-2">
+                <MapPin size={14} className="shrink-0 text-brand" />
+                <span className="min-w-0 truncate text-sm text-foreground">
+                  {currentPlace}
+                </span>
+              </div>
+            )}
+            <p className="text-center text-xs text-muted-foreground">
+              Discovering details for each place — this takes a moment
+            </p>
+          </div>
+        )}
+
+        {/* SAVING PHASE */}
+        {phase === "saving" && (
+          <div className="flex flex-col items-center gap-4 py-8">
+            <Loader2 size={28} className="animate-spin text-brand" />
+            <div className="text-center">
+              <p className="text-sm font-medium text-foreground">
+                Almost there!
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Saving your places and fetching photos...
+              </p>
+            </div>
+            <Progress value={100} className="max-w-xs" />
+          </div>
+        )}
+
+        {/* ERROR PHASE */}
         {phase === "error" && (
           <div className="space-y-4">
             <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
@@ -222,9 +318,9 @@ export function ImportGoogleListDialog({
           </div>
         )}
 
+        {/* RESULT PHASE */}
         {phase === "result" && result && (
           <div className="space-y-4">
-            {/* Summary counters */}
             <div className="flex gap-3">
               {result.imported_count > 0 && (
                 <div className="flex-1 rounded-lg border border-brand/20 bg-brand/5 p-3 text-center">
@@ -254,7 +350,6 @@ export function ImportGoogleListDialog({
               )}
             </div>
 
-            {/* Scrollable detail lists */}
             <div className="max-h-[40vh] space-y-3 overflow-y-auto pr-1">
               {result.imported.length > 0 && (
                 <ResultSection
