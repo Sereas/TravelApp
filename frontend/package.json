@@ -11,9 +11,11 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:perf": "playwright test",
-    "test:e2e:itinerary": "playwright test --config=playwright.itinerary.config.ts",
-    "test:all": "vitest run && playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:debug": "playwright test --debug",
+    "test:e2e:report": "playwright show-report playwright-report"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
