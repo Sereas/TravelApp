@@ -9,6 +9,7 @@ const isCI = !!process.env.CI;
 
 export default defineConfig({
   testDir: "./e2e/specs",
+  testIgnore: ["**/debug/**"],
   outputDir: "./e2e/test-results",
 
   // Timeouts

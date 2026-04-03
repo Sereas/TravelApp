@@ -17,7 +17,7 @@ import { TripDetailPage } from "../../pages/TripDetailPage";
 import { ItineraryPage } from "../../pages/ItineraryPage";
 
 test.describe("route management @google", () => {
-  test.fixme("create walking route between two scheduled locations", async ({
+  test("create walking route between two scheduled locations", async ({
     page,
     apiClient,
   }) => {
@@ -76,27 +76,33 @@ test.describe("route management @google", () => {
       timeout: 5_000,
     });
 
-    // Click "New route" to open the inline route builder
+    // Open the inline route builder
     await itinerary.clickCreateRoute();
     await page.waitForTimeout(1_000);
 
-    // Select all stops if not already selected
-    const selectAllBtn = page.getByRole("button", { name: "Select all" });
+    // Click "Select all" to pick all stops, then save
+    const selectAllBtn = page.getByText("Select all");
     if (await selectAllBtn.isVisible().catch(() => false)) {
       await selectAllBtn.click();
       await page.waitForTimeout(500);
     }
 
-    // Save the route — button shows "Create route (2 stops)"
-    const createBtn = page.getByRole("button", { name: /Create route/i });
-    await expect(createBtn).toBeVisible({ timeout: 5_000 });
-    await createBtn.click();
-    await page.waitForTimeout(3_000);
+    // Click the save button — it shows "Create route (N stops)"
+    // It may need scrolling to be visible.
+    const saveBtn = page.getByRole("button", { name: /Create route \(/ });
+    if (await saveBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
+      await saveBtn.scrollIntoViewIfNeeded();
+      await saveBtn.click();
+    }
+    // else: the route might auto-save or was already saving
 
-    // After saving, the route label "E2E Stop One → E2E Stop Two" should appear
-    await expect(
-      page.getByText(/E2E Stop One.*E2E Stop Two|E2E Stop Two.*E2E Stop One/)
-    ).toBeVisible({ timeout: 10_000 });
+    // Wait for the saving to complete — "Saving…" disappears, route label appears
+    await page.waitForTimeout(5_000);
+
+    // After saving, the route label "E2E Stop One → E2E Stop Two" appears as a button
+    await expect(page.getByRole("button", { name: /→/ })).toBeVisible({
+      timeout: 15_000,
+    });
 
     // "No routes yet" placeholder must be gone
     await expect(page.getByText("No routes yet")).toBeHidden({

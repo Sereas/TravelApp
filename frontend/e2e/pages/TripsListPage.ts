@@ -29,13 +29,16 @@ export class TripsListPage {
     // The heading "My Trips" is always present (trips/page.tsx line 65)
     await this.page
       .getByRole("heading", { name: "My Trips" })
-      .waitFor({ state: "visible" });
+      .waitFor({ state: "visible", timeout: 20_000 });
 
-    // Wait for the loading spinner to disappear
-    const spinner = this.page.locator('[data-testid="loading-spinner"]');
-    if (await spinner.isVisible().catch(() => false)) {
-      await spinner.waitFor({ state: "hidden" });
-    }
+    // Wait for EITHER the "New trip" button (trips exist) OR the empty-state
+    // CTA (no trips). This ensures the async data fetch has completed.
+    await this.page
+      .locator(
+        'button:has-text("New trip"), button:has-text("Create your first trip"), h3'
+      )
+      .first()
+      .waitFor({ state: "visible", timeout: 15_000 });
   }
 
   /** Total number of trip cards currently displayed. */
@@ -94,8 +97,11 @@ export class TripsListPage {
     // Dates are optional; skip date picker interaction for now to keep tests
     // fast and avoid flakiness from date-picker UI complexity.
 
-    // Submit (button text "Create trip" — CreateTripDialog.tsx line 171)
-    await this.page.getByRole("button", { name: "Create trip" }).click();
+    // Submit — scope to dialog to avoid matching "Create your first trip" behind overlay
+    await this.page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Create trip" })
+      .click();
 
     // After creation the app calls router.push(`/trips/${trip.id}`)
     // Wait for navigation away from /trips
