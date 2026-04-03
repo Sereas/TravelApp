@@ -1,0 +1,132 @@
+/**
+ * Add location E2E tests.
+ *
+ * Selectors derived from `frontend/src/components/locations/AddLocationForm.tsx`:
+ *   - Google Maps link input: id="add-location-google-link"
+ *   - Location name input:    id="add-location-name"
+ *   - "Fetching details…" text (previewLoading state, line 196)
+ *   - Duplicate warning: contains "already exists in this trip" (line 200)
+ *   - Submit button: text "Add Location" (line 411)
+ *
+ * Location card name renders as <h3> (LocationCard.tsx line 301).
+ *
+ * Tests tagged @google make real calls to the Google Places API and require
+ * GOOGLE_PLACES_API_KEY + GOOGLE_ROUTES_API_KEY in the backend env.
+ */
+
+import { test, expect } from "../../fixtures/index";
+import { TripDetailPage } from "../../pages/TripDetailPage";
+import { GOOGLE_LINK_SINGLE } from "../../helpers/constants";
+
+test.describe("Add location — manual", () => {
+  test("add location manually — card appears with correct name", async ({
+    page,
+    testTrip,
+  }) => {
+    const detail = new TripDetailPage(page);
+    await detail.goto(testTrip.id);
+
+    // Open the Add Location dialog
+    await detail.clickAddLocation();
+
+    // Fill the name field (id="add-location-name" — AddLocationForm.tsx line 219)
+    await page.locator("#add-location-name").fill("E2E Test Restaurant");
+
+    // Submit (button text "Add Location" — AddLocationForm.tsx line 411)
+    await page.getByRole("button", { name: "Add Location" }).click();
+
+    // Dialog should close and the new location card should appear
+    await expect(detail.locationCard("E2E Test Restaurant")).toBeVisible({
+      timeout: 15_000,
+    });
+  });
+});
+
+test.describe("@google — Add location via Google Maps link", () => {
+  test("add location via Google Maps link — name and city auto-fill", async ({
+    page,
+    testTrip,
+  }) => {
+    const detail = new TripDetailPage(page);
+    await detail.goto(testTrip.id);
+
+    await detail.clickAddLocation();
+
+    // Paste Google Maps link into the dedicated field
+    // id="add-location-google-link" — AddLocationForm.tsx line 177
+    await page.locator("#add-location-google-link").fill(GOOGLE_LINK_SINGLE);
+    // Trigger blur to start the preview fetch
+    await page.locator("#add-location-google-link").blur();
+
+    // Wait for "Fetching details…" indicator to appear, then disappear
+    // AddLocationForm.tsx line 196: previewLoading renders this text
+    await page
+      .getByText("Fetching details…")
+      .waitFor({ state: "visible", timeout: 20_000 })
+      .catch(() => {
+        // If it appeared and disappeared faster than we could catch it, that's fine
+      });
+    await page
+      .getByText("Fetching details…")
+      .waitFor({ state: "hidden", timeout: 30_000 });
+
+    // The name field should be auto-filled with a non-empty value
+    const nameValue = await page.locator("#add-location-name").inputValue();
+    expect(nameValue.trim()).not.toBe("");
+
+    // Submit
+    await page.getByRole("button", { name: "Add Location" }).click();
+
+    // The card with the auto-filled name should appear
+    await expect(detail.locationCard(nameValue.trim())).toBeVisible({
+      timeout: 15_000,
+    });
+  });
+
+  test("duplicate Google Maps link shows 'already exists in this trip' warning", async ({
+    page,
+    testTrip,
+  }) => {
+    const detail = new TripDetailPage(page);
+    await detail.goto(testTrip.id);
+
+    // First addition: add the location via Google link
+    await detail.clickAddLocation();
+    await page.locator("#add-location-google-link").fill(GOOGLE_LINK_SINGLE);
+    await page.locator("#add-location-google-link").blur();
+
+    // Wait for preview to complete
+    await page
+      .getByText("Fetching details…")
+      .waitFor({ state: "visible", timeout: 20_000 })
+      .catch(() => {});
+    await page
+      .getByText("Fetching details…")
+      .waitFor({ state: "hidden", timeout: 30_000 });
+
+    await page.getByRole("button", { name: "Add Location" }).click();
+    // Wait for the dialog to close
+    await page
+      .getByRole("dialog")
+      .waitFor({ state: "hidden", timeout: 10_000 });
+
+    // Second attempt: open the form again and paste the same link
+    await detail.clickAddLocation();
+    await page.locator("#add-location-google-link").fill(GOOGLE_LINK_SINGLE);
+    await page.locator("#add-location-google-link").blur();
+
+    // Wait for preview
+    await page
+      .getByText("Fetching details…")
+      .waitFor({ state: "visible", timeout: 20_000 })
+      .catch(() => {});
+    await page
+      .getByText("Fetching details…")
+      .waitFor({ state: "hidden", timeout: 30_000 });
+
+    // Duplicate warning should appear (AddLocationForm.tsx line 200)
+    await expect(page.getByText(/already exists in this trip/)).toBeVisible({
+      timeout: 10_000,
+    });
+  });
+});
