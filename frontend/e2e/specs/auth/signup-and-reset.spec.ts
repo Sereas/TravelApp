@@ -38,9 +38,7 @@ test.describe("Signup & password reset edge cases", () => {
     await noAuthPage.getByLabel("Confirm password").fill("SomePass123");
 
     // Submit
-    await noAuthPage
-      .getByRole("button", { name: "Create account" })
-      .click();
+    await noAuthPage.getByRole("button", { name: "Create account" }).click();
 
     // Supabase returns "User already registered" for duplicate signups
     const errorAlert = noAuthPage.getByRole("alert").first();
@@ -62,15 +60,11 @@ test.describe("Signup & password reset edge cases", () => {
 
     // Fill form with mismatched passwords
     await noAuthPage.getByLabel("Email").fill("test-mismatch@example.com");
-    await noAuthPage
-      .getByLabel("Password", { exact: true })
-      .fill("Password1");
+    await noAuthPage.getByLabel("Password", { exact: true }).fill("Password1");
     await noAuthPage.getByLabel("Confirm password").fill("Password2");
 
     // Submit
-    await noAuthPage
-      .getByRole("button", { name: "Create account" })
-      .click();
+    await noAuthPage.getByRole("button", { name: "Create account" }).click();
 
     // Client-side validation: "Passwords do not match" (LoginForm.tsx line 51)
     const errorAlert = noAuthPage.getByRole("alert").first();
@@ -118,8 +112,6 @@ test.describe("Signup & password reset edge cases", () => {
     const successMsg = noAuthPage.getByText(/Password reset link sent to/i);
     const errorMsg = noAuthPage.getByRole("alert").first();
 
-    await expect(
-      successMsg.or(errorMsg)
-    ).toBeVisible({ timeout: 15_000 });
+    await expect(successMsg.or(errorMsg)).toBeVisible({ timeout: 15_000 });
   });
 });

@@ -158,9 +158,7 @@ test.describe("route management", () => {
     // Confirm deletion if a dialog appears
     const dialog = page.getByRole("dialog");
     if (await dialog.isVisible({ timeout: 3_000 }).catch(() => false)) {
-      await dialog
-        .getByRole("button", { name: /Delete|Confirm|Yes/i })
-        .click();
+      await dialog.getByRole("button", { name: /Delete|Confirm|Yes/i }).click();
       await dialog.waitFor({ state: "hidden", timeout: 8_000 });
     }
 

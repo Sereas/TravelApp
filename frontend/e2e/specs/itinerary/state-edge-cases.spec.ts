@@ -41,9 +41,9 @@ test.describe("state and edge cases", () => {
 
     // Click "Add day" and verify Day 1 appears in the rail
     await addDayBtn.click();
-    await expect(
-      page.getByRole("button", { name: /Day 1/i })
-    ).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("button", { name: /Day 1/i })).toBeVisible({
+      timeout: 10_000,
+    });
 
     await apiClient.deleteTrip(trip.id);
   });
@@ -127,9 +127,7 @@ test.describe("state and edge cases", () => {
       .click();
 
     // Submit — button text should be "Add 2 locations"
-    await dialog
-      .getByRole("button", { name: /Add 2 locations/ })
-      .click();
+    await dialog.getByRole("button", { name: /Add 2 locations/ }).click();
 
     // Dialog should close
     await expect(dialog).toBeHidden({ timeout: 10_000 });
@@ -192,9 +190,7 @@ test.describe("state and edge cases", () => {
       .filter({ hasText: "E2E Progress Loc B" })
       .click();
 
-    await dialog
-      .getByRole("button", { name: /Add 2 locations/ })
-      .click();
+    await dialog.getByRole("button", { name: /Add 2 locations/ }).click();
     await expect(dialog).toBeHidden({ timeout: 10_000 });
 
     // Progress should update to 1/3 days and 33%
@@ -277,9 +273,9 @@ test.describe("state and edge cases", () => {
 
     // Click "Add day" and verify a day card appears
     await addDayBtn.click();
-    await expect(
-      page.getByRole("button", { name: /Day 1/i })
-    ).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("button", { name: /Day 1/i })).toBeVisible({
+      timeout: 10_000,
+    });
 
     await apiClient.deleteTrip(trip.id);
   });

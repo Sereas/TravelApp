@@ -54,9 +54,18 @@ test.describe("day/plan management", () => {
     await itinerary.waitForDayCards();
 
     // Verify only 2 days remain: Aug 1 and Aug 2 visible, Aug 3 gone
-    const aug1After = page.locator("button").filter({ hasText: "Aug 1" }).first();
-    const aug2After = page.locator("button").filter({ hasText: "Aug 2" }).first();
-    const aug3After = page.locator("button").filter({ hasText: "Aug 3" }).first();
+    const aug1After = page
+      .locator("button")
+      .filter({ hasText: "Aug 1" })
+      .first();
+    const aug2After = page
+      .locator("button")
+      .filter({ hasText: "Aug 2" })
+      .first();
+    const aug3After = page
+      .locator("button")
+      .filter({ hasText: "Aug 3" })
+      .first();
 
     await expect(aug1After).toBeVisible({ timeout: 8_000 });
     await expect(aug2After).toBeVisible({ timeout: 5_000 });
@@ -167,9 +176,7 @@ test.describe("day/plan management", () => {
     // Open plan switcher and verify "Deletable Plan" is NOT in the list
     await itinerary.clickPlanSwitcher();
     await expect(
-      page
-        .locator('[role="option"]')
-        .filter({ hasText: "Deletable Plan" })
+      page.locator('[role="option"]').filter({ hasText: "Deletable Plan" })
     ).toBeHidden({ timeout: 5_000 });
 
     await apiClient.deleteTrip(trip.id);

@@ -57,9 +57,9 @@ test.describe("Sharing advanced", () => {
     ).toBeVisible({ timeout: 20_000 });
 
     // Also verify the explanatory text is present
-    await expect(
-      noAuthPage.getByText(/expired or been revoked/i)
-    ).toBeVisible({ timeout: 5_000 });
+    await expect(noAuthPage.getByText(/expired or been revoked/i)).toBeVisible({
+      timeout: 5_000,
+    });
 
     await apiClient.deleteTrip(trip.id);
   });
@@ -70,16 +70,15 @@ test.describe("Sharing advanced", () => {
   }) => {
     // Set up a trip with 2 scheduled locations (no route — requires Google API)
     const tripName = `E2E Parity ${Date.now()}`;
-    const { trip } =
-      await apiClient.setupTripWithScheduledLocations({
-        name: tripName,
-        startDate: "2026-08-01",
-        endDate: "2026-08-03",
-        locations: [
-          { name: "E2E Shared Loc A", city: "Paris" },
-          { name: "E2E Shared Loc B", city: "Rome" },
-        ],
-      });
+    const { trip } = await apiClient.setupTripWithScheduledLocations({
+      name: tripName,
+      startDate: "2026-08-01",
+      endDate: "2026-08-03",
+      locations: [
+        { name: "E2E Shared Loc A", city: "Paris" },
+        { name: "E2E Shared Loc B", city: "Rome" },
+      ],
+    });
 
     // Enable sharing
     const share = await apiClient.createShare(trip.id);
@@ -163,9 +162,7 @@ test.describe("Sharing advanced", () => {
 
     // Click "Delete trip" button inside the edit dialog
     // (EditTripForm.tsx: button with aria-label="Delete trip")
-    await editDialog
-      .getByRole("button", { name: "Delete trip" })
-      .click();
+    await editDialog.getByRole("button", { name: "Delete trip" }).click();
 
     // ConfirmDialog opens asking "Delete trip?"
     // It has a "Delete trip" confirm button (confirmLabel from EditTripForm.tsx line 175)
@@ -173,9 +170,9 @@ test.describe("Sharing advanced", () => {
     // There are now two "Delete trip" buttons — the trigger and the confirm.
     // The confirm one is in the nested dialog. Wait for the confirmation
     // description text to disambiguate.
-    await expect(
-      page.getByText(/permanently delete this trip/i)
-    ).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText(/permanently delete this trip/i)).toBeVisible({
+      timeout: 5_000,
+    });
 
     // Click the confirm button in the confirmation dialog
     // The confirm dialog's button is the last "Delete trip" button visible
@@ -185,9 +182,9 @@ test.describe("Sharing advanced", () => {
     await expect(page).toHaveURL(/\/trips$/, { timeout: 20_000 });
 
     // Verify the "My Trips" heading is visible (we landed on the trips list)
-    await expect(
-      page.getByRole("heading", { name: "My Trips" })
-    ).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("heading", { name: "My Trips" })).toBeVisible({
+      timeout: 10_000,
+    });
 
     // The deleted trip should no longer appear in the list
     await expect(

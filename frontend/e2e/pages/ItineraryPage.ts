@@ -169,10 +169,7 @@ export class ItineraryPage {
    * @param period - "Morning" | "Afternoon" | "Evening" | "Night"
    * @param nthButton - 0-based index of which "Time:" button to click
    */
-  async changeTimePeriod(
-    period: string,
-    nthButton = 0
-  ): Promise<void> {
+  async changeTimePeriod(period: string, nthButton = 0): Promise<void> {
     await this.page
       .getByRole("button", { name: /Time:/ })
       .nth(nthButton)
@@ -257,11 +254,11 @@ export class ItineraryPage {
 
     // After clicking "Rename", an inline text input appears in the plan
     // switcher area. Scope to inputs near the plan settings popover.
-    const input = this.page.locator(
-      '[role="listbox"] input, [placeholder*="name"], [placeholder*="plan"]'
-    ).or(
-      this.page.locator('input[type="text"], input:not([type])')
-    );
+    const input = this.page
+      .locator(
+        '[role="listbox"] input, [placeholder*="name"], [placeholder*="plan"]'
+      )
+      .or(this.page.locator('input[type="text"], input:not([type])'));
     await input.first().waitFor({ state: "visible", timeout: 5_000 });
     await input.first().clear();
     await input.first().fill(newName);
@@ -319,9 +316,7 @@ export class ItineraryPage {
    * Get a route button by its label text (e.g. "Stop A → Stop B").
    */
   getRouteButton(labelPattern?: RegExp): Locator {
-    return this.page
-      .getByRole("button", { name: labelPattern ?? /→/ })
-      .first();
+    return this.page.getByRole("button", { name: labelPattern ?? /→/ }).first();
   }
 
   // ── Unscheduled panel ─────────────────────────────────────────────────────

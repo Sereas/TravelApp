@@ -142,9 +142,7 @@ test.describe("day options details", () => {
     ).toBeVisible({ timeout: 8_000 });
 
     // Verify the "Edit day date" pencil button exists next to it
-    const editBtn = page
-      .getByRole("button", { name: "Edit day date" })
-      .first();
+    const editBtn = page.getByRole("button", { name: "Edit day date" }).first();
     await expect(editBtn).toBeVisible({ timeout: 5_000 });
 
     // Clicking the edit button opens a calendar date picker.

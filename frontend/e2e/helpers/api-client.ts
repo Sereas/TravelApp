@@ -355,10 +355,7 @@ export class ApiClient {
     );
   }
 
-  async listOptions(
-    tripId: string,
-    dayId: string
-  ): Promise<OptionResponse[]> {
+  async listOptions(tripId: string, dayId: string): Promise<OptionResponse[]> {
     return this.request<OptionResponse[]>(
       `/api/v1/trips/${tripId}/days/${dayId}/options`
     );
@@ -594,9 +591,7 @@ export class ApiClient {
     const itinerary = await this.getItinerary(trip.id);
     const firstDay = itinerary.days[0];
     if (!firstDay?.options?.length) {
-      throw new Error(
-        `No options found for day 0 of trip ${trip.id}`
-      );
+      throw new Error(`No options found for day 0 of trip ${trip.id}`);
     }
     const optionId = firstDay.options[0].id;
 
