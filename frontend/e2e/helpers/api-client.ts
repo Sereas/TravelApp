@@ -52,8 +52,74 @@ export interface DayResponse {
   created_at: string | null;
 }
 
+export interface OptionResponse {
+  id: string;
+  day_id: string;
+  option_index: number;
+  starting_city: string | null;
+  ending_city: string | null;
+  created_by: string | null;
+  created_at: string | null;
+}
+
+export interface OptionLocationResponse {
+  option_id: string;
+  location_id: string;
+  sort_order: number;
+  time_period: string;
+  location: {
+    id: string;
+    name: string;
+    city: string | null;
+    address: string | null;
+    category: string | null;
+  };
+}
+
+export interface RouteResponse {
+  route_id: string;
+  option_id: string;
+  label: string | null;
+  transport_mode: string;
+  duration_seconds: number | null;
+  distance_meters: number | null;
+  sort_order: number;
+  location_ids: string[];
+  route_status: string;
+}
+
+export interface ShareResponse {
+  share_token: string;
+  share_url: string;
+  created_at: string;
+  expires_at: string | null;
+}
+
+export interface SharedTripResponse {
+  trip: { name: string; start_date: string | null; end_date: string | null };
+  locations: Location[];
+  itinerary: ItineraryResponse;
+}
+
+export interface ItineraryDay {
+  id: string;
+  date: string | null;
+  sort_order: number;
+  options: ItineraryOption[];
+}
+
+export interface ItineraryOption {
+  id: string;
+  option_index: number;
+  starting_city: string | null;
+  ending_city: string | null;
+  created_by: string | null;
+  locations: OptionLocationResponse[];
+  routes: RouteResponse[];
+}
+
 export interface ItineraryResponse {
-  days: unknown[];
+  days: ItineraryDay[];
 }
 
 // ── Manifest helpers ───────────────────────────────────────────────────────
@@ -161,12 +227,35 @@ export class ApiClient {
     return res.json() as Promise<T>;
   }
 
-  // ── Public API methods ───────────────────────────────────────────────────
-
   /**
-   * Create a trip and register its ID in the teardown manifest so
-   * global-teardown will clean it up automatically.
+   * Fetch without auth — for public endpoints like /shared/{token}.
    */
+  private async publicRequest<T>(
+    path: string,
+    options: RequestInit = {}
+  ): Promise<{ status: number; data: T | null }> {
+    const res = await fetch(`${this.apiUrl}${path}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers as Record<string, string>),
+      },
+    });
+
+    if (res.status === 204) {
+      return { status: res.status, data: null };
+    }
+
+    if (!res.ok) {
+      return { status: res.status, data: null };
+    }
+
+    const data = (await res.json()) as T;
+    return { status: res.status, data };
+  }
+
+  // ── Trips ──────────────────────────────────────────────────────────────
+
   async createTrip(body: {
     name: string;
     start_date?: string | null;
@@ -176,17 +265,30 @@ export class ApiClient {
       method: "POST",
       body: JSON.stringify(body),
     });
-    // Register for automatic teardown
     recordTripId(trip.id);
     return trip;
   }
 
-  /** Delete a trip immediately (also used for explicit in-test teardown). */
+  async updateTrip(
+    tripId: string,
+    body: {
+      name?: string;
+      start_date?: string | null;
+      end_date?: string | null;
+    }
+  ): Promise<Trip> {
+    return this.request<Trip>(`/api/v1/trips/${tripId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+  }
+
   async deleteTrip(tripId: string): Promise<void> {
     await this.request<void>(`/api/v1/trips/${tripId}`, { method: "DELETE" });
   }
 
-  /** Add a single location to a trip. */
+  // ── Locations ──────────────────────────────────────────────────────────
+
   async addLocation(
     tripId: string,
     body: {
@@ -203,12 +305,12 @@ export class ApiClient {
     });
   }
 
-  /** List all locations for a trip. */
   async listLocations(tripId: string): Promise<Location[]> {
     return this.request<Location[]>(`/api/v1/trips/${tripId}/locations`);
   }
 
-  /** Create an itinerary day for a trip. */
+  // ── Days ───────────────────────────────────────────────────────────────
+
   async createDay(
     tripId: string,
     body: { date?: string | null } = {}
@@ -219,10 +321,297 @@ export class ApiClient {
     });
   }
 
-  /** Fetch the full itinerary tree for a trip. */
+  async generateDays(tripId: string): Promise<DayResponse[]> {
+    return this.request<DayResponse[]>(
+      `/api/v1/trips/${tripId}/days/generate`,
+      { method: "POST" }
+    );
+  }
+
+  async deleteDay(tripId: string, dayId: string): Promise<void> {
+    await this.request<void>(`/api/v1/trips/${tripId}/days/${dayId}`, {
+      method: "DELETE",
+    });
+  }
+
+  async listDays(tripId: string): Promise<DayResponse[]> {
+    return this.request<DayResponse[]>(`/api/v1/trips/${tripId}/days`);
+  }
+
+  // ── Day Options ────────────────────────────────────────────────────────
+
+  async createOption(
+    tripId: string,
+    dayId: string,
+    body: {
+      starting_city?: string | null;
+      ending_city?: string | null;
+      created_by?: string | null;
+    } = {}
+  ): Promise<OptionResponse> {
+    return this.request<OptionResponse>(
+      `/api/v1/trips/${tripId}/days/${dayId}/options`,
+      { method: "POST", body: JSON.stringify(body) }
+    );
+  }
+
+  async listOptions(
+    tripId: string,
+    dayId: string
+  ): Promise<OptionResponse[]> {
+    return this.request<OptionResponse[]>(
+      `/api/v1/trips/${tripId}/days/${dayId}/options`
+    );
+  }
+
+  async updateOption(
+    tripId: string,
+    dayId: string,
+    optionId: string,
+    body: {
+      starting_city?: string | null;
+      ending_city?: string | null;
+      created_by?: string | null;
+    }
+  ): Promise<OptionResponse> {
+    return this.request<OptionResponse>(
+      `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}`,
+      { method: "PATCH", body: JSON.stringify(body) }
+    );
+  }
+
+  async deleteOption(
+    tripId: string,
+    dayId: string,
+    optionId: string
+  ): Promise<void> {
+    await this.request<void>(
+      `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}`,
+      { method: "DELETE" }
+    );
+  }
+
+  // ── Option Locations ───────────────────────────────────────────────────
+
+  async addLocationToOption(
+    tripId: string,
+    dayId: string,
+    optionId: string,
+    body: {
+      location_id: string;
+      sort_order: number;
+      time_period?: string;
+    }
+  ): Promise<OptionLocationResponse> {
+    return this.request<OptionLocationResponse>(
+      `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/locations`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          time_period: "morning",
+          ...body,
+        }),
+      }
+    );
+  }
+
+  async batchAddLocationsToOption(
+    tripId: string,
+    dayId: string,
+    optionId: string,
+    items: Array<{
+      location_id: string;
+      sort_order: number;
+      time_period?: string;
+    }>
+  ): Promise<OptionLocationResponse[]> {
+    return this.request<OptionLocationResponse[]>(
+      `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/locations/batch`,
+      {
+        method: "POST",
+        body: JSON.stringify(
+          items.map((i) => ({ time_period: "morning", ...i }))
+        ),
+      }
+    );
+  }
+
+  async updateOptionLocation(
+    tripId: string,
+    dayId: string,
+    optionId: string,
+    locationId: string,
+    body: { sort_order?: number; time_period?: string }
+  ): Promise<OptionLocationResponse> {
+    return this.request<OptionLocationResponse>(
+      `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/locations/${locationId}`,
+      { method: "PATCH", body: JSON.stringify(body) }
+    );
+  }
+
+  async removeLocationFromOption(
+    tripId: string,
+    dayId: string,
+    optionId: string,
+    locationId: string
+  ): Promise<void> {
+    await this.request<void>(
+      `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/locations/${locationId}`,
+      { method: "DELETE" }
+    );
+  }
+
+  async reorderOptionLocations(
+    tripId: string,
+    dayId: string,
+    optionId: string,
+    locationIds: string[]
+  ): Promise<OptionLocationResponse[]> {
+    return this.request<OptionLocationResponse[]>(
+      `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/locations/reorder`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ location_ids: locationIds }),
+      }
+    );
+  }
+
+  // ── Routes ─────────────────────────────────────────────────────────────
+
+  async createRoute(
+    tripId: string,
+    dayId: string,
+    optionId: string,
+    body: {
+      transport_mode: string;
+      label?: string | null;
+      location_ids: string[];
+    }
+  ): Promise<RouteResponse> {
+    return this.request<RouteResponse>(
+      `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/routes`,
+      { method: "POST", body: JSON.stringify(body) }
+    );
+  }
+
+  async deleteRoute(
+    tripId: string,
+    dayId: string,
+    optionId: string,
+    routeId: string
+  ): Promise<void> {
+    await this.request<void>(
+      `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/routes/${routeId}`,
+      { method: "DELETE" }
+    );
+  }
+
+  async listRoutes(
+    tripId: string,
+    dayId: string,
+    optionId: string
+  ): Promise<RouteResponse[]> {
+    return this.request<RouteResponse[]>(
+      `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/routes`
+    );
+  }
+
+  // ── Sharing ────────────────────────────────────────────────────────────
+
+  async createShare(tripId: string): Promise<ShareResponse> {
+    return this.request<ShareResponse>(`/api/v1/trips/${tripId}/share`, {
+      method: "POST",
+    });
+  }
+
+  async revokeShare(tripId: string): Promise<void> {
+    await this.request<void>(`/api/v1/trips/${tripId}/share`, {
+      method: "DELETE",
+    });
+  }
+
+  async getSharedTrip(
+    shareToken: string
+  ): Promise<{ status: number; data: SharedTripResponse | null }> {
+    return this.publicRequest<SharedTripResponse>(
+      `/api/v1/shared/${shareToken}`
+    );
+  }
+
+  // ── Itinerary Tree ─────────────────────────────────────────────────────
+
   async getItinerary(tripId: string): Promise<ItineraryResponse> {
     return this.request<ItineraryResponse>(
       `/api/v1/trips/${tripId}/itinerary?include_empty_options=true`
     );
+  }
+
+  // ── Helpers for test setup ─────────────────────────────────────────────
+
+  /**
+   * Convenience: create a trip with days generated from dates,
+   * add locations, and schedule them to the first day's main option.
+   * Returns all IDs needed for further test setup.
+   */
+  async setupTripWithScheduledLocations(opts: {
+    name: string;
+    startDate: string;
+    endDate: string;
+    locations: Array<{
+      name: string;
+      city?: string;
+      category?: string;
+      address?: string;
+    }>;
+    timePeriod?: string;
+  }): Promise<{
+    trip: Trip;
+    locations: Location[];
+    days: DayResponse[];
+    dayId: string;
+    optionId: string;
+  }> {
+    const trip = await this.createTrip({
+      name: opts.name,
+      start_date: opts.startDate,
+      end_date: opts.endDate,
+    });
+
+    const locations = await Promise.all(
+      opts.locations.map((loc) => this.addLocation(trip.id, loc))
+    );
+
+    const days = await this.generateDays(trip.id);
+    if (!days.length) {
+      throw new Error(
+        `generateDays returned no days for trip ${trip.id} ` +
+          `(${opts.startDate} to ${opts.endDate})`
+      );
+    }
+    const dayId = days[0].id;
+
+    // Get the main option (option_index=1) for the first day
+    const itinerary = await this.getItinerary(trip.id);
+    const firstDay = itinerary.days[0];
+    if (!firstDay?.options?.length) {
+      throw new Error(
+        `No options found for day 0 of trip ${trip.id}`
+      );
+    }
+    const optionId = firstDay.options[0].id;
+
+    // Schedule all locations to the first day
+    await this.batchAddLocationsToOption(
+      trip.id,
+      dayId,
+      optionId,
+      locations.map((loc, i) => ({
+        location_id: loc.id,
+        sort_order: i,
+        time_period: opts.timePeriod ?? "morning",
+      }))
+    );
+
+    return { trip, locations, days, dayId, optionId };
   }
 }

@@ -59,3 +59,62 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run test
+
+  # ── E2E tests — run only on merge to main ─────────────────────────────
+  # Requires a running backend + Supabase. Secrets must be configured in
+  # GitHub repo Settings > Secrets and variables > Actions.
+  e2e:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      E2E_USER_EMAIL: ${{ secrets.E2E_USER_EMAIL }}
+      E2E_USER_PASSWORD: ${{ secrets.E2E_USER_PASSWORD }}
+      E2E_BASE_URL: http://localhost:3000
+      E2E_API_URL: http://localhost:8000
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Backend ──────────────────────────────────────────────────────
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r ../requirements.txt
+      - name: Start backend
+        run: |
+          cd ..
+          uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 &
+          sleep 3
+
+      # ── Frontend ─────────────────────────────────────────────────────
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Start frontend
+        run: |
+          npm run build
+          npm run start &
+          sleep 5
+
+      # ── Playwright ───────────────────────────────────────────────────
+      - run: npx playwright install --with-deps chromium
+      - name: Run E2E tests
+        run: npx playwright test --reporter=list
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-results
+          path: frontend/e2e/test-results/
+          retention-days: 7
