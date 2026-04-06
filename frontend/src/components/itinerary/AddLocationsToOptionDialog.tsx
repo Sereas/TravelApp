@@ -66,13 +66,7 @@ export function AddLocationsToOptionDialog({
     }
 
     return locs;
-  }, [
-    allLocations,
-    hasCityFilter,
-    filterByCities,
-    citiesForFilter,
-    search,
-  ]);
+  }, [allLocations, hasCityFilter, filterByCities, citiesForFilter, search]);
 
   function toggleLocation(id: string) {
     setSelected((prev) => {

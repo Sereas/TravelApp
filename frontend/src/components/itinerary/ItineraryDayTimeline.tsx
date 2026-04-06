@@ -209,8 +209,7 @@ export function ItineraryDayTimeline({
                 const expanded = expandedId === optionLocation.id;
                 const isDrag = dragId === optionLocation.id;
                 const isDrop = dropId === optionLocation.id && !isDrag;
-                const routeInfos =
-                  locRouteMap.get(optionLocation.id) ?? [];
+                const routeInfos = locRouteMap.get(optionLocation.id) ?? [];
                 const picking =
                   isPickMode && pickIds.includes(optionLocation.id);
                 const pickSeq = pickIds.indexOf(optionLocation.id) + 1;

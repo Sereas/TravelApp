@@ -567,11 +567,15 @@ export function useItineraryState({
                       o.routes.length > 0
                         ? (o.routes
                             .map((route) => {
-                              const remainingIds = route.option_location_ids.filter(
-                                (id) => id !== olId
-                              );
+                              const remainingIds =
+                                route.option_location_ids.filter(
+                                  (id) => id !== olId
+                                );
                               if (remainingIds.length < 2) return null;
-                              return { ...route, option_location_ids: remainingIds };
+                              return {
+                                ...route,
+                                option_location_ids: remainingIds,
+                              };
                             })
                             .filter(Boolean) as typeof o.routes)
                         : o.routes;
@@ -741,11 +745,7 @@ export function useItineraryState({
   );
 
   const handleReorderOptionLocations = useCallback(
-    async (
-      dayId: string,
-      optionId: string,
-      newOrderedOlIds: string[]
-    ) => {
+    async (dayId: string, optionId: string, newOrderedOlIds: string[]) => {
       if (!itinerary) return;
       const day = itinerary.days.find((currentDay) => currentDay.id === dayId);
       const option = day?.options.find(

@@ -239,9 +239,7 @@ export function ItineraryLocationRow({
             tabIndex={0}
             role="button"
             draggable
-            onDragStart={(event) =>
-              onDragStart(optionLocation.id, event)
-            }
+            onDragStart={(event) => onDragStart(optionLocation.id, event)}
             onDragEnd={onDragEnd}
             aria-label={`Reorder ${optionLocation.location.name}`}
             aria-roledescription="draggable"
@@ -443,11 +441,7 @@ export function ItineraryLocationRow({
               aria-label={`Remove ${optionLocation.location.name}`}
               onClick={(event) => {
                 event.stopPropagation();
-                onRemoveLocation(
-                  dayId,
-                  currentOptionId,
-                  optionLocation.id
-                );
+                onRemoveLocation(dayId, currentOptionId, optionLocation.id);
               }}
             >
               <X size={13} />
@@ -487,7 +481,8 @@ export function ItineraryLocationRow({
           )}
 
         {routeInfos.map((info) => {
-          const isLastLeg = info.idx === info.route.option_location_ids.length - 1;
+          const isLastLeg =
+            info.idx === info.route.option_location_ids.length - 1;
           const Icon =
             TRANSPORT_ICONS[
               info.route.transport_mode as keyof typeof TRANSPORT_ICONS

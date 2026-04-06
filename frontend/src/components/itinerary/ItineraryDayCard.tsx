@@ -503,12 +503,7 @@ export function ItineraryDayCard({
                       )}
                       onClick={() => {
                         setTpOpen(null);
-                        onUpdateTimePeriod(
-                          day.id,
-                          currentOption.id,
-                          ol.id,
-                          k
-                        );
+                        onUpdateTimePeriod(day.id, currentOption.id, ol.id, k);
                       }}
                     >
                       <span

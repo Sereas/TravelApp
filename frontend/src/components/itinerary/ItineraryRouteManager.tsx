@@ -188,9 +188,7 @@ function InlineRouteBuilder({
 
   const toggleStop = useCallback((olId: string) => {
     setPickIds((prev) =>
-      prev.includes(olId)
-        ? prev.filter((id) => id !== olId)
-        : [...prev, olId]
+      prev.includes(olId) ? prev.filter((id) => id !== olId) : [...prev, olId]
     );
   }, []);
 
@@ -433,7 +431,8 @@ export function ItineraryRouteManager({
 
   const editInitialIds =
     editingRouteId != null
-      ? (routes.find((r) => r.route_id === editingRouteId)?.option_location_ids ?? [])
+      ? (routes.find((r) => r.route_id === editingRouteId)
+          ?.option_location_ids ?? [])
       : [];
   const editInitialTransport =
     editingRouteId != null
@@ -539,9 +538,8 @@ export function ItineraryRouteManager({
             const hasSegments = route.segments && route.segments.length > 0;
             const stopNames = route.option_location_ids.map(
               (olId) =>
-                sortedLocations.find(
-                  (location) => location.id === olId
-                )?.location.name ?? "?"
+                sortedLocations.find((location) => location.id === olId)
+                  ?.location.name ?? "?"
             );
 
             return (
