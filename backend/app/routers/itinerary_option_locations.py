@@ -20,7 +20,7 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger("itinerary_option_lo
 
 router = APIRouter(prefix="/trips", tags=["itinerary-option-locations"])
 
-_OPTION_LOCATIONS_SELECT = "option_id, location_id, sort_order, time_period"
+_OPTION_LOCATIONS_SELECT = "id, option_id, location_id, sort_order, time_period"
 _LOCATION_SUMMARY_SELECT = (
     "location_id, name, city, address, google_link, google_place_id, "
     "category, note, working_hours, requires_booking, user_image_url"
@@ -78,6 +78,7 @@ def _option_location_row_to_response(
     loc_id = str(row["location_id"])
     summary = _build_location_summary(loc_row, loc_id)
     return OptionLocationResponse(
+        id=str(row["id"]),
         option_id=str(row["option_id"]),
         location_id=loc_id,
         sort_order=int(row.get("sort_order", 0)),
@@ -175,19 +176,7 @@ async def add_location_to_option(
     """
     _ensure_resource_chain(supabase, trip_id, user_id, day_id=day_id, option_id=option_id)
     _ensure_location_in_trip(supabase, trip_id, body.location_id)
-    # Uniqueness: (option_id, location_id)
-    existing = (
-        supabase.table("option_locations")
-        .select("option_id, location_id")
-        .eq("option_id", str(option_id))
-        .eq("location_id", str(body.location_id))
-        .execute()
-    )
-    if existing.data and len(existing.data) > 0:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Location already added to this option",
-        )
+    # Duplicates are now allowed — same location can appear multiple times in an option
     row = {
         "option_id": str(option_id),
         "location_id": str(body.location_id),
@@ -242,42 +231,42 @@ async def reorder_option_locations(
     supabase=Depends(get_supabase_client),
 ):
     """
-    Reorder locations within an option. Body: ordered list of location_ids.
+    Reorder locations within an option. Body: ordered list of ol_ids (option_locations.id).
     Backend sets sort_order to 0, 1, 2, … by position.
-    422 if any id not in this option or duplicate.
+    422 if any id not in this option or duplicate ol_id.
     """
     _ensure_resource_chain(supabase, trip_id, user_id, day_id=day_id, option_id=option_id)
     option_id_str = str(option_id)
-    if not body.location_ids:
+    if not body.ol_ids:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="location_ids must not be empty",
+            detail="ol_ids must not be empty",
         )
     seen: set[str] = set()
-    for lid in body.location_ids:
-        lid_str = str(lid)
-        if lid_str in seen:
+    for oid in body.ol_ids:
+        oid_str = str(oid)
+        if oid_str in seen:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Duplicate location_id in location_ids",
+                detail="Duplicate ol_id in ol_ids",
             )
-        seen.add(lid_str)
-    # Fetch current option_locations for this option to validate all ids belong
+        seen.add(oid_str)
+    # Fetch current option_locations for this option to validate all ol_ids belong
     current = (
         supabase.table("option_locations")
-        .select("location_id")
+        .select("id")
         .eq("option_id", option_id_str)
         .execute()
     )
-    current_ids = {str(r["location_id"]) for r in (current.data or [])}
+    current_ids = {str(r["id"]) for r in (current.data or [])}
     if seen != current_ids:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="location_ids must match exactly the locations in this option",
+            detail="ol_ids must match exactly the option_locations in this option",
         )
     supabase.rpc(
         "reorder_option_locations",
-        {"p_option_id": option_id_str, "p_location_ids": [str(lid) for lid in body.location_ids]},
+        {"p_option_id": option_id_str, "p_ol_ids": [str(oid) for oid in body.ol_ids]},
     ).execute()
     result = (
         supabase.table("option_locations")
@@ -310,14 +299,14 @@ async def reorder_option_locations(
 
 
 @router.patch(
-    "/{trip_id}/days/{day_id}/options/{option_id}/locations/{location_id}",
+    "/{trip_id}/days/{day_id}/options/{option_id}/locations/{ol_id}",
     response_model=OptionLocationResponse,
 )
 async def update_option_location(
     trip_id: UUID,
     day_id: UUID,
     option_id: UUID,
-    location_id: UUID,
+    ol_id: UUID,
     body: UpdateOptionLocationBody,
     user_id: UUID = Depends(get_current_user_id),
     supabase=Depends(get_supabase_client),
@@ -325,14 +314,14 @@ async def update_option_location(
     """
     Update an option-location link (sort_order and/or time_period).
     Trip/day/option must exist and be owned; link must exist; else 404.
-    422 if no fields provided.
+    422 if no fields provided. Addressed by ol_id (surrogate key).
     """
     _ensure_resource_chain(supabase, trip_id, user_id, day_id=day_id, option_id=option_id)
     existing = (
         supabase.table("option_locations")
         .select(_OPTION_LOCATIONS_SELECT)
+        .eq("id", str(ol_id))
         .eq("option_id", str(option_id))
-        .eq("location_id", str(location_id))
         .execute()
     )
     if not existing.data or len(existing.data) == 0:
@@ -355,14 +344,11 @@ async def update_option_location(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="At least one field must be provided for update",
         )
-    supabase.table("option_locations").update(update_data).eq("option_id", str(option_id)).eq(
-        "location_id", str(location_id)
-    ).execute()
+    supabase.table("option_locations").update(update_data).eq("id", str(ol_id)).execute()
     updated = (
         supabase.table("option_locations")
         .select(_OPTION_LOCATIONS_SELECT)
-        .eq("option_id", str(option_id))
-        .eq("location_id", str(location_id))
+        .eq("id", str(ol_id))
         .execute()
     )
     if not updated.data or len(updated.data) == 0:
@@ -371,50 +357,51 @@ async def update_option_location(
             detail="Option-location was updated but could not be retrieved; please refresh",
         )
     rec = updated.data[0]
+    location_id = str(rec["location_id"])
     loc_row = (
         supabase.table("locations")
         .select(_LOCATION_SUMMARY_SELECT)
         .eq("trip_id", str(trip_id))
-        .eq("location_id", str(location_id))
+        .eq("location_id", location_id)
         .execute()
     )
     loc_data = (loc_row.data or [None])[0] if loc_row.data else None
     if loc_data:
-        _enrich_locations_with_photos(supabase, {str(location_id): loc_data})
+        _enrich_locations_with_photos(supabase, {location_id: loc_data})
     logger.info(
         "option_location_updated",
         trip_id=str(trip_id),
         day_id=str(day_id),
         option_id=str(option_id),
-        location_id=str(location_id),
+        ol_id=str(ol_id),
     )
     return _option_location_row_to_response(rec, loc_row=loc_data)
 
 
 @router.delete(
-    "/{trip_id}/days/{day_id}/options/{option_id}/locations/{location_id}",
+    "/{trip_id}/days/{day_id}/options/{option_id}/locations/{ol_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def remove_location_from_option(
     trip_id: UUID,
     day_id: UUID,
     option_id: UUID,
-    location_id: UUID,
+    ol_id: UUID,
     user_id: UUID = Depends(get_current_user_id),
     supabase=Depends(get_supabase_client),
 ):
     """
-    Remove a location from an option.
+    Remove a location from an option by its surrogate ol_id.
     Trip/day/option must exist and be owned; link must exist; else 404.
     """
     _ensure_resource_chain(supabase, trip_id, user_id, day_id=day_id, option_id=option_id)
     option_id_str = str(option_id)
-    location_id_str = str(location_id)
+    ol_id_str = str(ol_id)
     # Single atomic RPC: handles route cleanup + option_locations delete in one transaction
     try:
         supabase.rpc(
             "remove_location_from_option",
-            {"p_option_id": option_id_str, "p_location_id": location_id_str},
+            {"p_option_id": option_id_str, "p_ol_id": ol_id_str},
         ).execute()
     except Exception as exc:
         detail = str(exc)
@@ -432,7 +419,7 @@ async def remove_location_from_option(
         trip_id=str(trip_id),
         day_id=str(day_id),
         option_id=str(option_id),
-        location_id=str(location_id),
+        ol_id=str(ol_id),
     )
 
 
@@ -462,45 +449,23 @@ async def batch_add_locations_to_option(
     _ensure_resource_chain(supabase, trip_id, user_id, day_id=day_id, option_id=option_id)
     option_id_str = str(option_id)
     trip_id_str = str(trip_id)
-    # Collect and deduplicate
-    seen_pairs: set[str] = set()
-    location_ids_to_add: list[str] = []
-    for item in body:
-        lid = str(item.location_id)
-        if lid in seen_pairs:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Duplicate location in batch for this option",
-            )
-        seen_pairs.add(lid)
-        location_ids_to_add.append(lid)
-    # Batch-validate: all locations belong to trip (single query)
+    # Duplicates are allowed — same location can appear multiple times
+    location_ids_to_add: list[str] = [str(item.location_id) for item in body]
+    # Batch-validate: all locations belong to trip (single query, deduplicated)
+    unique_location_ids = list(set(location_ids_to_add))
     loc_check = (
         supabase.table("locations")
         .select("location_id")
         .eq("trip_id", trip_id_str)
-        .in_("location_id", location_ids_to_add)
+        .in_("location_id", unique_location_ids)
         .execute()
     )
     found_ids = {str(r["location_id"]) for r in (loc_check.data or [])}
-    missing = [lid for lid in location_ids_to_add if lid not in found_ids]
+    missing = [lid for lid in unique_location_ids if lid not in found_ids]
     if missing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Location does not belong to this trip",
-        )
-    # Batch-check conflicts (single query)
-    existing_check = (
-        supabase.table("option_locations")
-        .select("location_id")
-        .eq("option_id", option_id_str)
-        .in_("location_id", location_ids_to_add)
-        .execute()
-    )
-    if existing_check.data and len(existing_check.data) > 0:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Location already added to this option",
         )
     # Batch insert via RPC (single DB call)
     rpc_result = supabase.rpc(

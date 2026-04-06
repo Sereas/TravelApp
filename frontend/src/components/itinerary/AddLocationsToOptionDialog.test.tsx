@@ -112,7 +112,7 @@ describe("AddLocationsToOptionDialog", () => {
     ).toBeInTheDocument();
   });
 
-  it("lists available locations (excluding already added)", async () => {
+  it("lists all locations and shows 'In plan' badge for already added", async () => {
     renderDialog({
       alreadyAddedIds: new Set(["loc-2"]),
     });
@@ -122,7 +122,8 @@ describe("AddLocationsToOptionDialog", () => {
 
     expect(screen.getByText("Eiffel Tower")).toBeInTheDocument();
     expect(screen.getByText("Nice Promenade")).toBeInTheDocument();
-    expect(screen.queryByText("Louvre Museum")).not.toBeInTheDocument();
+    expect(screen.getByText("Louvre Museum")).toBeInTheDocument();
+    expect(screen.getByText("In plan")).toBeInTheDocument();
   });
 
   it("filters list by search", async () => {
@@ -199,14 +200,15 @@ describe("AddLocationsToOptionDialog", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows empty state when all locations already added", async () => {
+  it("shows all locations with 'In plan' badges when all already added", async () => {
     renderDialog({ alreadyAddedIds: new Set(["loc-1", "loc-2", "loc-3"]) });
     await userEvent.click(
       screen.getByRole("button", { name: /add locations/i })
     );
 
-    expect(
-      screen.getByText(/all locations are already added/i)
-    ).toBeInTheDocument();
+    expect(screen.getByText("Eiffel Tower")).toBeInTheDocument();
+    expect(screen.getByText("Louvre Museum")).toBeInTheDocument();
+    expect(screen.getByText("Nice Promenade")).toBeInTheDocument();
+    expect(screen.getAllByText("In plan")).toHaveLength(3);
   });
 });

@@ -43,6 +43,7 @@ describe("ItineraryDayTimeline", () => {
       <ItineraryDayTimeline
         sorted={[
           {
+            id: "ol-1",
             location_id: "loc-1",
             sort_order: 0,
             time_period: "morning",
@@ -65,7 +66,7 @@ describe("ItineraryDayTimeline", () => {
         ]}
         locRouteMap={new Map()}
         expandedId={null}
-        dragId="loc-1"
+        dragId="ol-1"
         dropId="__end__"
         isPickMode={false}
         pickIds={[]}
@@ -101,6 +102,7 @@ describe("ItineraryDayTimeline", () => {
       <ItineraryDayTimeline
         sorted={[
           {
+            id: "ol-1",
             location_id: "loc-1",
             sort_order: 0,
             time_period: "morning",
@@ -121,6 +123,7 @@ describe("ItineraryDayTimeline", () => {
             },
           },
           {
+            id: "ol-2",
             location_id: "loc-2",
             sort_order: 1,
             time_period: "evening",
