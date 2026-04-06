@@ -253,10 +253,7 @@ async def reorder_option_locations(
         seen.add(oid_str)
     # Fetch current option_locations for this option to validate all ol_ids belong
     current = (
-        supabase.table("option_locations")
-        .select("id")
-        .eq("option_id", option_id_str)
-        .execute()
+        supabase.table("option_locations").select("id").eq("option_id", option_id_str).execute()
     )
     current_ids = {str(r["id"]) for r in (current.data or [])}
     if seen != current_ids:

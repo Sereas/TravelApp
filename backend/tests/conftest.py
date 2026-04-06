@@ -934,10 +934,7 @@ def mock_supabase_trips_and_days():
                     for r in self._store
                     if not (
                         (self._id is None or str(r.get("id")) == self._id)
-                        and (
-                            self._option_id is None
-                            or str(r.get("option_id")) == self._option_id
-                        )
+                        and (self._option_id is None or str(r.get("option_id")) == self._option_id)
                         and (
                             self._location_id is None
                             or str(r.get("location_id")) == self._location_id

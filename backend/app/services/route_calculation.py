@@ -451,10 +451,7 @@ def get_route_with_fresh_segments(
         )
     # Resolve option_location_id → location_id via option_locations
     ol_rows = (
-        supabase.table("option_locations")
-        .select("id, location_id")
-        .in_("id", ol_ids)
-        .execute()
+        supabase.table("option_locations").select("id, location_id").in_("id", ol_ids).execute()
     )
     ol_to_loc = {str(r["id"]): str(r["location_id"]) for r in (ol_rows.data or [])}
     location_ids = [ol_to_loc.get(str(s["option_location_id"])) for s in ordered]

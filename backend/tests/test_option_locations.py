@@ -291,10 +291,7 @@ def test_remove_location_from_option_returns_204(
             f"/api/v1/trips/{trip_id}/days/{day_id}/options/{option_id}/locations/{ol_id}",
         )
         assert r.status_code == 204
-        assert not any(
-            ol.get("id") == ol_id
-            for ol in mock_sb._option_locations_store
-        )
+        assert not any(ol.get("id") == ol_id for ol in mock_sb._option_locations_store)
     finally:
         app.dependency_overrides.clear()
 
