@@ -846,6 +846,7 @@ def mock_supabase_trips_and_days():
             self._store = store
             self._option_id = None
             self._location_id = None
+            self._id = None
             self._order_col = None
             self._order_desc = False
             self._insert_row = None
@@ -855,6 +856,7 @@ def mock_supabase_trips_and_days():
         def select(self, *args):
             self._option_id = None
             self._location_id = None
+            self._id = None
             self._order_col = None
             self._order_desc = False
             self._insert_row = None
@@ -865,15 +867,11 @@ def mock_supabase_trips_and_days():
         def eq(self, key, value):
             val = str(value) if value is not None else None
             if key == "option_id":
-                if self._is_delete:
-                    self._option_id = val
-                else:
-                    self._option_id = val
+                self._option_id = val
             elif key == "location_id":
-                if self._is_delete:
-                    self._location_id = val
-                else:
-                    self._location_id = val
+                self._location_id = val
+            elif key == "id":
+                self._id = val
             return self
 
         def in_(self, key, values):
@@ -908,6 +906,7 @@ def mock_supabase_trips_and_days():
         def execute(self):
             if self._insert_row is not None:
                 row = {
+                    "id": str(_uuid.uuid4()),
                     "option_id": self._insert_row.get("option_id"),
                     "location_id": self._insert_row.get("location_id"),
                     "sort_order": int(self._insert_row.get("sort_order", 0)),
@@ -919,6 +918,8 @@ def mock_supabase_trips_and_days():
             if self._update_data is not None:
                 updated = []
                 for r in self._store:
+                    if self._id and str(r.get("id")) != self._id:
+                        continue
                     if self._option_id and str(r.get("option_id")) != self._option_id:
                         continue
                     if self._location_id and str(r.get("location_id")) != self._location_id:
@@ -932,7 +933,8 @@ def mock_supabase_trips_and_days():
                     r
                     for r in self._store
                     if not (
-                        (self._option_id is None or str(r.get("option_id")) == self._option_id)
+                        (self._id is None or str(r.get("id")) == self._id)
+                        and (self._option_id is None or str(r.get("option_id")) == self._option_id)
                         and (
                             self._location_id is None
                             or str(r.get("location_id")) == self._location_id
@@ -951,6 +953,8 @@ def mock_supabase_trips_and_days():
                 return str(row.get("option_id")) == self._option_id
 
             filtered = [r for r in filtered if _matches_option_id(r)]
+            if self._id is not None:
+                filtered = [r for r in filtered if str(r.get("id")) == self._id]
             if self._location_id is not None:
                 filtered = [r for r in filtered if str(r.get("location_id")) == self._location_id]
             if self._order_col:
@@ -1054,6 +1058,7 @@ def mock_supabase_trips_and_days():
                             "option_ending_city": o.get("ending_city"),
                             "option_created_by": o.get("created_by"),
                             "option_created_at": o.get("created_at"),
+                            "ol_id": ol.get("id"),
                             "location_id": lid,
                             "ol_sort_order": ol.get("sort_order", 0),
                             "time_period": ol.get("time_period") or "",
@@ -1116,7 +1121,7 @@ def mock_supabase_trips_and_days():
                 return _LocationsTableForItinerary(self._locations_store)
             if name == "option_locations":
                 return _OptionLocationsTable(self._option_locations_store)
-            if name in ("option_routes", "route_stops"):
+            if name in ("option_routes", "route_stops", "place_photos"):
                 return _EmptyTable()
             return None
 
@@ -1163,10 +1168,10 @@ def mock_supabase_trips_and_days():
                 return type("RpcChain", (), {"execute": lambda _: _RpcResult(True)})()
             if name == "reorder_option_locations":
                 oid = str(params.get("p_option_id", ""))
-                lids = [str(x) for x in (params.get("p_location_ids") or [])]
-                for pos, lid in enumerate(lids):
+                ol_ids = [str(x) for x in (params.get("p_ol_ids") or [])]
+                for pos, ol_id in enumerate(ol_ids):
                     for r in self._option_locations_store:
-                        if str(r.get("option_id")) == oid and str(r.get("location_id")) == lid:
+                        if str(r.get("option_id")) == oid and str(r.get("id")) == ol_id:
                             r["sort_order"] = pos
                 return type("RpcChain", (), {"execute": lambda _: _RpcResult(None)})()
             if name == "reorder_day_options":
@@ -1193,6 +1198,7 @@ def mock_supabase_trips_and_days():
                 inserted = []
                 for i, lid in enumerate(lids):
                     row = {
+                        "id": str(_uuid.uuid4()),
                         "option_id": oid,
                         "location_id": lid,
                         "sort_order": int(sorts[i]) if i < len(sorts) else 0,
@@ -1209,9 +1215,9 @@ def mock_supabase_trips_and_days():
                 return type("RpcChain", (), {"execute": lambda _: _RpcResult(filtered)})()
             if name == "remove_location_from_option":
                 oid = str(params.get("p_option_id", ""))
-                lid = str(params.get("p_location_id", ""))
+                ol_id = str(params.get("p_ol_id", ""))
                 exists = any(
-                    str(r.get("option_id")) == oid and str(r.get("location_id")) == lid
+                    str(r.get("option_id")) == oid and str(r.get("id")) == ol_id
                     for r in self._option_locations_store
                 )
                 if not exists:
@@ -1219,7 +1225,7 @@ def mock_supabase_trips_and_days():
                 self._option_locations_store[:] = [
                     r
                     for r in self._option_locations_store
-                    if not (str(r.get("option_id")) == oid and str(r.get("location_id")) == lid)
+                    if not (str(r.get("option_id")) == oid and str(r.get("id")) == ol_id)
                 ]
                 return type("RpcChain", (), {"execute": lambda _: _RpcResult(None)})()
             if name == "update_route_with_stops":
@@ -1234,13 +1240,13 @@ def mock_supabase_trips_and_days():
                     raise Exception("ROUTE_NOT_FOUND")
                 tm = params.get("p_transport_mode")
                 lb = params.get("p_label")
-                lids = params.get("p_location_ids")
+                ol_ids = params.get("p_option_location_ids")
                 if tm is not None:
                     route["transport_mode"] = tm
                 if lb is not None:
                     route["label"] = lb
-                if lids is not None:
-                    route["stop_location_ids"] = lids
+                if ol_ids is not None:
+                    route["stop_option_location_ids"] = ol_ids
                     route["duration_seconds"] = None
                     route["distance_meters"] = None
                 row = {

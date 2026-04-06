@@ -768,6 +768,7 @@ describe("TripDetailPage", () => {
               created_by: null,
               locations: [
                 {
+                  id: "ol-1",
                   location_id: "loc-1",
                   sort_order: 0,
                   time_period: "morning",
@@ -784,6 +785,7 @@ describe("TripDetailPage", () => {
                   },
                 },
                 {
+                  id: "ol-2",
                   location_id: "loc-2",
                   sort_order: 1,
                   time_period: "afternoon",
@@ -835,6 +837,7 @@ describe("TripDetailPage", () => {
               created_by: null,
               locations: [
                 {
+                  id: "ol-1",
                   location_id: "loc-1",
                   sort_order: 0,
                   time_period: "morning",
@@ -893,7 +896,7 @@ describe("TripDetailPage", () => {
       "trip-1",
       "day-1",
       "opt-1",
-      "loc-1",
+      "ol-1",
       { time_period: "evening" }
     );
   });

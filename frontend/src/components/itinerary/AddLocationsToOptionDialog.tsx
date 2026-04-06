@@ -47,7 +47,7 @@ export function AddLocationsToOptionDialog({
   const hasCityFilter = citiesForFilter.size > 0;
 
   const availableLocations = useMemo(() => {
-    let locs = allLocations.filter((l) => !alreadyAddedIds.has(l.id));
+    let locs = [...allLocations];
 
     if (hasCityFilter && filterByCities) {
       locs = locs.filter(
@@ -66,14 +66,7 @@ export function AddLocationsToOptionDialog({
     }
 
     return locs;
-  }, [
-    allLocations,
-    alreadyAddedIds,
-    hasCityFilter,
-    filterByCities,
-    citiesForFilter,
-    search,
-  ]);
+  }, [allLocations, hasCityFilter, filterByCities, citiesForFilter, search]);
 
   function toggleLocation(id: string) {
     setSelected((prev) => {
@@ -153,12 +146,13 @@ export function AddLocationsToOptionDialog({
                   ? "No matching locations."
                   : hasCityFilter && filterByCities
                     ? `No locations in ${cityFilterLabel}. Uncheck the filter to see all.`
-                    : "All locations are already added."}
+                    : "No locations found."}
             </p>
           ) : (
             <ul className="space-y-0.5">
               {availableLocations.map((loc) => {
                 const isSelected = selected.has(loc.id);
+                const isAlreadyAdded = alreadyAddedIds.has(loc.id);
                 return (
                   <li key={loc.id}>
                     <button
@@ -194,6 +188,11 @@ export function AddLocationsToOptionDialog({
                           </span>
                         )}
                       </span>
+                      {isAlreadyAdded && (
+                        <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                          In plan
+                        </span>
+                      )}
                     </button>
                   </li>
                 );

@@ -133,6 +133,7 @@ describe("ItineraryDayRail", () => {
                 created_by: null,
                 locations: [
                   {
+                    id: "ol-1",
                     location_id: "loc-1",
                     sort_order: 0,
                     time_period: "morning",
@@ -153,6 +154,7 @@ describe("ItineraryDayRail", () => {
                     },
                   },
                   {
+                    id: "ol-2",
                     location_id: "loc-2",
                     sort_order: 1,
                     time_period: "afternoon",
@@ -187,6 +189,7 @@ describe("ItineraryDayRail", () => {
             created_by: null,
             locations: [
               {
+                id: "ol-1",
                 location_id: "loc-1",
                 sort_order: 0,
                 time_period: "morning",
@@ -207,6 +210,7 @@ describe("ItineraryDayRail", () => {
                 },
               },
               {
+                id: "ol-2",
                 location_id: "loc-2",
                 sort_order: 1,
                 time_period: "afternoon",

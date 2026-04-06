@@ -197,7 +197,7 @@ describe("API client", () => {
       "trip-1",
       "day-1",
       "opt-1",
-      { location_ids: ["loc-2", "loc-1"] }
+      { ol_ids: ["ol-2", "ol-1"] }
     );
 
     expect(global.fetch).toHaveBeenCalledWith(
@@ -206,7 +206,7 @@ describe("API client", () => {
       ),
       expect.objectContaining({
         method: "PATCH",
-        body: JSON.stringify({ location_ids: ["loc-2", "loc-1"] }),
+        body: JSON.stringify({ ol_ids: ["ol-2", "ol-1"] }),
       })
     );
     expect(result).toHaveLength(2);

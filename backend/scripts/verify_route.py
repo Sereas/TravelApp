@@ -39,7 +39,7 @@ def main():
 
     stops = (
         supabase.table("route_stops")
-        .select("location_id, stop_order")
+        .select("option_location_id, stop_order")
         .eq("route_id", route_id)
         .order("stop_order")
         .execute()

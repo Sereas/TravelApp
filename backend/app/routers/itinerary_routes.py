@@ -34,9 +34,9 @@ def _route_status_from_totals(duration_seconds: int | None, distance_meters: int
 
 def _rpc_row_to_response(row: dict) -> RouteResponse:
     """Build RouteResponse from a get_option_routes RPC row."""
-    location_ids = row.get("location_ids") or []
-    if isinstance(location_ids, str):
-        location_ids = [lid.strip() for lid in location_ids.split(",") if lid.strip()]
+    ol_ids = row.get("option_location_ids") or []
+    if isinstance(ol_ids, str):
+        ol_ids = [oid.strip() for oid in ol_ids.split(",") if oid.strip()]
     duration = row.get("duration_seconds")
     distance = row.get("distance_meters")
     return RouteResponse(
@@ -47,7 +47,7 @@ def _rpc_row_to_response(row: dict) -> RouteResponse:
         duration_seconds=duration,
         distance_meters=distance,
         sort_order=int(row.get("sort_order", 0)),
-        location_ids=[str(lid) for lid in location_ids],
+        option_location_ids=[str(oid) for oid in ol_ids],
         route_status=row.get("route_status") or _route_status_from_totals(duration, distance),
     )
 
@@ -103,15 +103,23 @@ async def create_route(
     Uses create_route_with_stops RPC.
     """
     _ensure_resource_chain(supabase, trip_id, user_id, day_id=day_id, option_id=option_id)
-    result = supabase.rpc(
-        "create_route_with_stops",
-        {
-            "p_option_id": str(option_id),
-            "p_transport_mode": body.transport_mode,
-            "p_label": body.label,
-            "p_location_ids": body.location_ids,
-        },
-    ).execute()
+    try:
+        result = supabase.rpc(
+            "create_route_with_stops",
+            {
+                "p_option_id": str(option_id),
+                "p_transport_mode": body.transport_mode,
+                "p_label": body.label,
+                "p_option_location_ids": body.option_location_ids,
+            },
+        ).execute()
+    except Exception as e:
+        if "INVALID_OPTION_LOCATION_IDS" in str(e):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="One or more option_location_ids do not belong to this option",
+            ) from None
+        raise
     if not result.data:
         logger.error(
             "route_create_failed",
@@ -125,7 +133,7 @@ async def create_route(
             detail="Failed to create route; please try again",
         )
     row = result.data if isinstance(result.data, dict) else result.data[0]
-    row["location_ids"] = body.location_ids
+    row["option_location_ids"] = body.option_location_ids
     # New route has no segments yet; metrics when client calls get with segments or recalculate
     row["route_status"] = "pending"
     logger.info(
@@ -193,13 +201,13 @@ async def get_route(
         return with_segments
     stops = (
         supabase.table("route_stops")
-        .select("location_id, stop_order")
+        .select("option_location_id, stop_order")
         .eq("route_id", str(route_id))
         .order("stop_order")
         .execute()
     )
     stops_sorted = sorted((stops.data or []), key=lambda r: r["stop_order"])
-    location_ids = [str(s["location_id"]) for s in stops_sorted]
+    ol_ids = [str(s["option_location_id"]) for s in stops_sorted]
     row = existing.data[0]
     duration = row.get("duration_seconds")
     distance = row.get("distance_meters")
@@ -211,7 +219,7 @@ async def get_route(
         duration_seconds=duration,
         distance_meters=distance,
         sort_order=int(row.get("sort_order", 0)),
-        location_ids=location_ids,
+        option_location_ids=ol_ids,
         route_status=_route_status_from_totals(duration, distance),
     )
 
@@ -231,13 +239,13 @@ async def update_route(
 ):
     """
     Update a route's stops, transport mode, and/or label.
-    When location_ids changes, stale route_segments are cleared and metrics reset to pending.
+    When option_location_ids changes, stale route_segments are cleared and metrics reset to pending.
     Segment cache is preserved so unchanged stop-pairs reuse cached results.
     """
-    if body.transport_mode is None and body.label is None and body.location_ids is None:
+    if body.transport_mode is None and body.label is None and body.option_location_ids is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="At least one of transport_mode, label, or location_ids is required",
+            detail="At least one of transport_mode, label, or option_location_ids is required",
         )
     _ensure_resource_chain(supabase, trip_id, user_id, day_id=day_id, option_id=option_id)
     try:
@@ -248,7 +256,7 @@ async def update_route(
                 "p_option_id": str(option_id),
                 "p_transport_mode": body.transport_mode,
                 "p_label": body.label,
-                "p_location_ids": body.location_ids,
+                "p_option_location_ids": body.option_location_ids,
             },
         ).execute()
     except Exception as e:
@@ -257,35 +265,40 @@ async def update_route(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Route not found"
             ) from None
+        if "INVALID_OPTION_LOCATION_IDS" in err_msg:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="One or more option_location_ids do not belong to this option",
+            ) from None
         raise
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
     row = result.data if isinstance(result.data, dict) else result.data[0]
-    row["location_ids"] = body.location_ids or []
+    row["option_location_ids"] = body.option_location_ids or []
     # If stops changed, status is pending; otherwise preserve
-    if body.location_ids is not None:
+    if body.option_location_ids is not None:
         row["route_status"] = "pending"
     else:
         row["route_status"] = _route_status_from_totals(
             row.get("duration_seconds"), row.get("distance_meters")
         )
-    # If location_ids not changed, fetch current stops for the response
-    if body.location_ids is None:
+    # If option_location_ids not changed, fetch current stops for the response
+    if body.option_location_ids is None:
         stops = (
             supabase.table("route_stops")
-            .select("location_id, stop_order")
+            .select("option_location_id, stop_order")
             .eq("route_id", str(route_id))
             .order("stop_order")
             .execute()
         )
-        row["location_ids"] = [str(s["location_id"]) for s in (stops.data or [])]
+        row["option_location_ids"] = [str(s["option_location_id"]) for s in (stops.data or [])]
     logger.info(
         "route_updated",
         trip_id=str(trip_id),
         day_id=str(day_id),
         option_id=str(option_id),
         route_id=str(route_id),
-        changed_stops=body.location_ids is not None,
+        changed_stops=body.option_location_ids is not None,
         changed_transport=body.transport_mode is not None,
     )
     return _rpc_row_to_response(row)

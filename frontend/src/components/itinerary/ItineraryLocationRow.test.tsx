@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { ItineraryLocationRow } from "./ItineraryLocationRow";
 
 const optionLocation = {
+  id: "ol-1",
   location_id: "loc-1",
   sort_order: 0,
   time_period: "morning",
@@ -71,12 +72,12 @@ describe("ItineraryLocationRow", () => {
 
     const expandBtn = screen.getByRole("button", { expanded: false });
     await userEvent.click(expandBtn);
-    expect(props.onToggleExpanded).toHaveBeenCalledWith("loc-1");
+    expect(props.onToggleExpanded).toHaveBeenCalledWith("ol-1");
 
     await userEvent.click(
       screen.getByRole("button", { name: /time: morning/i })
     );
-    expect(props.onToggleTimePicker).toHaveBeenCalledWith("loc-1");
+    expect(props.onToggleTimePicker).toHaveBeenCalledWith("ol-1");
   });
 
   it("removes a location from the current option", async () => {
@@ -88,7 +89,7 @@ describe("ItineraryLocationRow", () => {
     expect(props.onRemoveLocation).toHaveBeenCalledWith(
       "day-1",
       "opt-1",
-      "loc-1"
+      "ol-1"
     );
   });
 
@@ -106,6 +107,7 @@ describe("ItineraryLocationRow", () => {
     renderRow({
       optionLocation: {
         ...optionLocation,
+        id: "ol-1",
         location: {
           ...optionLocation.location,
           image_url: "https://images.example/eiffel.jpg",

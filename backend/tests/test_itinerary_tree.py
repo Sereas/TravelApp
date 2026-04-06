@@ -287,7 +287,7 @@ def test_get_itinerary_includes_route_polylines(
             "duration_seconds": 1560,
             "distance_meters": 1900,
             "sort_order": 0,
-            "stop_location_ids": [loc1, loc2],
+            "stop_option_location_ids": [loc1, loc2],
             "segments": [
                 {
                     "segment_order": 0,
@@ -318,7 +318,7 @@ def test_get_itinerary_includes_route_polylines(
         assert route["duration_seconds"] == 1560
         assert route["distance_meters"] == 1900
         assert route["route_status"] == "ok"
-        assert route["location_ids"] == [loc1, loc2]
+        assert route["option_location_ids"] == [loc1, loc2]
         # Segments include encoded_polyline
         assert len(route["segments"]) == 1
         seg = route["segments"][0]
@@ -357,7 +357,7 @@ def test_get_itinerary_route_without_polyline(
             "duration_seconds": None,
             "distance_meters": None,
             "sort_order": 0,
-            "stop_location_ids": [loc1, loc2],
+            "stop_option_location_ids": [loc1, loc2],
             "segments": [
                 {
                     "segment_order": 0,

@@ -186,11 +186,9 @@ function InlineRouteBuilder({
   const [pickIds, setPickIds] = useState<string[]>(initialPickIds);
   const [transport, setTransport] = useState<TransportMode>(initialTransport);
 
-  const toggleStop = useCallback((locationId: string) => {
+  const toggleStop = useCallback((olId: string) => {
     setPickIds((prev) =>
-      prev.includes(locationId)
-        ? prev.filter((id) => id !== locationId)
-        : [...prev, locationId]
+      prev.includes(olId) ? prev.filter((id) => id !== olId) : [...prev, olId]
     );
   }, []);
 
@@ -204,12 +202,12 @@ function InlineRouteBuilder({
     });
   }, []);
 
-  const removeStop = useCallback((locationId: string) => {
-    setPickIds((prev) => prev.filter((id) => id !== locationId));
+  const removeStop = useCallback((olId: string) => {
+    setPickIds((prev) => prev.filter((id) => id !== olId));
   }, []);
 
   const selectAllInOrder = useCallback(() => {
-    setPickIds(displayLocations.map((l) => l.location_id));
+    setPickIds(displayLocations.map((l) => l.id));
   }, [displayLocations]);
 
   return (
@@ -278,13 +276,13 @@ function InlineRouteBuilder({
       {/* Available stops */}
       <div className="space-y-1">
         {displayLocations.map((ol) => {
-          const selected = pickIds.includes(ol.location_id);
-          const seq = selected ? pickIds.indexOf(ol.location_id) + 1 : 0;
+          const selected = pickIds.includes(ol.id);
+          const seq = selected ? pickIds.indexOf(ol.id) + 1 : 0;
           return (
             <button
-              key={ol.location_id}
+              key={ol.id}
               type="button"
-              onClick={() => toggleStop(ol.location_id)}
+              onClick={() => toggleStop(ol.id)}
               className={cn(
                 "flex w-full items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left text-xs transition-all",
                 selected
@@ -328,7 +326,7 @@ function InlineRouteBuilder({
           </span>
           <div className="rounded-lg border border-border/60 bg-card p-1">
             {pickIds.map((id, i) => {
-              const ol = displayLocations.find((l) => l.location_id === id);
+              const ol = displayLocations.find((l) => l.id === id);
               if (!ol) return null;
               return (
                 <div
@@ -433,7 +431,8 @@ export function ItineraryRouteManager({
 
   const editInitialIds =
     editingRouteId != null
-      ? (routes.find((r) => r.route_id === editingRouteId)?.location_ids ?? [])
+      ? (routes.find((r) => r.route_id === editingRouteId)
+          ?.option_location_ids ?? [])
       : [];
   const editInitialTransport =
     editingRouteId != null
@@ -537,11 +536,10 @@ export function ItineraryRouteManager({
             const metricsError = routeMetricsError[route.route_id];
             const isExpanded = expandedRouteId === route.route_id;
             const hasSegments = route.segments && route.segments.length > 0;
-            const stopNames = route.location_ids.map(
-              (locationId) =>
-                sortedLocations.find(
-                  (location) => location.location_id === locationId
-                )?.location.name ?? "?"
+            const stopNames = route.option_location_ids.map(
+              (olId) =>
+                sortedLocations.find((location) => location.id === olId)
+                  ?.location.name ?? "?"
             );
 
             return (

@@ -10,7 +10,7 @@ interface RouteInfo {
   route: {
     route_id: string;
     transport_mode: string;
-    location_ids: string[];
+    option_location_ids: string[];
     segments?: Array<{
       segment_order: number;
       duration_seconds?: number | null;
@@ -149,7 +149,7 @@ export function ItineraryDayTimeline({
   >();
 
   for (const ol of sorted) {
-    const routeInfos = locRouteMap.get(ol.location_id) ?? [];
+    const routeInfos = locRouteMap.get(ol.id) ?? [];
     let top: string | null = null;
     let bottom: string | null = null;
 
@@ -157,12 +157,12 @@ export function ItineraryDayTimeline({
       if (!top && info.idx > 0) {
         top = info.color.hex;
       }
-      if (!bottom && info.idx < info.route.location_ids.length - 1) {
+      if (!bottom && info.idx < info.route.option_location_ids.length - 1) {
         bottom = info.color.hex;
       }
     }
 
-    connectorMap.set(ol.location_id, { top, bottom });
+    connectorMap.set(ol.id, { top, bottom });
   }
 
   const groupedSections = TIME_SECTIONS.map((section) => ({
@@ -206,22 +206,21 @@ export function ItineraryDayTimeline({
 
             <div className="space-y-0">
               {section.items.map((optionLocation) => {
-                const expanded = expandedId === optionLocation.location_id;
-                const isDrag = dragId === optionLocation.location_id;
-                const isDrop = dropId === optionLocation.location_id && !isDrag;
-                const routeInfos =
-                  locRouteMap.get(optionLocation.location_id) ?? [];
+                const expanded = expandedId === optionLocation.id;
+                const isDrag = dragId === optionLocation.id;
+                const isDrop = dropId === optionLocation.id && !isDrag;
+                const routeInfos = locRouteMap.get(optionLocation.id) ?? [];
                 const picking =
-                  isPickMode && pickIds.includes(optionLocation.location_id);
-                const pickSeq = pickIds.indexOf(optionLocation.location_id) + 1;
+                  isPickMode && pickIds.includes(optionLocation.id);
+                const pickSeq = pickIds.indexOf(optionLocation.id) + 1;
 
-                const connectors = connectorMap.get(optionLocation.location_id);
+                const connectors = connectorMap.get(optionLocation.id);
                 const topConnectorHex = connectors?.top ?? null;
                 const bottomConnectorHex = connectors?.bottom ?? null;
 
                 return (
                   <ItineraryLocationRow
-                    key={optionLocation.location_id}
+                    key={optionLocation.id}
                     optionLocation={optionLocation}
                     expanded={expanded}
                     isDrag={isDrag}

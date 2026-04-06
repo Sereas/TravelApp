@@ -240,10 +240,10 @@ export function ItineraryDayCard({
     >();
     routes.forEach((r, ri) => {
       const color = ROUTE_COLORS[ri % ROUTE_COLORS.length];
-      r.location_ids.forEach((lid, idx) => {
-        const arr = m.get(lid) ?? [];
+      r.option_location_ids.forEach((olId, idx) => {
+        const arr = m.get(olId) ?? [];
         arr.push({ route: r, idx, color });
-        m.set(lid, arr);
+        m.set(olId, arr);
       });
     });
     return m;
@@ -374,8 +374,8 @@ export function ItineraryDayCard({
       setDragId(null);
       return;
     }
-    const fi = sorted.findIndex((l) => l.location_id === dragId);
-    const ti = sorted.findIndex((l) => l.location_id === targetId);
+    const fi = sorted.findIndex((l) => l.id === dragId);
+    const ti = sorted.findIndex((l) => l.id === targetId);
     if (fi < 0 || ti < 0) {
       setDragId(null);
       return;
@@ -387,7 +387,7 @@ export function ItineraryDayCard({
     onReorderLocations(
       day.id,
       currentOption.id,
-      arr.map((l) => l.location_id)
+      arr.map((l) => l.id)
     );
   }
 
@@ -398,7 +398,7 @@ export function ItineraryDayCard({
       setDragId(null);
       return;
     }
-    const fi = sorted.findIndex((l) => l.location_id === dragId);
+    const fi = sorted.findIndex((l) => l.id === dragId);
     if (fi < 0 || fi === sorted.length - 1) {
       setDragId(null);
       return;
@@ -410,7 +410,7 @@ export function ItineraryDayCard({
     onReorderLocations(
       day.id,
       currentOption.id,
-      arr.map((l) => l.location_id)
+      arr.map((l) => l.id)
     );
   }
 
@@ -428,7 +428,7 @@ export function ItineraryDayCard({
         editingRouteId,
         {
           transport_mode: transport,
-          location_ids: locationIds,
+          option_location_ids: locationIds,
         }
       );
       await onRouteCreated(day.id, currentOption.id, routeResponse);
@@ -440,7 +440,7 @@ export function ItineraryDayCard({
         {
           transport_mode: transport,
           label: null,
-          location_ids: locationIds,
+          option_location_ids: locationIds,
         }
       );
       await onRouteCreated(day.id, currentOption.id, routeResponse);
@@ -466,7 +466,7 @@ export function ItineraryDayCard({
   const tpPortal =
     tpOpen && tpPos && currentOption
       ? (() => {
-          const ol = sorted.find((l) => l.location_id === tpOpen);
+          const ol = sorted.find((l) => l.id === tpOpen);
           if (!ol) return null;
           const style: CSSProperties = {
             position: "fixed",
@@ -503,12 +503,7 @@ export function ItineraryDayCard({
                       )}
                       onClick={() => {
                         setTpOpen(null);
-                        onUpdateTimePeriod(
-                          day.id,
-                          currentOption.id,
-                          ol.location_id,
-                          k
-                        );
+                        onUpdateTimePeriod(day.id, currentOption.id, ol.id, k);
                       }}
                     >
                       <span

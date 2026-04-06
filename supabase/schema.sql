@@ -9,6 +9,7 @@ CREATE TABLE public.option_locations (
     location_id uuid NOT NULL,
     sort_order integer NOT NULL,
     time_period character varying(20) NOT NULL,
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
     CONSTRAINT option_locations_time_period_check CHECK (((time_period)::text = ANY ((ARRAY['morning'::character varying, 'afternoon'::character varying, 'evening'::character varying, 'night'::character varying])::text[])))
 );
 
@@ -18,24 +19,29 @@ CREATE FUNCTION public.batch_insert_option_locations(p_option_id uuid, p_locatio
     LANGUAGE sql SECURITY DEFINER
     AS $$
     INSERT INTO option_locations (option_id, location_id, sort_order, time_period)
-    SELECT
-        p_option_id,
-        unnest(p_location_ids),
-        unnest(p_sort_orders),
-        unnest(p_time_periods)
+    SELECT p_option_id, unnest(p_location_ids), unnest(p_sort_orders), unnest(p_time_periods)
     RETURNING *;
 $$;
 
 ALTER FUNCTION public.batch_insert_option_locations(p_option_id uuid, p_location_ids uuid[], p_sort_orders integer[], p_time_periods text[]) OWNER TO postgres;
 
-CREATE FUNCTION public.create_route_with_stops(p_option_id uuid, p_transport_mode character varying, p_label character varying, p_location_ids uuid[]) RETURNS json
+CREATE FUNCTION public.create_route_with_stops(p_option_id uuid, p_transport_mode character varying, p_label character varying, p_option_location_ids uuid[]) RETURNS json
     LANGUAGE plpgsql SECURITY DEFINER
     AS $$
 DECLARE
-  v_route_id uuid;
+  v_route_id  uuid;
   v_max_order int;
-  i int;
 BEGIN
+  IF EXISTS (
+      SELECT 1 FROM unnest(p_option_location_ids) AS t(ol_id)
+      WHERE NOT EXISTS (
+          SELECT 1 FROM option_locations ol
+          WHERE ol.id = t.ol_id AND ol.option_id = p_option_id
+      )
+  ) THEN
+      RAISE EXCEPTION 'INVALID_OPTION_LOCATION_IDS';
+  END IF;
+
   SELECT COALESCE(MAX(sort_order), -1) + 1 INTO v_max_order
   FROM option_routes WHERE option_id = p_option_id;
 
@@ -43,23 +49,22 @@ BEGIN
   VALUES (p_option_id, p_transport_mode, p_label, v_max_order)
   RETURNING route_id INTO v_route_id;
 
-  FOR i IN 1..array_length(p_location_ids, 1) LOOP
-    INSERT INTO route_stops (route_id, location_id, stop_order)
-    VALUES (v_route_id, p_location_ids[i], i - 1);
-  END LOOP;
+  INSERT INTO route_stops (route_id, option_location_id, stop_order)
+  SELECT v_route_id, ol_id, idx - 1
+  FROM unnest(p_option_location_ids) WITH ORDINALITY AS t(ol_id, idx);
 
   RETURN json_build_object(
-    'route_id', v_route_id,
-    'option_id', p_option_id,
-    'transport_mode', p_transport_mode,
-    'label', p_label,
-    'sort_order', v_max_order,
-    'location_ids', p_location_ids
+    'route_id',              v_route_id,
+    'option_id',             p_option_id,
+    'transport_mode',        p_transport_mode,
+    'label',                 p_label,
+    'sort_order',            v_max_order,
+    'option_location_ids',   p_option_location_ids
   );
 END;
 $$;
 
-ALTER FUNCTION public.create_route_with_stops(p_option_id uuid, p_transport_mode character varying, p_label character varying, p_location_ids uuid[]) OWNER TO postgres;
+ALTER FUNCTION public.create_route_with_stops(p_option_id uuid, p_transport_mode character varying, p_label character varying, p_option_location_ids uuid[]) OWNER TO postgres;
 
 CREATE FUNCTION public.delete_days_batch(p_trip_id uuid, p_day_ids uuid[]) RETURNS void
     LANGUAGE plpgsql
@@ -93,86 +98,64 @@ $$;
 ALTER FUNCTION public.delete_empty_dateless_days(p_trip_id uuid) OWNER TO postgres;
 
 CREATE FUNCTION public.delete_location_cascade(p_trip_id uuid, p_location_id uuid) RETURNS void
-    LANGUAGE plpgsql
+    LANGUAGE plpgsql SECURITY DEFINER
     AS $$
 DECLARE
-    v_route_id   uuid;
-    v_stop_count integer;
-    v_total_dur  integer;
-    v_total_dist integer;
+    v_route_id    uuid;
+    v_stop_count  integer;
+    v_affected_routes uuid[];
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM locations
-        WHERE location_id = p_location_id
-          AND trip_id     = p_trip_id
+        WHERE location_id = p_location_id AND trip_id = p_trip_id
     ) THEN
         RAISE EXCEPTION 'LOCATION_NOT_FOUND';
     END IF;
 
-    FOR v_route_id IN
-        SELECT DISTINCT rs.route_id
-        FROM route_stops rs
-        WHERE rs.location_id = p_location_id
-    LOOP
-        SELECT COUNT(*) INTO v_stop_count
-        FROM route_stops
-        WHERE route_id = v_route_id;
-
-        IF v_stop_count <= 2 THEN
-            DELETE FROM option_routes WHERE route_id = v_route_id;
-        ELSE
-            DELETE FROM route_segments
-            WHERE route_id = v_route_id
-              AND (from_location_id = p_location_id
-                   OR to_location_id = p_location_id);
-
-            DELETE FROM route_stops
-            WHERE route_id    = v_route_id
-              AND location_id = p_location_id;
-
-            WITH numbered AS (
-                SELECT route_id, location_id,
-                       ROW_NUMBER() OVER (ORDER BY stop_order) - 1 AS new_order
-                FROM route_stops
-                WHERE route_id = v_route_id
-            )
-            UPDATE route_stops rs
-            FROM numbered
-            WHERE rs.route_id    = numbered.route_id
-              AND rs.location_id = numbered.location_id;
-
-            WITH numbered AS (
-                SELECT id,
-                       ROW_NUMBER() OVER (ORDER BY segment_order) - 1 AS new_order
-                FROM route_segments
-                WHERE route_id = v_route_id
-            )
-            UPDATE route_segments seg
-            FROM numbered
-            WHERE seg.id = numbered.id;
-
-            SELECT COALESCE(SUM(sc.duration_seconds), 0),
-                   COALESCE(SUM(sc.distance_meters), 0)
-            INTO v_total_dur, v_total_dist
-            FROM route_segments rseg
-            JOIN segment_cache sc ON sc.id = rseg.segment_cache_id
-            WHERE rseg.route_id = v_route_id;
-
-            UPDATE option_routes
-                distance_meters  = v_total_dist
-            WHERE route_id = v_route_id;
-        END IF;
-    END LOOP;
+    SELECT array_agg(DISTINCT rs.route_id)
+    INTO v_affected_routes
+    FROM route_stops rs
+    JOIN option_locations ol ON ol.id = rs.option_location_id
+    WHERE ol.location_id = p_location_id;
 
     DELETE FROM locations
-    WHERE location_id = p_location_id
-      AND trip_id     = p_trip_id;
+    WHERE location_id = p_location_id AND trip_id = p_trip_id;
+
+    IF v_affected_routes IS NOT NULL THEN
+        FOREACH v_route_id IN ARRAY v_affected_routes LOOP
+            IF NOT EXISTS (SELECT 1 FROM option_routes WHERE route_id = v_route_id) THEN
+                CONTINUE;
+            END IF;
+
+            SELECT COUNT(*) INTO v_stop_count
+            FROM route_stops WHERE route_id = v_route_id;
+
+            IF v_stop_count < 2 THEN
+                DELETE FROM option_routes WHERE route_id = v_route_id;
+            ELSE
+                DELETE FROM route_segments WHERE route_id = v_route_id;
+
+                WITH numbered AS (
+                    SELECT stop_order AS old_order,
+                           ROW_NUMBER() OVER (ORDER BY stop_order) - 1 AS new_order
+                    FROM route_stops WHERE route_id = v_route_id
+                )
+                UPDATE route_stops rs SET stop_order = numbered.new_order
+                FROM numbered
+                WHERE rs.route_id = v_route_id
+                  AND rs.stop_order = numbered.old_order;
+
+                UPDATE option_routes
+                WHERE route_id = v_route_id;
+            END IF;
+        END LOOP;
+    END IF;
 END;
 $$;
 
 ALTER FUNCTION public.delete_location_cascade(p_trip_id uuid, p_location_id uuid) OWNER TO postgres;
 
-CREATE FUNCTION public.get_itinerary_routes(p_option_ids uuid[]) RETURNS TABLE(route_id uuid, option_id uuid, label text, transport_mode text, duration_seconds integer, distance_meters integer, sort_order integer, stop_location_ids json, segments json)
+CREATE FUNCTION public.get_itinerary_routes(p_option_ids uuid[]) RETURNS TABLE(route_id uuid, option_id uuid, label text, transport_mode text, duration_seconds integer, distance_meters integer, sort_order integer, stop_option_location_ids json, segments json)
     LANGUAGE sql STABLE SECURITY DEFINER
     AS $$
     SELECT
@@ -183,11 +166,11 @@ CREATE FUNCTION public.get_itinerary_routes(p_option_ids uuid[]) RETURNS TABLE(r
         r.duration_seconds,
         r.distance_meters,
         r.sort_order,
-        COALESCE(stops.ids,  '[]'::json) AS stop_location_ids,
+        COALESCE(stops.ids,  '[]'::json) AS stop_option_location_ids,
         COALESCE(segs.data,  '[]'::json) AS segments
     FROM option_routes r
     LEFT JOIN LATERAL (
-        SELECT json_agg(s.location_id ORDER BY s.stop_order) AS ids
+        SELECT json_agg(s.option_location_id ORDER BY s.stop_order) AS ids
         FROM route_stops s
         WHERE s.route_id = r.route_id
     ) stops ON true
@@ -211,31 +194,13 @@ $$;
 
 ALTER FUNCTION public.get_itinerary_routes(p_option_ids uuid[]) OWNER TO postgres;
 
-CREATE FUNCTION public.get_itinerary_tree(p_trip_id uuid) RETURNS TABLE(day_id uuid, day_date date, day_sort_order integer, day_created_at timestamp with time zone, option_id uuid, option_index integer, option_starting_city character varying, option_ending_city character varying, option_created_by character varying, option_created_at timestamp with time zone, location_id uuid, ol_sort_order integer, time_period text, loc_name text, loc_city text, loc_address text, loc_google_link text, loc_category text, loc_note text, loc_working_hours text, loc_requires_booking text)
+CREATE FUNCTION public.get_itinerary_tree(p_trip_id uuid) RETURNS TABLE(day_id uuid, day_date date, day_sort_order integer, day_created_at timestamp with time zone, option_id uuid, option_index integer, option_starting_city character varying, option_ending_city character varying, option_created_by character varying, option_created_at timestamp with time zone, ol_id uuid, location_id uuid, ol_sort_order integer, time_period text, loc_name text, loc_city text, loc_address text, loc_google_link text, loc_category text, loc_note text, loc_working_hours text, loc_requires_booking text)
     LANGUAGE sql STABLE
     AS $$
-  SELECT
-    d.day_id,
-    d.date           AS day_date,
-    d.sort_order     AS day_sort_order,
-    d.created_at     AS day_created_at,
-    o.option_id,
-    o.option_index,
-    o.starting_city  AS option_starting_city,
-    o.ending_city    AS option_ending_city,
-    o.created_by     AS option_created_by,
-    o.created_at     AS option_created_at,
-    ol.location_id,
-    ol.sort_order    AS ol_sort_order,
-    ol.time_period,
-    l.name           AS loc_name,
-    l.city           AS loc_city,
-    l.address        AS loc_address,
-    l.google_link    AS loc_google_link,
-    l.category       AS loc_category,
-    l.note           AS loc_note,
-    l.working_hours  AS loc_working_hours,
-    l.requires_booking AS loc_requires_booking
+  SELECT d.day_id, d.date, d.sort_order, d.created_at,
+    o.option_id, o.option_index, o.starting_city, o.ending_city, o.created_by, o.created_at,
+    ol.id, ol.location_id, ol.sort_order, ol.time_period,
+    l.name, l.city, l.address, l.google_link, l.category, l.note, l.working_hours, l.requires_booking
   FROM trip_days d
   LEFT JOIN day_options o ON o.day_id = d.day_id
   LEFT JOIN option_locations ol ON ol.option_id = o.option_id
@@ -246,48 +211,23 @@ $$;
 
 ALTER FUNCTION public.get_itinerary_tree(p_trip_id uuid) OWNER TO postgres;
 
-CREATE FUNCTION public.get_itinerary_tree(p_trip_id uuid, p_user_id uuid DEFAULT NULL::uuid) RETURNS TABLE(day_id uuid, day_date date, day_sort_order integer, day_created_at timestamp with time zone, option_id uuid, option_index integer, option_starting_city character varying, option_ending_city character varying, option_created_by character varying, option_created_at timestamp with time zone, location_id uuid, ol_sort_order integer, time_period text, loc_name text, loc_city text, loc_address text, loc_google_link text, loc_category text, loc_note text, loc_working_hours text, loc_requires_booking text, loc_photo_url text, loc_user_image_url text)
+CREATE FUNCTION public.get_itinerary_tree(p_trip_id uuid, p_user_id uuid DEFAULT NULL::uuid) RETURNS TABLE(day_id uuid, day_date date, day_sort_order integer, day_created_at timestamp with time zone, option_id uuid, option_index integer, option_starting_city character varying, option_ending_city character varying, option_created_by character varying, option_created_at timestamp with time zone, ol_id uuid, location_id uuid, ol_sort_order integer, time_period text, loc_name text, loc_city text, loc_address text, loc_google_link text, loc_category text, loc_note text, loc_working_hours text, loc_requires_booking text, loc_photo_url text, loc_user_image_url text)
     LANGUAGE sql STABLE
     AS $$
-    SELECT
-        d.day_id,
-        d.date           AS day_date,
-        d.sort_order     AS day_sort_order,
-        d.created_at     AS day_created_at,
-        o.option_id,
-        o.option_index,
-        o.starting_city  AS option_starting_city,
-        o.ending_city    AS option_ending_city,
-        o.created_by     AS option_created_by,
-        o.created_at     AS option_created_at,
-        ol.location_id,
-        ol.sort_order    AS ol_sort_order,
-        ol.time_period,
-        l.name           AS loc_name,
-        l.city           AS loc_city,
-        l.address        AS loc_address,
-        l.google_link    AS loc_google_link,
-        l.category       AS loc_category,
-        l.note           AS loc_note,
-        l.working_hours  AS loc_working_hours,
-        l.requires_booking AS loc_requires_booking,
-        pp.photo_url     AS loc_photo_url,
-        l.user_image_url AS loc_user_image_url
+    SELECT d.day_id, d.date, d.sort_order, d.created_at,
+        o.option_id, o.option_index, o.starting_city, o.ending_city, o.created_by, o.created_at,
+        ol.id, ol.location_id, ol.sort_order, ol.time_period,
+        l.name, l.city, l.address, l.google_link, l.category, l.note, l.working_hours, l.requires_booking,
+        pp.photo_url, l.user_image_url
     FROM trip_days d
-    LEFT JOIN day_options o        ON o.day_id = d.day_id
-    LEFT JOIN option_locations ol  ON ol.option_id = o.option_id
-    LEFT JOIN locations l          ON l.trip_id = d.trip_id
-                                  AND l.location_id = ol.location_id
-    LEFT JOIN place_photos pp     ON pp.google_place_id = l.google_place_id
+    LEFT JOIN day_options o ON o.day_id = d.day_id
+    LEFT JOIN option_locations ol ON ol.option_id = o.option_id
+    LEFT JOIN locations l ON l.trip_id = d.trip_id AND l.location_id = ol.location_id
+    LEFT JOIN place_photos pp ON pp.google_place_id = l.google_place_id
     WHERE d.trip_id = p_trip_id
-      AND (
-          p_user_id IS NULL
-          OR EXISTS (
-              SELECT 1 FROM trips t
-              WHERE t.trip_id = p_trip_id
-                AND t.user_id = p_user_id
-          )
-      )
+      AND (p_user_id IS NULL OR EXISTS (
+          SELECT 1 FROM trips t WHERE t.trip_id = p_trip_id AND t.user_id = p_user_id
+      ))
     ORDER BY d.sort_order, o.option_index NULLS LAST, ol.sort_order NULLS LAST;
 $$;
 
@@ -299,14 +239,14 @@ CREATE FUNCTION public.get_option_routes(p_option_id uuid) RETURNS json
     SELECT COALESCE(
         json_agg(
             json_build_object(
-                'route_id',         r.route_id,
-                'option_id',        r.option_id,
-                'label',            r.label,
-                'transport_mode',   r.transport_mode,
-                'duration_seconds', r.duration_seconds,
-                'distance_meters',  r.distance_meters,
-                'sort_order',       r.sort_order,
-                'location_ids',     COALESCE(stops.ids, '[]'::json)
+                'route_id',              r.route_id,
+                'option_id',             r.option_id,
+                'label',                 r.label,
+                'transport_mode',        r.transport_mode,
+                'duration_seconds',      r.duration_seconds,
+                'distance_meters',       r.distance_meters,
+                'sort_order',            r.sort_order,
+                'option_location_ids',   COALESCE(stops.ids, '[]'::json)
             )
             ORDER BY r.sort_order
         ),
@@ -314,7 +254,7 @@ CREATE FUNCTION public.get_option_routes(p_option_id uuid) RETURNS json
     )
     FROM option_routes r
     LEFT JOIN LATERAL (
-        SELECT json_agg(s.location_id ORDER BY s.stop_order) AS ids
+        SELECT json_agg(s.option_location_id ORDER BY s.stop_order) AS ids
         FROM route_stops s
         WHERE s.route_id = r.route_id
     ) stops ON true
@@ -491,87 +431,58 @@ $$;
 
 ALTER FUNCTION public.reconcile_clear_dates(p_trip_id uuid, p_day_ids uuid[]) OWNER TO postgres;
 
-CREATE FUNCTION public.remove_location_from_option(p_option_id uuid, p_location_id uuid) RETURNS void
-    LANGUAGE plpgsql
+CREATE FUNCTION public.remove_location_from_option(p_option_id uuid, p_ol_id uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
     AS $$
 DECLARE
-    v_route_id   uuid;
-    v_stop_count integer;
-    v_total_dur  integer;
-    v_total_dist integer;
+    v_route_id    uuid;
+    v_stop_count  integer;
+    v_affected_routes uuid[];
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM option_locations
-        WHERE option_id   = p_option_id
-          AND location_id = p_location_id
+        WHERE id = p_ol_id AND option_id = p_option_id
     ) THEN
         RAISE EXCEPTION 'OPTION_LOCATION_NOT_FOUND';
     END IF;
 
-    FOR v_route_id IN
-        SELECT rs.route_id
-        FROM route_stops rs
-        JOIN option_routes r ON r.route_id = rs.route_id
-        WHERE rs.location_id = p_location_id
-          AND r.option_id    = p_option_id
-    LOOP
-        SELECT COUNT(*) INTO v_stop_count
-        FROM route_stops
-        WHERE route_id = v_route_id;
+    SELECT array_agg(DISTINCT rs.route_id)
+    INTO v_affected_routes
+    FROM route_stops rs
+    WHERE rs.option_location_id = p_ol_id;
 
-        IF v_stop_count <= 2 THEN
-            DELETE FROM option_routes WHERE route_id = v_route_id;
-        ELSE
-            DELETE FROM route_segments
-            WHERE route_id = v_route_id
-              AND (from_location_id = p_location_id
-                   OR to_location_id = p_location_id);
+    DELETE FROM option_locations WHERE id = p_ol_id;
 
-            DELETE FROM route_stops
-            WHERE route_id   = v_route_id
-              AND location_id = p_location_id;
+    IF v_affected_routes IS NOT NULL THEN
+        FOREACH v_route_id IN ARRAY v_affected_routes LOOP
+            SELECT COUNT(*) INTO v_stop_count
+            FROM route_stops WHERE route_id = v_route_id;
 
-            WITH numbered AS (
-                SELECT route_id, location_id,
-                       ROW_NUMBER() OVER (ORDER BY stop_order) - 1 AS new_order
-                FROM route_stops
-                WHERE route_id = v_route_id
-            )
-            UPDATE route_stops rs
-            FROM numbered
-            WHERE rs.route_id    = numbered.route_id
-              AND rs.location_id = numbered.location_id;
+            IF v_stop_count < 2 THEN
+                DELETE FROM option_routes WHERE route_id = v_route_id;
+            ELSE
+                DELETE FROM route_segments
+                WHERE route_id = v_route_id;
 
-            WITH numbered AS (
-                SELECT id,
-                       ROW_NUMBER() OVER (ORDER BY segment_order) - 1 AS new_order
-                FROM route_segments
-                WHERE route_id = v_route_id
-            )
-            UPDATE route_segments seg
-            FROM numbered
-            WHERE seg.id = numbered.id;
+                WITH numbered AS (
+                    SELECT stop_order AS old_order,
+                           ROW_NUMBER() OVER (ORDER BY stop_order) - 1 AS new_order
+                    FROM route_stops WHERE route_id = v_route_id
+                )
+                UPDATE route_stops rs SET stop_order = numbered.new_order
+                FROM numbered
+                WHERE rs.route_id = v_route_id
+                  AND rs.stop_order = numbered.old_order;
 
-            SELECT COALESCE(SUM(sc.duration_seconds), 0),
-                   COALESCE(SUM(sc.distance_meters), 0)
-            INTO v_total_dur, v_total_dist
-            FROM route_segments rseg
-            JOIN segment_cache sc ON sc.id = rseg.segment_cache_id
-            WHERE rseg.route_id = v_route_id;
-
-            UPDATE option_routes
-                distance_meters  = v_total_dist
-            WHERE route_id = v_route_id;
-        END IF;
-    END LOOP;
-
-    DELETE FROM option_locations
-    WHERE option_id   = p_option_id
-      AND location_id = p_location_id;
+                UPDATE option_routes
+                WHERE route_id = v_route_id;
+            END IF;
+        END LOOP;
+    END IF;
 END;
 $$;
 
-ALTER FUNCTION public.remove_location_from_option(p_option_id uuid, p_location_id uuid) OWNER TO postgres;
+ALTER FUNCTION public.remove_location_from_option(p_option_id uuid, p_ol_id uuid) OWNER TO postgres;
 
 CREATE FUNCTION public.reorder_day_options(p_day_id uuid, p_option_ids uuid[]) RETURNS void
     LANGUAGE sql SECURITY DEFINER
@@ -607,20 +518,18 @@ $$;
 
 ALTER FUNCTION public.reorder_days_by_date(p_trip_id uuid) OWNER TO postgres;
 
-CREATE FUNCTION public.reorder_option_locations(p_option_id uuid, p_location_ids uuid[]) RETURNS void
+CREATE FUNCTION public.reorder_option_locations(p_option_id uuid, p_ol_ids uuid[]) RETURNS void
     LANGUAGE sql SECURITY DEFINER
     AS $$
     UPDATE option_locations ol
     FROM (
-        SELECT
-            unnest(p_location_ids)              AS location_id,
-            generate_subscripts(p_location_ids, 1) AS ord
+        SELECT unnest(p_ol_ids) AS ol_id,
+               generate_subscripts(p_ol_ids, 1) AS ord
     ) t
-    WHERE ol.option_id    = p_option_id
-      AND ol.location_id  = t.location_id;
+    WHERE ol.id = t.ol_id AND ol.option_id = p_option_id;
 $$;
 
-ALTER FUNCTION public.reorder_option_locations(p_option_id uuid, p_location_ids uuid[]) OWNER TO postgres;
+ALTER FUNCTION public.reorder_option_locations(p_option_id uuid, p_ol_ids uuid[]) OWNER TO postgres;
 
 CREATE FUNCTION public.reorder_trip_days(p_trip_id uuid, p_day_ids uuid[]) RETURNS void
     LANGUAGE sql SECURITY DEFINER
@@ -660,7 +569,7 @@ $$;
 
 ALTER FUNCTION public.shift_day_dates(p_trip_id uuid, p_offset_days integer) OWNER TO postgres;
 
-CREATE FUNCTION public.update_route_with_stops(p_route_id uuid, p_option_id uuid, p_transport_mode text DEFAULT NULL::text, p_label text DEFAULT NULL::text, p_location_ids uuid[] DEFAULT NULL::uuid[]) RETURNS TABLE(route_id uuid, option_id uuid, label text, transport_mode text, duration_seconds integer, distance_meters integer, sort_order integer)
+CREATE FUNCTION public.update_route_with_stops(p_route_id uuid, p_option_id uuid, p_transport_mode text DEFAULT NULL::text, p_label text DEFAULT NULL::text, p_option_location_ids uuid[] DEFAULT NULL::uuid[]) RETURNS TABLE(route_id uuid, option_id uuid, label text, transport_mode text, duration_seconds integer, distance_meters integer, sort_order integer)
     LANGUAGE plpgsql SECURITY DEFINER
     AS $$
 BEGIN
@@ -671,17 +580,29 @@ BEGIN
         RAISE EXCEPTION 'ROUTE_NOT_FOUND';
     END IF;
 
-    UPDATE option_routes r
+    UPDATE option_routes r SET
+        transport_mode = COALESCE(p_transport_mode, r.transport_mode),
         label          = COALESCE(p_label, r.label)
     WHERE r.route_id = p_route_id;
 
-    IF p_location_ids IS NOT NULL THEN
+    IF p_option_location_ids IS NOT NULL THEN
+        IF EXISTS (
+            SELECT 1 FROM unnest(p_option_location_ids) AS t(ol_id)
+            WHERE NOT EXISTS (
+                SELECT 1 FROM option_locations ol
+                WHERE ol.id = t.ol_id AND ol.option_id = p_option_id
+            )
+        ) THEN
+            RAISE EXCEPTION 'INVALID_OPTION_LOCATION_IDS';
+        END IF;
+
         DELETE FROM route_segments rs WHERE rs.route_id = p_route_id;
         DELETE FROM route_stops s WHERE s.route_id = p_route_id;
-        INSERT INTO route_stops (route_id, location_id, stop_order)
-        SELECT p_route_id, lid, idx - 1
-        FROM unnest(p_location_ids) WITH ORDINALITY AS t(lid, idx);
-        UPDATE option_routes r
+        INSERT INTO route_stops (route_id, option_location_id, stop_order)
+        SELECT p_route_id, ol_id, idx - 1
+        FROM unnest(p_option_location_ids) WITH ORDINALITY AS t(ol_id, idx);
+        UPDATE option_routes r SET
+            duration_seconds = NULL,
             distance_meters  = NULL
         WHERE r.route_id = p_route_id;
     END IF;
@@ -694,7 +615,7 @@ BEGIN
 END;
 $$;
 
-ALTER FUNCTION public.update_route_with_stops(p_route_id uuid, p_option_id uuid, p_transport_mode text, p_label text, p_location_ids uuid[]) OWNER TO postgres;
+ALTER FUNCTION public.update_route_with_stops(p_route_id uuid, p_option_id uuid, p_transport_mode text, p_label text, p_option_location_ids uuid[]) OWNER TO postgres;
 
 CREATE FUNCTION public.verify_resource_chain(p_trip_id uuid, p_user_id uuid, p_day_id uuid DEFAULT NULL::uuid, p_option_id uuid DEFAULT NULL::uuid) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER
@@ -829,8 +750,8 @@ COMMENT ON TABLE public.route_segments IS 'Links a route to cached segments; one
 
 CREATE TABLE public.route_stops (
     route_id uuid NOT NULL,
-    location_id uuid NOT NULL,
-    stop_order integer DEFAULT 0 NOT NULL
+    stop_order integer DEFAULT 0 NOT NULL,
+    option_location_id uuid NOT NULL
 );
 
 ALTER TABLE public.route_stops OWNER TO postgres;
@@ -924,7 +845,7 @@ ALTER TABLE ONLY public.locations
     ADD CONSTRAINT locations_pkey PRIMARY KEY (location_id);
 
 ALTER TABLE ONLY public.option_locations
-    ADD CONSTRAINT option_locations_pkey PRIMARY KEY (option_id, location_id);
+    ADD CONSTRAINT option_locations_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.option_routes
     ADD CONSTRAINT option_routes_pkey PRIMARY KEY (route_id);
@@ -939,7 +860,7 @@ ALTER TABLE ONLY public.route_segments
     ADD CONSTRAINT route_segments_route_order_unique UNIQUE (route_id, segment_order);
 
 ALTER TABLE ONLY public.route_stops
-    ADD CONSTRAINT route_stops_pkey PRIMARY KEY (route_id, location_id);
+    ADD CONSTRAINT route_stops_pkey PRIMARY KEY (route_id, stop_order);
 
 ALTER TABLE ONLY public.segment_cache
     ADD CONSTRAINT segment_cache_pkey PRIMARY KEY (id);
@@ -966,11 +887,13 @@ CREATE INDEX idx_option_locations_location_id ON public.option_locations USING b
 
 CREATE INDEX idx_option_locations_option_id ON public.option_locations USING btree (option_id);
 
+CREATE INDEX idx_option_locations_option_location ON public.option_locations USING btree (option_id, location_id);
+
 CREATE INDEX idx_option_routes_option_id ON public.option_routes USING btree (option_id);
 
 CREATE INDEX idx_route_segments_route_id ON public.route_segments USING btree (route_id);
 
-CREATE INDEX idx_route_stops_location_id ON public.route_stops USING btree (location_id);
+CREATE INDEX idx_route_stops_option_location_id ON public.route_stops USING btree (option_location_id);
 
 CREATE INDEX idx_route_stops_route_id ON public.route_stops USING btree (route_id);
 
@@ -1018,7 +941,7 @@ ALTER TABLE ONLY public.route_segments
     ADD CONSTRAINT route_segments_segment_cache_id_fkey FOREIGN KEY (segment_cache_id) REFERENCES public.segment_cache(id) ON DELETE RESTRICT;
 
 ALTER TABLE ONLY public.route_stops
-    ADD CONSTRAINT route_stops_location_id_fkey FOREIGN KEY (location_id) REFERENCES public.locations(location_id) ON DELETE CASCADE;
+    ADD CONSTRAINT route_stops_option_location_id_fkey FOREIGN KEY (option_location_id) REFERENCES public.option_locations(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.route_stops
     ADD CONSTRAINT route_stops_route_id_fkey FOREIGN KEY (route_id) REFERENCES public.option_routes(route_id) ON DELETE CASCADE;
@@ -1196,8 +1119,8 @@ GRANT ALL ON TABLE public.option_locations TO service_role;
 GRANT ALL ON FUNCTION public.batch_insert_option_locations(p_option_id uuid, p_location_ids uuid[], p_sort_orders integer[], p_time_periods text[]) TO authenticated;
 GRANT ALL ON FUNCTION public.batch_insert_option_locations(p_option_id uuid, p_location_ids uuid[], p_sort_orders integer[], p_time_periods text[]) TO service_role;
 
-GRANT ALL ON FUNCTION public.create_route_with_stops(p_option_id uuid, p_transport_mode character varying, p_label character varying, p_location_ids uuid[]) TO authenticated;
-GRANT ALL ON FUNCTION public.create_route_with_stops(p_option_id uuid, p_transport_mode character varying, p_label character varying, p_location_ids uuid[]) TO service_role;
+GRANT ALL ON FUNCTION public.create_route_with_stops(p_option_id uuid, p_transport_mode character varying, p_label character varying, p_option_location_ids uuid[]) TO authenticated;
+GRANT ALL ON FUNCTION public.create_route_with_stops(p_option_id uuid, p_transport_mode character varying, p_label character varying, p_option_location_ids uuid[]) TO service_role;
 
 GRANT ALL ON FUNCTION public.delete_days_batch(p_trip_id uuid, p_day_ids uuid[]) TO authenticated;
 GRANT ALL ON FUNCTION public.delete_days_batch(p_trip_id uuid, p_day_ids uuid[]) TO service_role;
@@ -1230,8 +1153,8 @@ GRANT ALL ON FUNCTION public.move_option_to_day(p_option_id uuid, p_source_day_i
 GRANT ALL ON FUNCTION public.reconcile_clear_dates(p_trip_id uuid, p_day_ids uuid[]) TO authenticated;
 GRANT ALL ON FUNCTION public.reconcile_clear_dates(p_trip_id uuid, p_day_ids uuid[]) TO service_role;
 
-GRANT ALL ON FUNCTION public.remove_location_from_option(p_option_id uuid, p_location_id uuid) TO authenticated;
-GRANT ALL ON FUNCTION public.remove_location_from_option(p_option_id uuid, p_location_id uuid) TO service_role;
+GRANT ALL ON FUNCTION public.remove_location_from_option(p_option_id uuid, p_ol_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.remove_location_from_option(p_option_id uuid, p_ol_id uuid) TO service_role;
 
 GRANT ALL ON FUNCTION public.reorder_day_options(p_day_id uuid, p_option_ids uuid[]) TO authenticated;
 GRANT ALL ON FUNCTION public.reorder_day_options(p_day_id uuid, p_option_ids uuid[]) TO service_role;
@@ -1239,8 +1162,8 @@ GRANT ALL ON FUNCTION public.reorder_day_options(p_day_id uuid, p_option_ids uui
 GRANT ALL ON FUNCTION public.reorder_days_by_date(p_trip_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.reorder_days_by_date(p_trip_id uuid) TO service_role;
 
-GRANT ALL ON FUNCTION public.reorder_option_locations(p_option_id uuid, p_location_ids uuid[]) TO authenticated;
-GRANT ALL ON FUNCTION public.reorder_option_locations(p_option_id uuid, p_location_ids uuid[]) TO service_role;
+GRANT ALL ON FUNCTION public.reorder_option_locations(p_option_id uuid, p_ol_ids uuid[]) TO authenticated;
+GRANT ALL ON FUNCTION public.reorder_option_locations(p_option_id uuid, p_ol_ids uuid[]) TO service_role;
 
 GRANT ALL ON FUNCTION public.reorder_trip_days(p_trip_id uuid, p_day_ids uuid[]) TO authenticated;
 GRANT ALL ON FUNCTION public.reorder_trip_days(p_trip_id uuid, p_day_ids uuid[]) TO service_role;
@@ -1251,8 +1174,8 @@ GRANT ALL ON FUNCTION public.set_updated_at() TO service_role;
 GRANT ALL ON FUNCTION public.shift_day_dates(p_trip_id uuid, p_offset_days integer) TO authenticated;
 GRANT ALL ON FUNCTION public.shift_day_dates(p_trip_id uuid, p_offset_days integer) TO service_role;
 
-GRANT ALL ON FUNCTION public.update_route_with_stops(p_route_id uuid, p_option_id uuid, p_transport_mode text, p_label text, p_location_ids uuid[]) TO authenticated;
-GRANT ALL ON FUNCTION public.update_route_with_stops(p_route_id uuid, p_option_id uuid, p_transport_mode text, p_label text, p_location_ids uuid[]) TO service_role;
+GRANT ALL ON FUNCTION public.update_route_with_stops(p_route_id uuid, p_option_id uuid, p_transport_mode text, p_label text, p_option_location_ids uuid[]) TO authenticated;
+GRANT ALL ON FUNCTION public.update_route_with_stops(p_route_id uuid, p_option_id uuid, p_transport_mode text, p_label text, p_option_location_ids uuid[]) TO service_role;
 
 GRANT ALL ON FUNCTION public.verify_resource_chain(p_trip_id uuid, p_user_id uuid, p_day_id uuid, p_option_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.verify_resource_chain(p_trip_id uuid, p_user_id uuid, p_day_id uuid, p_option_id uuid) TO service_role;

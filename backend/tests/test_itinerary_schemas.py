@@ -85,6 +85,7 @@ def test_option_location_response_and_location_summary_shapes():
         requires_booking="no",
     )
     resp = OptionLocationResponse(
+        id="ol-uuid",
         option_id="opt-uuid",
         location_id="loc-uuid",
         sort_order=1,
@@ -99,7 +100,7 @@ def test_option_location_response_and_location_summary_shapes():
 def test_itinerary_tree_models_compose_correctly():
     summary = LocationSummary(id="loc", name="Name")
     node = ItineraryOptionLocation(
-        location_id="loc", sort_order=0, time_period="morning", location=summary
+        id="ol-1", location_id="loc", sort_order=0, time_period="morning", location=summary
     )
     opt = ItineraryOption(
         id="opt",

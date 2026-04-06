@@ -100,7 +100,7 @@ export function useItineraryState({
       for (const day of data.days) {
         for (const option of day.options) {
           for (const route of option.routes ?? []) {
-            const expectedSegments = route.location_ids.length - 1;
+            const expectedSegments = route.option_location_ids.length - 1;
             const hasSegmentsArray = Array.isArray(route.segments);
             const actualSegments = hasSegmentsArray
               ? route.segments!.length
@@ -479,6 +479,7 @@ export function useItineraryState({
                       (locationId, index) => {
                         const loc = locations.find((l) => l.id === locationId);
                         return {
+                          id: crypto.randomUUID(),
                           location_id: locationId,
                           sort_order: startOrder + index,
                           time_period: "morning",
@@ -547,41 +548,45 @@ export function useItineraryState({
   );
 
   const handleRemoveLocationFromOption = useCallback(
-    async (dayId: string, optionId: string, locationId: string) => {
+    async (dayId: string, optionId: string, olId: string) => {
       setItineraryActionError(null);
       setItinerary((prev) => {
         if (!prev) return prev;
         return {
           ...prev,
-          days: prev.days.map((day) =>
-            day.id === dayId
+          days: prev.days.map((d) =>
+            d.id === dayId
               ? {
-                  ...day,
-                  options: day.options.map((option) => {
-                    if (option.id !== optionId) return option;
-                    const nextLocations = option.locations.filter(
-                      (location) => location.location_id !== locationId
+                  ...d,
+                  options: d.options.map((o) => {
+                    if (o.id !== optionId) return o;
+                    const nextLocations = o.locations.filter(
+                      (location) => location.id !== olId
                     );
                     const nextRoutes =
-                      option.routes.length > 0
-                        ? (option.routes
+                      o.routes.length > 0
+                        ? (o.routes
                             .map((route) => {
-                              const remainingIds = route.location_ids.filter(
-                                (id) => id !== locationId
-                              );
+                              const remainingIds =
+                                route.option_location_ids.filter(
+                                  (id) => id !== olId
+                                );
                               if (remainingIds.length < 2) return null;
-                              return { ...route, location_ids: remainingIds };
+                              return {
+                                ...route,
+                                option_location_ids: remainingIds,
+                              };
                             })
-                            .filter(Boolean) as typeof option.routes)
-                        : option.routes;
+                            .filter(Boolean) as typeof o.routes)
+                        : o.routes;
                     return {
-                      ...option,
+                      ...o,
                       locations: nextLocations,
                       routes: nextRoutes,
                     };
                   }),
                 }
-              : day
+              : d
           ),
         };
       });
@@ -591,7 +596,7 @@ export function useItineraryState({
           tripId,
           dayId,
           optionId,
-          locationId
+          olId
         );
       } catch (err) {
         setItineraryActionError(
@@ -600,14 +605,14 @@ export function useItineraryState({
         await fetchItinerary();
       }
     },
-    [fetchItinerary, tripId]
+    [fetchItinerary, itinerary, tripId]
   );
 
   const handleUpdateLocationTimePeriod = useCallback(
     async (
       dayId: string,
       optionId: string,
-      locationId: string,
+      olId: string,
       timePeriod: string
     ) => {
       setItineraryActionError(null);
@@ -624,7 +629,7 @@ export function useItineraryState({
                       ? {
                           ...option,
                           locations: option.locations.map((location) =>
-                            location.location_id === locationId
+                            location.id === olId
                               ? { ...location, time_period: timePeriod }
                               : location
                           ),
@@ -642,7 +647,7 @@ export function useItineraryState({
           tripId,
           dayId,
           optionId,
-          locationId,
+          olId,
           { time_period: timePeriod }
         );
       } catch (err) {
@@ -740,11 +745,7 @@ export function useItineraryState({
   );
 
   const handleReorderOptionLocations = useCallback(
-    async (
-      dayId: string,
-      optionId: string,
-      newOrderedLocationIds: string[]
-    ) => {
+    async (dayId: string, optionId: string, newOrderedOlIds: string[]) => {
       if (!itinerary) return;
       const day = itinerary.days.find((currentDay) => currentDay.id === dayId);
       const option = day?.options.find(
@@ -752,16 +753,16 @@ export function useItineraryState({
       );
       if (!option) return;
 
-      const locationById = new Map(
-        option.locations.map((location) => [location.location_id, location])
+      const locationByOlId = new Map(
+        option.locations.map((location) => [location.id, location])
       );
-      const reordered = newOrderedLocationIds
-        .map((id, index) => {
-          const location = locationById.get(id);
+      const reordered = newOrderedOlIds
+        .map((olId, index) => {
+          const location = locationByOlId.get(olId);
           return location ? { ...location, sort_order: index } : null;
         })
         .filter(Boolean) as typeof option.locations;
-      if (reordered.length !== newOrderedLocationIds.length) return;
+      if (reordered.length !== newOrderedOlIds.length) return;
 
       setItineraryActionError(null);
       setItinerary((prev) => {
@@ -785,7 +786,7 @@ export function useItineraryState({
 
       try {
         await api.itinerary.reorderOptionLocations(tripId, dayId, optionId, {
-          location_ids: newOrderedLocationIds,
+          ol_ids: newOrderedOlIds,
         });
       } catch (err) {
         setItineraryActionError(
@@ -826,6 +827,7 @@ export function useItineraryState({
                         locations: [
                           ...option.locations,
                           {
+                            id: crypto.randomUUID(),
                             location_id: locationId,
                             sort_order: option.locations.length,
                             time_period: "morning",

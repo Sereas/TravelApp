@@ -125,7 +125,7 @@ interface RouteInfo {
   route: {
     route_id: string;
     transport_mode: string;
-    location_ids: string[];
+    option_location_ids: string[];
     segments?: Array<{
       segment_order: number;
       duration_seconds?: number | null;
@@ -223,7 +223,7 @@ export function ItineraryLocationRow({
         ) : isPickMode ? (
           <button
             type="button"
-            onClick={() => onTogglePick(optionLocation.location_id)}
+            onClick={() => onTogglePick(optionLocation.id)}
             className={cn(
               "flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold transition-all duration-200",
               picking
@@ -239,9 +239,7 @@ export function ItineraryLocationRow({
             tabIndex={0}
             role="button"
             draggable
-            onDragStart={(event) =>
-              onDragStart(optionLocation.location_id, event)
-            }
+            onDragStart={(event) => onDragStart(optionLocation.id, event)}
             onDragEnd={onDragEnd}
             aria-label={`Reorder ${optionLocation.location.name}`}
             aria-roledescription="draggable"
@@ -289,9 +287,9 @@ export function ItineraryLocationRow({
           "min-w-0 flex-1 pb-1",
           isDrop && "rounded-md bg-accent/60 ring-1 ring-inset ring-primary"
         )}
-        onDragOver={(event) => onDragOver(optionLocation.location_id, event)}
+        onDragOver={(event) => onDragOver(optionLocation.id, event)}
         onDragLeave={onDropLeave}
-        onDrop={(event) => onDrop(optionLocation.location_id, event)}
+        onDrop={(event) => onDrop(optionLocation.id, event)}
       >
         <div
           className={cn(
@@ -308,8 +306,8 @@ export function ItineraryLocationRow({
             type="button"
             className="flex min-w-0 flex-1 items-center gap-3 text-left"
             onClick={() => {
-              onInspectLocation?.(optionLocation.location_id);
-              onToggleExpanded(optionLocation.location_id);
+              onInspectLocation?.(optionLocation.id);
+              onToggleExpanded(optionLocation.id);
             }}
             aria-expanded={expanded}
           >
@@ -416,7 +414,7 @@ export function ItineraryLocationRow({
           ) : (
             <div
               ref={
-                timePickerOpenId === optionLocation.location_id
+                timePickerOpenId === optionLocation.id
                   ? (node) => {
                       tpTriggerRef.current = node;
                     }
@@ -426,7 +424,7 @@ export function ItineraryLocationRow({
               <button
                 type="button"
                 className="inline-flex shrink-0 items-center gap-1 rounded-full border border-transparent bg-muted/60 px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:border-primary/20 hover:bg-primary/5 hover:text-foreground"
-                onClick={() => onToggleTimePicker(optionLocation.location_id)}
+                onClick={() => onToggleTimePicker(optionLocation.id)}
                 aria-label={`Time: ${tm.label}`}
               >
                 <TIcon size={10} className="shrink-0" />
@@ -443,11 +441,7 @@ export function ItineraryLocationRow({
               aria-label={`Remove ${optionLocation.location.name}`}
               onClick={(event) => {
                 event.stopPropagation();
-                onRemoveLocation(
-                  dayId,
-                  currentOptionId,
-                  optionLocation.location_id
-                );
+                onRemoveLocation(dayId, currentOptionId, optionLocation.id);
               }}
             >
               <X size={13} />
@@ -487,7 +481,8 @@ export function ItineraryLocationRow({
           )}
 
         {routeInfos.map((info) => {
-          const isLastLeg = info.idx === info.route.location_ids.length - 1;
+          const isLastLeg =
+            info.idx === info.route.option_location_ids.length - 1;
           const Icon =
             TRANSPORT_ICONS[
               info.route.transport_mode as keyof typeof TRANSPORT_ICONS
