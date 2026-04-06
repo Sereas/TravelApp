@@ -855,7 +855,8 @@ def test_itinerary_tree_returns_ol_id(
         assert len(locations) == 2, f"expected 2 locations, got {len(locations)}"
         for loc_entry in locations:
             assert "id" in loc_entry, (
-                f"ItineraryOptionLocation must expose `id` (ol_id), got keys: {list(loc_entry.keys())}"
+                "ItineraryOptionLocation must expose `id` (ol_id), "
+                f"got keys: {list(loc_entry.keys())}"
             )
         # Verify the ids match what was seeded
         returned_ids = {loc_entry["id"] for loc_entry in locations}

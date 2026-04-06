@@ -473,7 +473,9 @@ class CreateRouteBody(BaseModel):
 
     transport_mode: str = Field(..., description="One of: walk, drive, transit")
     label: str | None = None
-    option_location_ids: list[str] = Field(..., min_length=2, description="Ordered stop option_location UUIDs")
+    option_location_ids: list[str] = Field(
+        ..., min_length=2, description="Ordered stop option_location UUIDs"
+    )
 
     @field_validator("transport_mode")
     @classmethod
