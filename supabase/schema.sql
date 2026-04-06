@@ -5,11 +5,11 @@ ALTER SCHEMA public OWNER TO pg_database_owner;
 COMMENT ON SCHEMA public IS 'standard public schema';
 
 CREATE TABLE public.option_locations (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
     option_id uuid NOT NULL,
     location_id uuid NOT NULL,
     sort_order integer NOT NULL,
     time_period character varying(20) NOT NULL,
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
     CONSTRAINT option_locations_time_period_check CHECK (((time_period)::text = ANY ((ARRAY['morning'::character varying, 'afternoon'::character varying, 'evening'::character varying, 'night'::character varying])::text[])))
 );
 
@@ -19,18 +19,14 @@ CREATE FUNCTION public.batch_insert_option_locations(p_option_id uuid, p_locatio
     LANGUAGE sql SECURITY DEFINER
     AS $$
     INSERT INTO option_locations (option_id, location_id, sort_order, time_period)
-    SELECT
-        p_option_id,
-        unnest(p_location_ids),
-        unnest(p_sort_orders),
-        unnest(p_time_periods)
+    SELECT p_option_id, unnest(p_location_ids), unnest(p_sort_orders), unnest(p_time_periods)
     RETURNING *;
 $$;
 
 ALTER FUNCTION public.batch_insert_option_locations(p_option_id uuid, p_location_ids uuid[], p_sort_orders integer[], p_time_periods text[]) OWNER TO postgres;
 
 CREATE FUNCTION public.create_route_with_stops(p_option_id uuid, p_transport_mode character varying, p_label character varying, p_option_location_ids uuid[]) RETURNS json
-    LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
+    LANGUAGE plpgsql SECURITY DEFINER
     AS $$
 DECLARE
   v_route_id  uuid;
@@ -102,7 +98,7 @@ $$;
 ALTER FUNCTION public.delete_empty_dateless_days(p_trip_id uuid) OWNER TO postgres;
 
 CREATE FUNCTION public.delete_location_cascade(p_trip_id uuid, p_location_id uuid) RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
+    LANGUAGE plpgsql SECURITY DEFINER
     AS $$
 DECLARE
     v_route_id    uuid;
@@ -150,7 +146,6 @@ BEGIN
                   AND rs.stop_order = numbered.old_order;
 
                 UPDATE option_routes
-                SET duration_seconds = NULL, distance_meters = NULL
                 WHERE route_id = v_route_id;
             END IF;
         END LOOP;
@@ -161,7 +156,7 @@ $$;
 ALTER FUNCTION public.delete_location_cascade(p_trip_id uuid, p_location_id uuid) OWNER TO postgres;
 
 CREATE FUNCTION public.get_itinerary_routes(p_option_ids uuid[]) RETURNS TABLE(route_id uuid, option_id uuid, label text, transport_mode text, duration_seconds integer, distance_meters integer, sort_order integer, stop_option_location_ids json, segments json)
-    LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public'
+    LANGUAGE sql STABLE SECURITY DEFINER
     AS $$
     SELECT
         r.route_id,
@@ -200,31 +195,12 @@ $$;
 ALTER FUNCTION public.get_itinerary_routes(p_option_ids uuid[]) OWNER TO postgres;
 
 CREATE FUNCTION public.get_itinerary_tree(p_trip_id uuid) RETURNS TABLE(day_id uuid, day_date date, day_sort_order integer, day_created_at timestamp with time zone, option_id uuid, option_index integer, option_starting_city character varying, option_ending_city character varying, option_created_by character varying, option_created_at timestamp with time zone, ol_id uuid, location_id uuid, ol_sort_order integer, time_period text, loc_name text, loc_city text, loc_address text, loc_google_link text, loc_category text, loc_note text, loc_working_hours text, loc_requires_booking text)
-    LANGUAGE sql STABLE SET search_path TO 'public'
+    LANGUAGE sql STABLE
     AS $$
-  SELECT
-    d.day_id,
-    d.date           AS day_date,
-    d.sort_order     AS day_sort_order,
-    d.created_at     AS day_created_at,
-    o.option_id,
-    o.option_index,
-    o.starting_city  AS option_starting_city,
-    o.ending_city    AS option_ending_city,
-    o.created_by     AS option_created_by,
-    o.created_at     AS option_created_at,
-    ol.id,
-    ol.location_id,
-    ol.sort_order    AS ol_sort_order,
-    ol.time_period,
-    l.name           AS loc_name,
-    l.city           AS loc_city,
-    l.address        AS loc_address,
-    l.google_link    AS loc_google_link,
-    l.category       AS loc_category,
-    l.note           AS loc_note,
-    l.working_hours  AS loc_working_hours,
-    l.requires_booking AS loc_requires_booking
+  SELECT d.day_id, d.date, d.sort_order, d.created_at,
+    o.option_id, o.option_index, o.starting_city, o.ending_city, o.created_by, o.created_at,
+    ol.id, ol.location_id, ol.sort_order, ol.time_period,
+    l.name, l.city, l.address, l.google_link, l.category, l.note, l.working_hours, l.requires_booking
   FROM trip_days d
   LEFT JOIN day_options o ON o.day_id = d.day_id
   LEFT JOIN option_locations ol ON ol.option_id = o.option_id
@@ -236,55 +212,29 @@ $$;
 ALTER FUNCTION public.get_itinerary_tree(p_trip_id uuid) OWNER TO postgres;
 
 CREATE FUNCTION public.get_itinerary_tree(p_trip_id uuid, p_user_id uuid DEFAULT NULL::uuid) RETURNS TABLE(day_id uuid, day_date date, day_sort_order integer, day_created_at timestamp with time zone, option_id uuid, option_index integer, option_starting_city character varying, option_ending_city character varying, option_created_by character varying, option_created_at timestamp with time zone, ol_id uuid, location_id uuid, ol_sort_order integer, time_period text, loc_name text, loc_city text, loc_address text, loc_google_link text, loc_category text, loc_note text, loc_working_hours text, loc_requires_booking text, loc_photo_url text, loc_user_image_url text)
-    LANGUAGE sql STABLE SET search_path TO 'public'
+    LANGUAGE sql STABLE
     AS $$
-    SELECT
-        d.day_id,
-        d.date           AS day_date,
-        d.sort_order     AS day_sort_order,
-        d.created_at     AS day_created_at,
-        o.option_id,
-        o.option_index,
-        o.starting_city  AS option_starting_city,
-        o.ending_city    AS option_ending_city,
-        o.created_by     AS option_created_by,
-        o.created_at     AS option_created_at,
-        ol.id,
-        ol.location_id,
-        ol.sort_order    AS ol_sort_order,
-        ol.time_period,
-        l.name           AS loc_name,
-        l.city           AS loc_city,
-        l.address        AS loc_address,
-        l.google_link    AS loc_google_link,
-        l.category       AS loc_category,
-        l.note           AS loc_note,
-        l.working_hours  AS loc_working_hours,
-        l.requires_booking AS loc_requires_booking,
-        pp.photo_url     AS loc_photo_url,
-        l.user_image_url AS loc_user_image_url
+    SELECT d.day_id, d.date, d.sort_order, d.created_at,
+        o.option_id, o.option_index, o.starting_city, o.ending_city, o.created_by, o.created_at,
+        ol.id, ol.location_id, ol.sort_order, ol.time_period,
+        l.name, l.city, l.address, l.google_link, l.category, l.note, l.working_hours, l.requires_booking,
+        pp.photo_url, l.user_image_url
     FROM trip_days d
-    LEFT JOIN day_options o        ON o.day_id = d.day_id
-    LEFT JOIN option_locations ol  ON ol.option_id = o.option_id
-    LEFT JOIN locations l          ON l.trip_id = d.trip_id
-                                  AND l.location_id = ol.location_id
-    LEFT JOIN place_photos pp     ON pp.google_place_id = l.google_place_id
+    LEFT JOIN day_options o ON o.day_id = d.day_id
+    LEFT JOIN option_locations ol ON ol.option_id = o.option_id
+    LEFT JOIN locations l ON l.trip_id = d.trip_id AND l.location_id = ol.location_id
+    LEFT JOIN place_photos pp ON pp.google_place_id = l.google_place_id
     WHERE d.trip_id = p_trip_id
-      AND (
-          p_user_id IS NULL
-          OR EXISTS (
-              SELECT 1 FROM trips t
-              WHERE t.trip_id = p_trip_id
-                AND t.user_id = p_user_id
-          )
-      )
+      AND (p_user_id IS NULL OR EXISTS (
+          SELECT 1 FROM trips t WHERE t.trip_id = p_trip_id AND t.user_id = p_user_id
+      ))
     ORDER BY d.sort_order, o.option_index NULLS LAST, ol.sort_order NULLS LAST;
 $$;
 
 ALTER FUNCTION public.get_itinerary_tree(p_trip_id uuid, p_user_id uuid) OWNER TO postgres;
 
 CREATE FUNCTION public.get_option_routes(p_option_id uuid) RETURNS json
-    LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public'
+    LANGUAGE sql STABLE SECURITY DEFINER
     AS $$
     SELECT COALESCE(
         json_agg(
@@ -482,7 +432,7 @@ $$;
 ALTER FUNCTION public.reconcile_clear_dates(p_trip_id uuid, p_day_ids uuid[]) OWNER TO postgres;
 
 CREATE FUNCTION public.remove_location_from_option(p_option_id uuid, p_ol_id uuid) RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
+    LANGUAGE plpgsql SECURITY DEFINER
     AS $$
 DECLARE
     v_route_id    uuid;
@@ -525,7 +475,6 @@ BEGIN
                   AND rs.stop_order = numbered.old_order;
 
                 UPDATE option_routes
-                SET duration_seconds = NULL, distance_meters = NULL
                 WHERE route_id = v_route_id;
             END IF;
         END LOOP;
@@ -570,10 +519,9 @@ $$;
 ALTER FUNCTION public.reorder_days_by_date(p_trip_id uuid) OWNER TO postgres;
 
 CREATE FUNCTION public.reorder_option_locations(p_option_id uuid, p_ol_ids uuid[]) RETURNS void
-    LANGUAGE sql SECURITY DEFINER SET search_path TO 'public'
+    LANGUAGE sql SECURITY DEFINER
     AS $$
     UPDATE option_locations ol
-    SET sort_order = t.ord - 1
     FROM (
         SELECT unnest(p_ol_ids) AS ol_id,
                generate_subscripts(p_ol_ids, 1) AS ord
@@ -622,7 +570,7 @@ $$;
 ALTER FUNCTION public.shift_day_dates(p_trip_id uuid, p_offset_days integer) OWNER TO postgres;
 
 CREATE FUNCTION public.update_route_with_stops(p_route_id uuid, p_option_id uuid, p_transport_mode text DEFAULT NULL::text, p_label text DEFAULT NULL::text, p_option_location_ids uuid[] DEFAULT NULL::uuid[]) RETURNS TABLE(route_id uuid, option_id uuid, label text, transport_mode text, duration_seconds integer, distance_meters integer, sort_order integer)
-    LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
+    LANGUAGE plpgsql SECURITY DEFINER
     AS $$
 BEGIN
     IF NOT EXISTS (
@@ -802,8 +750,8 @@ COMMENT ON TABLE public.route_segments IS 'Links a route to cached segments; one
 
 CREATE TABLE public.route_stops (
     route_id uuid NOT NULL,
-    option_location_id uuid NOT NULL,
-    stop_order integer DEFAULT 0 NOT NULL
+    stop_order integer DEFAULT 0 NOT NULL,
+    option_location_id uuid NOT NULL
 );
 
 ALTER TABLE public.route_stops OWNER TO postgres;
