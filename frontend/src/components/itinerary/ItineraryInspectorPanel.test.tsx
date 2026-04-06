@@ -19,6 +19,7 @@ describe("ItineraryInspectorPanel", () => {
               created_by: null,
               locations: [
                 {
+                  id: "ol-1",
                   location_id: "loc-1",
                   sort_order: 0,
                   time_period: "morning",
@@ -47,7 +48,7 @@ describe("ItineraryInspectorPanel", () => {
                   duration_seconds: 600,
                   distance_meters: 5000,
                   sort_order: 0,
-                  location_ids: ["loc-1"],
+                  option_location_ids: ["loc-1"],
                 },
               ],
             },
@@ -61,6 +62,7 @@ describe("ItineraryInspectorPanel", () => {
           created_by: null,
           locations: [
             {
+              id: "ol-1",
               location_id: "loc-1",
               sort_order: 0,
               time_period: "morning",
@@ -89,7 +91,7 @@ describe("ItineraryInspectorPanel", () => {
               duration_seconds: 600,
               distance_meters: 5000,
               sort_order: 0,
-              location_ids: ["loc-1"],
+              option_location_ids: ["loc-1"],
             },
           ],
         }}

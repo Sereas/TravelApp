@@ -76,6 +76,7 @@ def _build_itinerary_response(
                 attribution_uri=loc_row.get("attribution_uri"),
             )
         node = ItineraryOptionLocation(
+            id=str(row["id"]) if row.get("id") else loc_id,
             location_id=loc_id,
             sort_order=int(row.get("sort_order", 0)),
             time_period=str(row.get("time_period", "")),
@@ -151,6 +152,7 @@ def _rpc_rows_to_tree_data(
         if lid is not None:
             ol_rows.append(
                 {
+                    "id": r.get("ol_id"),
                     "option_id": r["option_id"],
                     "location_id": lid,
                     "sort_order": r.get("ol_sort_order", 0),
@@ -212,7 +214,7 @@ def _attach_routes_to_itinerary(supabase, itinerary: ItineraryResponse) -> None:
                 duration_seconds=dur,
                 distance_meters=dist,
                 sort_order=int(r.get("sort_order", 0)),
-                location_ids=[str(lid) for lid in (r.get("stop_location_ids") or [])],
+                option_location_ids=[str(lid) for lid in (r.get("stop_option_location_ids") or [])],
                 route_status=route_status,
                 segments=segments,
             )

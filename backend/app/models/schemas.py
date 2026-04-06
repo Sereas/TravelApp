@@ -345,8 +345,8 @@ class UpdateOptionLocationBody(BaseModel):
 class ReorderOptionLocationsBody(BaseModel):
     """Request body for PATCH reorder option-locations."""
 
-    location_ids: list[str] = Field(
-        ..., min_length=1, description="Ordered list of location UUIDs in this option"
+    ol_ids: list[str] = Field(
+        ..., min_length=1, description="Ordered list of option_locations.id values"
     )
 
 
@@ -371,6 +371,7 @@ class LocationSummary(BaseModel):
 class OptionLocationResponse(BaseModel):
     """Response body for option-locations operations."""
 
+    id: str = Field(..., description="Option-location row UUID (surrogate key)")
     option_id: str = Field(..., description="Option UUID")
     location_id: str = Field(..., description="Location UUID")
     sort_order: int = Field(..., ge=0)
@@ -381,6 +382,7 @@ class OptionLocationResponse(BaseModel):
 class ItineraryOptionLocation(BaseModel):
     """Itinerary tree node: location entry inside an option."""
 
+    id: str = Field(..., description="Option-location row UUID (surrogate key)")
     location_id: str
     sort_order: int
     time_period: str
@@ -405,7 +407,7 @@ class ItineraryRoute(BaseModel):
     duration_seconds: int | None = None
     distance_meters: int | None = None
     sort_order: int = 0
-    location_ids: list[str] = Field(default_factory=list)
+    option_location_ids: list[str] = Field(default_factory=list)
     route_status: str = Field(
         "pending",
         description="pending | ok | error; enables UI to show loading/error state",
@@ -471,7 +473,7 @@ class CreateRouteBody(BaseModel):
 
     transport_mode: str = Field(..., description="One of: walk, drive, transit")
     label: str | None = None
-    location_ids: list[str] = Field(..., min_length=2, description="Ordered stop location UUIDs")
+    option_location_ids: list[str] = Field(..., min_length=2, description="Ordered stop option_location UUIDs")
 
     @field_validator("transport_mode")
     @classmethod
@@ -486,8 +488,8 @@ class UpdateRouteBody(BaseModel):
 
     transport_mode: str | None = None
     label: str | None = None
-    location_ids: list[str] | None = Field(
-        None, min_length=2, description="Ordered stop location UUIDs"
+    option_location_ids: list[str] | None = Field(
+        None, min_length=2, description="Ordered stop option_location UUIDs"
     )
 
     @field_validator("transport_mode")
@@ -509,7 +511,7 @@ class RouteResponse(BaseModel):
     duration_seconds: int | None = None
     distance_meters: int | None = None
     sort_order: int = Field(..., ge=0)
-    location_ids: list[str] = Field(default_factory=list)
+    option_location_ids: list[str] = Field(default_factory=list)
     route_status: str = Field(
         "pending",
         description=(
@@ -616,7 +618,7 @@ class RouteWithSegmentsResponse(BaseModel):
     duration_seconds: int | None = None
     distance_meters: int | None = None
     sort_order: int = Field(..., ge=0)
-    location_ids: list[str] = Field(default_factory=list)
+    option_location_ids: list[str] = Field(default_factory=list)
     segments: list[RouteSegmentResponse] = Field(default_factory=list)
     route_status: str = Field(
         "ok",

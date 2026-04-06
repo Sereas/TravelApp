@@ -154,6 +154,7 @@ export interface LocationSummary {
 }
 
 export interface ItineraryOptionLocation {
+  id: string;
   location_id: string;
   sort_order: number;
   time_period: string;
@@ -178,7 +179,7 @@ export interface ItineraryOptionRoute {
   duration_seconds: number | null;
   distance_meters: number | null;
   sort_order: number;
-  location_ids: string[];
+  option_location_ids: string[];
   route_status?: RouteStatus;
   /** Per-leg metrics in order; use segments[idx] for pill between stop idx and idx+1. */
   segments?: RouteSegmentSummary[];
@@ -222,6 +223,7 @@ interface OptionResponse {
 }
 
 interface OptionLocationResponse {
+  id: string;
   option_id: string;
   location_id: string;
   sort_order: number;
@@ -237,7 +239,7 @@ export interface RouteResponse {
   duration_seconds: number | null;
   distance_meters: number | null;
   sort_order: number;
-  location_ids: string[];
+  option_location_ids: string[];
   route_status?: RouteStatus;
 }
 
@@ -682,14 +684,14 @@ export const api = {
       tripId: string,
       dayId: string,
       optionId: string,
-      locationId: string,
+      olId: string,
       body: {
         sort_order?: number;
         time_period?: string;
       }
     ) =>
       request<OptionLocationResponse>(
-        `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/locations/${locationId}`,
+        `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/locations/${olId}`,
         { method: "PATCH", body: JSON.stringify(body) }
       ),
 
@@ -698,10 +700,10 @@ export const api = {
       tripId: string,
       dayId: string,
       optionId: string,
-      locationId: string
+      olId: string
     ) =>
       request<void>(
-        `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/locations/${locationId}`,
+        `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/locations/${olId}`,
         { method: "DELETE" }
       ),
 
@@ -710,7 +712,7 @@ export const api = {
       tripId: string,
       dayId: string,
       optionId: string,
-      body: { location_ids: string[] }
+      body: { ol_ids: string[] }
     ) =>
       request<OptionLocationResponse[]>(
         `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/locations/reorder`,
@@ -731,7 +733,7 @@ export const api = {
       body: {
         transport_mode: string;
         label?: string | null;
-        location_ids: string[];
+        option_location_ids: string[];
       }
     ) =>
       request<RouteResponse>(
@@ -748,7 +750,7 @@ export const api = {
       body: {
         transport_mode?: string;
         label?: string | null;
-        location_ids?: string[];
+        option_location_ids?: string[];
       }
     ) =>
       request<RouteResponse>(

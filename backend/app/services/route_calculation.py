@@ -422,13 +422,13 @@ def get_route_with_fresh_segments(
 
     stops = (
         supabase.table("route_stops")
-        .select("location_id, stop_order")
+        .select("option_location_id, stop_order")
         .eq("route_id", route_id)
         .order("stop_order")
         .execute()
     )
     ordered = sorted((stops.data or []), key=lambda r: r["stop_order"])
-    location_ids = [str(s["location_id"]) for s in ordered]
+    ol_ids = [str(s["option_location_id"]) for s in ordered]
     if len(ordered) < 2:
         # Zero or one stop: no segments to compute; persist zero totals
         supabase.table("option_routes").update(
@@ -445,14 +445,25 @@ def get_route_with_fresh_segments(
             duration_seconds=0,
             distance_meters=0,
             sort_order=int(route.get("sort_order", 0)),
-            location_ids=location_ids,
+            option_location_ids=ol_ids,
             segments=[],
             route_status="ok",
         )
+    # Resolve option_location_id → location_id via option_locations
+    ol_rows = (
+        supabase.table("option_locations")
+        .select("id, location_id")
+        .in_("id", ol_ids)
+        .execute()
+    )
+    ol_to_loc = {str(r["id"]): str(r["location_id"]) for r in (ol_rows.data or [])}
+    location_ids = [ol_to_loc.get(str(s["option_location_id"])) for s in ordered]
+    if any(lid is None for lid in location_ids):
+        raise LookupError("Route references deleted option_location; recalculation not possible")
     loc_rows = (
         supabase.table("locations")
         .select("location_id, google_place_id, latitude, longitude")
-        .in_("location_id", location_ids)
+        .in_("location_id", list(set(location_ids)))
         .execute()
     )
     loc_by_id = {str(r["location_id"]): r for r in (loc_rows.data or [])}
@@ -464,6 +475,7 @@ def get_route_with_fresh_segments(
         option_id,
         mode,
         ordered,
+        ol_ids,
         location_ids,
         loc_by_id,
         google_routes_client,
@@ -491,6 +503,7 @@ def _get_route_segments_impl(
     option_id: str,
     mode: str,
     ordered: list,
+    ol_ids: list[str],
     location_ids: list[str],
     loc_by_id: dict,
     google_client: GoogleRoutesClient | None,
@@ -530,10 +543,8 @@ def _get_route_segments_impl(
     segment_order_to_cache_id: dict[int, str] = {}
 
     for i in range(len(ordered) - 1):
-        from_stop = ordered[i]
-        to_stop = ordered[i + 1]
-        from_loc_id = str(from_stop["location_id"])
-        to_loc_id = str(to_stop["location_id"])
+        from_loc_id = location_ids[i]
+        to_loc_id = location_ids[i + 1]
         from_loc = loc_by_id.get(from_loc_id) or {}
         to_loc = loc_by_id.get(to_loc_id) or {}
         from_place = from_loc.get("google_place_id")
@@ -654,8 +665,8 @@ def _get_route_segments_impl(
             {
                 "route_id": route_id,
                 "segment_order": seg_order,
-                "from_location_id": str(ordered[seg_order]["location_id"]),
-                "to_location_id": str(ordered[seg_order + 1]["location_id"]),
+                "from_location_id": location_ids[seg_order],
+                "to_location_id": location_ids[seg_order + 1],
                 "segment_cache_id": cache_id,
             }
             for seg_order, cache_id in segment_order_to_cache_id.items()
@@ -677,7 +688,7 @@ def _get_route_segments_impl(
         duration_seconds=total_duration,
         distance_meters=total_distance,
         sort_order=int(route.get("sort_order", 0)),
-        location_ids=location_ids,
+        option_location_ids=ol_ids,
         segments=segments_out,
         route_status="error" if any_non_success else "ok",
     )
@@ -699,13 +710,13 @@ def get_route_with_segments(supabase: Any, route_id: str) -> RouteWithSegmentsRe
     route = route_row.data[0]
     stops = (
         supabase.table("route_stops")
-        .select("location_id, stop_order")
+        .select("option_location_id, stop_order")
         .eq("route_id", route_id)
         .order("stop_order")
         .execute()
     )
     ordered = sorted((stops.data or []), key=lambda r: r["stop_order"])
-    location_ids = [str(s["location_id"]) for s in ordered]
+    ol_ids = [str(s["option_location_id"]) for s in ordered]
     rs_rows = (
         supabase.table("route_segments")
         .select("segment_order, from_location_id, to_location_id, segment_cache_id")
@@ -723,7 +734,7 @@ def get_route_with_segments(supabase: Any, route_id: str) -> RouteWithSegmentsRe
             duration_seconds=route.get("duration_seconds"),
             distance_meters=route.get("distance_meters"),
             sort_order=int(route.get("sort_order", 0)),
-            location_ids=location_ids,
+            option_location_ids=ol_ids,
             segments=[],
             route_status="ok",
         )
@@ -762,7 +773,7 @@ def get_route_with_segments(supabase: Any, route_id: str) -> RouteWithSegmentsRe
         duration_seconds=route.get("duration_seconds"),
         distance_meters=route.get("distance_meters"),
         sort_order=int(route.get("sort_order", 0)),
-        location_ids=location_ids,
+        option_location_ids=ol_ids,
         segments=segments_out,
         route_status="error" if any_error else "ok",
     )

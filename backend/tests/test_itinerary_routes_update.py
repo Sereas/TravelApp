@@ -76,7 +76,7 @@ def _setup_with_route(mock_supabase_trips_and_days, mock_user_id):
             "duration_seconds": 600,
             "distance_meters": 1000,
             "sort_order": 0,
-            "stop_location_ids": [loc1, loc2],
+            "stop_option_location_ids": [loc1, loc2],
             "segments": [],
         }
     )
@@ -89,7 +89,7 @@ def test_update_route_changes_stops(
     mock_user_id,
     mock_supabase_trips_and_days,
 ):
-    """PATCH with new location_ids returns pending status."""
+    """PATCH with new option_location_ids returns pending status."""
     trip_id, day_id, option_id, route_id, loc1, loc2, loc3, mock_sb = _setup_with_route(
         mock_supabase_trips_and_days, mock_user_id
     )
@@ -104,15 +104,46 @@ def test_update_route_changes_stops(
             f"/api/v1/trips/{trip_id}/days/{day_id}/options/{option_id}/routes/{route_id}",
             json={
                 "transport_mode": "drive",
-                "location_ids": [loc1, loc3, loc2],
+                "option_location_ids": [loc1, loc3, loc2],
             },
         )
         assert r.status_code == 200
         data = r.json()
         assert data["route_id"] == route_id
         assert data["transport_mode"] == "drive"
-        assert data["location_ids"] == [loc1, loc3, loc2]
+        assert data["option_location_ids"] == [loc1, loc3, loc2]
         assert data["route_status"] == "pending"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_update_route_transport_only_preserves_stops(
+    client: TestClient,
+    mock_user_id,
+    mock_supabase_trips_and_days,
+):
+    """PATCH with only transport_mode (no option_location_ids) re-fetches stops from route_stops."""
+    trip_id, day_id, option_id, route_id, *_, mock_sb = _setup_with_route(
+        mock_supabase_trips_and_days, mock_user_id
+    )
+
+    async def override_user():
+        return mock_user_id
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        r = client.patch(
+            f"/api/v1/trips/{trip_id}/days/{day_id}/options/{option_id}/routes/{route_id}",
+            json={"transport_mode": "transit"},
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["transport_mode"] == "transit"
+        # route_stops mock returns empty, so option_location_ids should be empty list
+        assert data["option_location_ids"] == []
+        # Status preserved (not reset to pending since stops not changed)
+        assert data["route_status"] != "pending"
     finally:
         app.dependency_overrides.clear()
 
@@ -147,7 +178,7 @@ def test_update_route_too_few_stops_returns_422(
     mock_user_id,
     mock_supabase_trips_and_days,
 ):
-    """PATCH with only 1 location_id returns 422 (need >= 2)."""
+    """PATCH with only 1 option_location_id returns 422 (need >= 2)."""
     trip_id, day_id, option_id, route_id, loc1, *_, mock_sb = _setup_with_route(
         mock_supabase_trips_and_days, mock_user_id
     )
@@ -160,7 +191,7 @@ def test_update_route_too_few_stops_returns_422(
     try:
         r = client.patch(
             f"/api/v1/trips/{trip_id}/days/{day_id}/options/{option_id}/routes/{route_id}",
-            json={"location_ids": [loc1]},
+            json={"option_location_ids": [loc1]},
         )
         assert r.status_code == 422
     finally:
@@ -186,7 +217,7 @@ def test_update_route_nonexistent_route_returns_404(
     try:
         r = client.patch(
             f"/api/v1/trips/{trip_id}/days/{day_id}/options/{option_id}/routes/{fake_route_id}",
-            json={"location_ids": [loc1, loc2]},
+            json={"option_location_ids": [loc1, loc2]},
         )
         assert r.status_code == 404
     finally:
