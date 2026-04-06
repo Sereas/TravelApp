@@ -5,7 +5,7 @@ import type { ItineraryDay, ItineraryOption } from "@/lib/api";
 import { ItineraryPlanSwitcher } from "@/components/itinerary/ItineraryPlanSwitcher";
 import { cn } from "@/lib/utils";
 import { useReadOnly } from "@/lib/read-only-context";
-import { ArrowRight, Pencil } from "lucide-react";
+import { ArrowRight, MapPin, Pencil } from "lucide-react";
 
 function AutosaveInput({
   id,
@@ -50,7 +50,7 @@ function AutosaveInput({
         }
       }}
       className={cn(
-        "h-7 rounded border border-transparent bg-transparent px-1.5 text-sm font-medium transition-colors hover:border-input focus:border-input focus:bg-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+        "h-7 rounded-md border px-2 text-sm font-medium transition-colors focus:border-ring focus:bg-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
         className
       )}
     />
@@ -115,11 +115,6 @@ export function ItineraryDayHeader({
   return (
     <div className="flex items-start gap-3">
       <div className="min-w-0 flex-1">
-        <div className="mb-2 flex h-1 w-20 gap-1">
-          <div className="h-full flex-1 rounded-full bg-primary" />
-          <div className="h-full w-2 rounded-full bg-brand" />
-          <div className="h-full w-1 rounded-full bg-brand" />
-        </div>
         <div className="flex items-center gap-1.5">
           {!readOnly && editingDate ? (
             <input
@@ -171,61 +166,87 @@ export function ItineraryDayHeader({
         </div>
 
         {currentOption && (
-          <div className="mt-2 flex items-center gap-1.5 text-sm text-muted-foreground">
+          <div className="mt-3 text-sm">
             {readOnly ? (
-              <>
-                {currentOption.starting_city && (
-                  <span className="text-sm font-medium">
-                    {currentOption.starting_city}
-                  </span>
-                )}
-                {currentOption.starting_city && currentOption.ending_city && (
-                  <ArrowRight
-                    size={12}
-                    className="shrink-0 text-muted-foreground/40"
-                  />
-                )}
-                {currentOption.ending_city && (
-                  <span className="text-sm font-medium">
-                    {currentOption.ending_city}
-                  </span>
-                )}
-              </>
+              (currentOption.starting_city || currentOption.ending_city) && (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <MapPin size={13} className="shrink-0 text-brand/50" />
+                  {currentOption.starting_city && (
+                    <span className="font-medium text-foreground">
+                      {currentOption.starting_city}
+                    </span>
+                  )}
+                  {currentOption.starting_city &&
+                    currentOption.ending_city && (
+                      <ArrowRight
+                        size={13}
+                        className="shrink-0 text-muted-foreground/40"
+                      />
+                    )}
+                  {currentOption.ending_city && (
+                    <span className="font-medium text-foreground">
+                      {currentOption.ending_city}
+                    </span>
+                  )}
+                </div>
+              )
             ) : (
-              <>
-                <AutosaveInput
-                  id={`sc-${currentOption.id}`}
-                  placeholder="Departure"
-                  initialValue={currentOption.starting_city ?? ""}
-                  onSave={async (value) => {
-                    const nextValue = value || null;
-                    if (nextValue === (currentOption.starting_city ?? null))
-                      return;
-                    onSaveOptionDetails(day.id, currentOption.id, {
-                      starting_city: nextValue,
-                    });
-                  }}
-                  className="w-28 text-sm"
-                />
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <label
+                    htmlFor={`sc-${currentOption.id}`}
+                    className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60"
+                  >
+                    From
+                  </label>
+                  <AutosaveInput
+                    id={`sc-${currentOption.id}`}
+                    placeholder="City"
+                    initialValue={currentOption.starting_city ?? ""}
+                    onSave={async (value) => {
+                      const nextValue = value || null;
+                      if (
+                        nextValue ===
+                        (currentOption.starting_city ?? null)
+                      )
+                        return;
+                      onSaveOptionDetails(day.id, currentOption.id, {
+                        starting_city: nextValue,
+                      });
+                    }}
+                    className="w-32 border-border/50 bg-muted/20 text-sm sm:w-36"
+                  />
+                </div>
                 <ArrowRight
-                  size={12}
-                  className="shrink-0 text-muted-foreground/40"
+                  size={14}
+                  className="shrink-0 text-muted-foreground/30"
                 />
-                <AutosaveInput
-                  id={`ec-${currentOption.id}`}
-                  placeholder="Arrival"
-                  initialValue={currentOption.ending_city ?? ""}
-                  onSave={async (value) => {
-                    const nextValue = value || null;
-                    if (nextValue === (currentOption.ending_city ?? null))
-                      return;
-                    onSaveOptionDetails(day.id, currentOption.id, {
-                      ending_city: nextValue,
-                    });
-                  }}
-                  className="w-28 text-sm"
-                />
-              </>
+                <div className="flex items-center gap-2">
+                  <label
+                    htmlFor={`ec-${currentOption.id}`}
+                    className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60"
+                  >
+                    To
+                  </label>
+                  <AutosaveInput
+                    id={`ec-${currentOption.id}`}
+                    placeholder="City"
+                    initialValue={currentOption.ending_city ?? ""}
+                    onSave={async (value) => {
+                      const nextValue = value || null;
+                      if (
+                        nextValue ===
+                        (currentOption.ending_city ?? null)
+                      )
+                        return;
+                      onSaveOptionDetails(day.id, currentOption.id, {
+                        ending_city: nextValue,
+                      });
+                    }}
+                    className="w-32 border-border/50 bg-muted/20 text-sm sm:w-36"
+                  />
+                </div>
+              </div>
             )}
           </div>
         )}

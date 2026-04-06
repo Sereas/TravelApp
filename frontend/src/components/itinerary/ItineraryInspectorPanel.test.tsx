@@ -98,7 +98,7 @@ describe("ItineraryInspectorPanel", () => {
       />
     );
 
-    expect(screen.getByText("Sitrep")).toBeInTheDocument();
+    expect(screen.getByText("Day overview")).toBeInTheDocument();
     expect(screen.getByText("place")).toBeInTheDocument();
     expect(screen.getByText("route")).toBeInTheDocument();
     expect(screen.getByText(/10 min/)).toBeInTheDocument();

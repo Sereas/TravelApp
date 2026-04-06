@@ -58,15 +58,17 @@ interface CategoryIconProps {
   category: CategoryKey;
   size?: number;
   className?: string;
+  style?: React.CSSProperties;
 }
 
 export function CategoryIcon({
   category,
   size = 16,
   className,
+  style,
 }: CategoryIconProps) {
   const meta = CATEGORY_META[category];
   if (!meta) return null;
   const Icon = ICON_MAP[meta.icon] ?? MapPin;
-  return <Icon size={size} className={className ?? meta.text} />;
+  return <Icon size={size} className={className ?? meta.text} style={style} />;
 }

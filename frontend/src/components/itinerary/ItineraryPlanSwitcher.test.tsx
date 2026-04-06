@@ -154,31 +154,28 @@ describe("ItineraryPlanSwitcher", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("opens plan settings for rename and delete", async () => {
+  it("shows rename and delete in the plan dropdown", async () => {
     const singleDay = {
       ...day,
       options: [day.options[0]],
     };
     const { props } = renderSwitcher({ day: singleDay });
 
-    await userEvent.click(
-      screen.getByRole("button", { name: /plan settings: main plan/i })
-    );
+    // Open the plan dropdown (rename/delete are now inside it)
+    await userEvent.click(screen.getByText("Main plan"));
 
-    expect(screen.getByRole("button", { name: /rename/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /delete/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /rename plan/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /delete plan/i })).toBeInTheDocument();
     expect(props.onSelectOption).not.toHaveBeenCalled();
   });
 
-  it("renames the current plan from settings", async () => {
+  it("renames the current plan from dropdown", async () => {
     const { props } = renderSwitcher({
       currentOption: day.options[1],
     });
 
-    await userEvent.click(
-      screen.getByRole("button", { name: /plan settings: rainy plan/i })
-    );
-    await userEvent.click(screen.getByRole("button", { name: /rename/i }));
+    await userEvent.click(screen.getByText("Rainy plan"));
+    await userEvent.click(screen.getByRole("button", { name: /rename plan/i }));
     const input = screen.getByDisplayValue("Rainy plan");
     await userEvent.clear(input);
     await userEvent.type(input, "Transit backup");
@@ -194,10 +191,8 @@ describe("ItineraryPlanSwitcher", () => {
       currentOption: day.options[1],
     });
 
-    await userEvent.click(
-      screen.getByRole("button", { name: /plan settings: rainy plan/i })
-    );
-    await userEvent.click(screen.getByRole("button", { name: /delete/i }));
+    await userEvent.click(screen.getByText("Rainy plan"));
+    await userEvent.click(screen.getByRole("button", { name: /delete plan/i }));
     const dialog = await screen.findByRole("dialog");
     await userEvent.click(
       within(dialog).getByRole("button", { name: /^delete$/i })

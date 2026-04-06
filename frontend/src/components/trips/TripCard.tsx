@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Calendar, Compass, Map, Mountain } from "lucide-react";
+import { Calendar } from "lucide-react";
+import { TripGradient } from "@/components/trips/TripGradient";
 
 export interface TripCardProps {
   id: string;
@@ -11,17 +12,6 @@ export interface TripCardProps {
   imageUrl?: string | null;
   href?: string;
   onClick?: (id: string) => void;
-}
-
-const PLACEHOLDER_ICONS = [Compass, Map, Mountain] as const;
-
-function getPlaceholderIcon(id: string) {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) {
-    hash = (hash << 5) - hash + id.charCodeAt(i);
-    hash |= 0;
-  }
-  return PLACEHOLDER_ICONS[Math.abs(hash) % PLACEHOLDER_ICONS.length];
 }
 
 function formatDate(dateStr: string): string {
@@ -51,12 +41,11 @@ export function TripCard({
 }: TripCardProps) {
   const dateDisplay = formatDateDisplay(startDate, endDate);
   const hasDates = startDate || endDate;
-  const PlaceholderIcon = getPlaceholderIcon(id);
   const isClickable = !!(href || onClick);
 
   const content = (
     <>
-      {/* Image area */}
+      {/* Visual area */}
       <div className="relative aspect-[16/10] w-full overflow-hidden">
         {imageUrl ? (
           <img
@@ -65,13 +54,10 @@ export function TripCard({
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-brand-muted to-background">
-            <PlaceholderIcon
-              size={40}
-              className="text-brand opacity-20"
-              aria-hidden="true"
-            />
-          </div>
+          <TripGradient
+            name={name}
+            className="h-full w-full transition-transform duration-300 group-hover:scale-105"
+          />
         )}
       </div>
 

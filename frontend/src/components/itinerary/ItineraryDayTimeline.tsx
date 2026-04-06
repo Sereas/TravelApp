@@ -60,35 +60,28 @@ const TIME_SECTIONS = [
     label: "Morning",
     displayLabel: "Morning",
     icon: Sunrise,
-    accent:
-      "text-time-morning-text bg-time-morning-bg border-time-morning-border",
-    wash: "bg-gradient-to-b from-time-morning-bg/40 to-transparent",
+    accent: "text-time-morning-text",
   },
   {
     key: "afternoon",
     label: "Afternoon",
     displayLabel: "Afternoon",
     icon: Sun,
-    accent:
-      "text-time-afternoon-text bg-time-afternoon-bg border-time-afternoon-border",
-    wash: "bg-gradient-to-b from-time-afternoon-bg/40 to-transparent",
+    accent: "text-time-afternoon-text",
   },
   {
     key: "evening",
     label: "Evening",
     displayLabel: "Evening",
     icon: Sunset,
-    accent:
-      "text-time-evening-text bg-time-evening-bg border-time-evening-border",
-    wash: "bg-gradient-to-b from-time-evening-bg/40 to-transparent",
+    accent: "text-time-evening-text",
   },
   {
     key: "night",
     label: "Night",
     displayLabel: "Night",
     icon: Moon,
-    accent: "text-time-night-text bg-time-night-bg border-time-night-border",
-    wash: "bg-gradient-to-b from-time-night-bg/40 to-transparent",
+    accent: "text-time-night-text",
   },
 ] as const;
 
@@ -120,23 +113,10 @@ export function ItineraryDayTimeline({
   if (sorted.length === 0) {
     return (
       <div className="flex flex-col items-center gap-3 py-8 text-muted-foreground/50">
-        <div className="flex items-center gap-2">
-          <div className="flex flex-col items-center gap-1.5">
-            <div className="h-2 w-2 rounded-full border-2 border-dashed border-primary/20" />
-            <div className="h-4 w-0.5 border-l border-dashed border-primary/15" />
-            <div className="h-2 w-2 rounded-full border-2 border-dashed border-primary/20" />
-            <div className="h-4 w-0.5 border-l border-dashed border-primary/15" />
-            <div className="h-2 w-2 rounded-full border-2 border-dashed border-primary/20" />
-          </div>
-          <div className="ml-2">
-            <p className="text-sm font-medium text-muted-foreground/50">
-              No stops planned yet
-            </p>
-            <p className="mt-0.5 text-xs text-muted-foreground/30">
-              Add places from the unscheduled panel
-            </p>
-          </div>
-        </div>
+        <p className="text-sm text-muted-foreground/50">No stops planned yet</p>
+        <p className="text-xs text-muted-foreground/30">
+          Add places from the unscheduled panel
+        </p>
       </div>
     );
   }
@@ -174,33 +154,27 @@ export function ItineraryDayTimeline({
   })).filter((section) => section.items.length > 0);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {groupedSections.map((section) => {
         const SectionIcon = section.icon;
 
         return (
-          <section
-            key={section.key}
-            aria-label={`${section.label} stops`}
-            className={cn(
-              "rounded-2xl border border-border/70 px-3 py-3",
-              section.wash,
-              "bg-white/60 dark:bg-card/60"
-            )}
-          >
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <div
+          <section key={section.key} aria-label={`${section.label} stops`}>
+            <div className="mb-1.5 flex items-center gap-2 px-1">
+              <SectionIcon
+                size={12}
+                className={cn("shrink-0", section.accent)}
+              />
+              <span
                 className={cn(
-                  "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-widest",
+                  "text-[10px] font-semibold uppercase tracking-widest",
                   section.accent
                 )}
               >
-                <SectionIcon size={13} />
                 {section.displayLabel}
-              </div>
-              <span className="text-xs font-medium text-muted-foreground">
-                {section.items.length}{" "}
-                {section.items.length === 1 ? "stop" : "stops"}
+              </span>
+              <span className="text-[10px] text-muted-foreground/50">
+                {section.items.length}
               </span>
             </div>
 

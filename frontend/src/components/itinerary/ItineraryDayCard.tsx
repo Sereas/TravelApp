@@ -17,10 +17,6 @@ import {
   type ItineraryOptionLocation,
   type Location,
 } from "@/lib/api";
-import {
-  ItineraryDayMap,
-  type MapRoutePolyline,
-} from "@/components/itinerary/ItineraryDayMap";
 import { ItineraryDayHeader } from "@/components/itinerary/ItineraryDayHeader";
 import { ItineraryDayTimeline } from "@/components/itinerary/ItineraryDayTimeline";
 import { ItineraryRouteManager } from "@/components/itinerary/ItineraryRouteManager";
@@ -29,7 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { useReadOnly } from "@/lib/read-only-context";
-import { Sunrise, Sun, Sunset, Moon, MapPin, Plus } from "lucide-react";
+import { Sunrise, Sun, Sunset, Moon, Plus } from "lucide-react";
 
 const TIME_META: Record<
   string,
@@ -66,7 +62,7 @@ const TIME_META: Record<
   },
 };
 
-const ROUTE_COLORS = [
+export const ROUTE_COLORS = [
   {
     bar: "border-l-blue-400",
     bg: "bg-blue-50",
@@ -103,30 +99,6 @@ const ROUTE_COLORS = [
     hex: "#fb7185",
   },
 ];
-
-function formatDuration(seconds: number): string {
-  const totalMin = Math.round(seconds / 60);
-  if (totalMin < 60) return `${totalMin} min`;
-  const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  return m === 0 ? `${h}h` : `${h}h ${m}min`;
-}
-
-function formatRouteTotalDuration(route: {
-  duration_seconds?: number | null;
-}): string {
-  if (route.duration_seconds == null) return "— min";
-  return formatDuration(route.duration_seconds);
-}
-
-function formatRouteTotalDistance(route: {
-  distance_meters?: number | null;
-}): string {
-  if (route.distance_meters == null) return "— km";
-  const km = route.distance_meters / 1000;
-  const decimals = km >= 10 ? 0 : 1;
-  return `${km.toFixed(decimals)} km`;
-}
 
 export interface ItineraryDayCardProps {
   day: ItineraryDay;
@@ -297,7 +269,6 @@ export function ItineraryDayCard({
     return () => document.removeEventListener("mousedown", h, true);
   }, [tpOpen]);
 
-  const [showMap, setShowMap] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const sorted = useMemo(
@@ -310,47 +281,6 @@ export function ItineraryDayCard({
     [currentOption]
   );
 
-  const mapLocations = useMemo(
-    () =>
-      sorted
-        .map((ol) => tripLocations.find((loc) => loc.id === ol.location_id))
-        .filter(
-          (loc): loc is Location =>
-            !!loc &&
-            typeof loc.latitude === "number" &&
-            typeof loc.longitude === "number"
-        )
-        .map((loc) => ({
-          id: loc.id,
-          name: loc.name,
-          address: loc.address,
-          latitude: loc.latitude as number,
-          longitude: loc.longitude as number,
-          category: loc.category ?? null,
-        })),
-    [sorted, tripLocations]
-  );
-
-  const mapRoutes: MapRoutePolyline[] = useMemo(() => {
-    if (!routes.length) return [];
-    return routes
-      .map((route, ri) => {
-        const polylines = (route.segments ?? [])
-          .filter((s) => s.encoded_polyline)
-          .sort((a, b) => a.segment_order - b.segment_order)
-          .map((s) => s.encoded_polyline!);
-        if (polylines.length === 0) return null;
-        const dur = formatRouteTotalDuration(route);
-        const dist = formatRouteTotalDistance(route);
-        return {
-          routeId: route.route_id,
-          color: ROUTE_COLORS[ri % ROUTE_COLORS.length].hex,
-          encodedPolylines: polylines,
-          label: `${dur} · ${dist}`,
-        };
-      })
-      .filter((r): r is NonNullable<typeof r> => r !== null);
-  }, [routes]);
 
   // Drag handlers
   function onDragStart(locId: string, e: React.DragEvent) {
@@ -549,17 +479,16 @@ export function ItineraryDayCard({
           {currentOption && (
             <div key={currentOption.id} className="animate-page-flip">
               {!readOnly && (
-                <div className="mb-3">
+                <div className="mb-4">
                   <AddLocationsToOptionDialog
                     trigger={
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 gap-1 text-xs"
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-brand/25 py-2.5 text-sm font-medium text-brand transition-colors hover:border-brand/40 hover:bg-brand/5"
                       >
-                        <Plus size={12} />
+                        <Plus size={15} strokeWidth={2.5} />
                         Add locations
-                      </Button>
+                      </button>
                     }
                     allLocations={tripLocations}
                     alreadyAddedIds={alreadyAdded}
@@ -625,39 +554,6 @@ export function ItineraryDayCard({
                 onDeleteRoute={handleDeleteRoute}
               />
 
-              {mapLocations.length > 0 && (
-                <div className="mt-4">
-                  {showMap ? (
-                    <div className="rounded-lg border border-border bg-muted/20 p-4">
-                      <div className="mb-2 flex items-center justify-between">
-                        <span className="text-xs font-bold text-foreground">
-                          Map
-                        </span>
-                        <button
-                          type="button"
-                          className="text-[11px] text-muted-foreground transition-colors hover:text-foreground"
-                          onClick={() => setShowMap(false)}
-                        >
-                          Hide
-                        </button>
-                      </div>
-                      <ItineraryDayMap
-                        locations={mapLocations}
-                        routes={mapRoutes}
-                      />
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground"
-                      onClick={() => setShowMap(true)}
-                    >
-                      <MapPin size={12} />
-                      Show map
-                    </button>
-                  )}
-                </div>
-              )}
             </div>
           )}
           {!currentOption && (

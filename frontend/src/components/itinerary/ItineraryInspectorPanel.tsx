@@ -69,72 +69,60 @@ export function ItineraryInspectorPanel({
   const hasTransfer = transferDuration > 0 || transferDistance > 0;
 
   return (
-    <aside className="grain-overlay overflow-hidden rounded-2xl border border-border bg-card p-4">
+    <aside className="overflow-hidden rounded-2xl border border-border bg-card p-4">
       <div className="mb-3 flex items-center gap-2">
-        <Compass size={16} className="text-brand" />
-        <span className="text-xs font-bold uppercase tracking-widest text-brand">
-          Sitrep
+        <Compass size={14} className="text-muted-foreground" />
+        <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+          Day overview
         </span>
       </div>
 
       {day ? (
-        <>
-          <div className="grid grid-cols-3 gap-3 text-center text-xs">
-            <div className="rounded-xl border border-primary/10 bg-primary/5 px-2 py-2.5">
-              <MapPin size={16} className="mx-auto mb-1 text-primary/60" />
-              <div className="text-xl font-bold text-foreground">
-                {placeCount}
-              </div>
-              <div className="font-medium text-muted-foreground">
-                {placeCount === 1 ? "place" : "places"}
-              </div>
+        <div className="space-y-2">
+          <div className="flex items-center gap-4 text-xs">
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <MapPin size={12} className="text-primary/60" />
+              <span className="font-bold text-foreground">{placeCount}</span>
+              <span>{placeCount === 1 ? "place" : "places"}</span>
             </div>
-            <div className="rounded-xl border border-brand/10 bg-brand/5 px-2 py-2.5">
-              <Route size={16} className="mx-auto mb-1 text-brand/60" />
-              <div className="text-xl font-bold text-foreground">
-                {routeCount}
-              </div>
-              <div className="font-medium text-muted-foreground">
-                {routeCount === 1 ? "route" : "routes"}
-              </div>
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <Route size={12} className="text-primary/60" />
+              <span className="font-bold text-foreground">{routeCount}</span>
+              <span>{routeCount === 1 ? "route" : "routes"}</span>
             </div>
-            <div className="rounded-xl border border-primary/10 bg-primary/5 px-2 py-2.5">
-              <LayoutList size={16} className="mx-auto mb-1 text-primary/60" />
-              <div className="text-xl font-bold text-foreground">
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <LayoutList size={12} className="text-primary/60" />
+              <span className="font-bold text-foreground">
                 {day.options.length}
-              </div>
-              <div className="font-medium text-muted-foreground">
-                {day.options.length === 1 ? "plan" : "plans"}
-              </div>
+              </span>
+              <span>{day.options.length === 1 ? "plan" : "plans"}</span>
             </div>
           </div>
           {routeCount > 0 && (hasWalk || hasTransfer) && (
-            <div className="mt-3 space-y-1.5 rounded-xl border border-border/50 bg-muted/30 px-3 py-2">
+            <div className="flex flex-wrap gap-3 border-t border-border/50 pt-2 text-xs text-muted-foreground">
               {hasWalk && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Footprints size={12} className="shrink-0 text-primary/50" />
-                  <span className="font-bold">
+                <div className="flex items-center gap-1.5">
+                  <Footprints size={11} className="shrink-0 text-primary/50" />
+                  <span className="font-medium">
                     {walkDuration > 0 && formatDuration(walkDuration)}
                     {walkDuration > 0 && walkDistance > 0 && " / "}
                     {walkDistance > 0 && formatDistance(walkDistance)}
                   </span>
-                  <span className="text-muted-foreground/50">on foot</span>
                 </div>
               )}
               {hasTransfer && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Car size={12} className="shrink-0 text-brand/50" />
-                  <span className="font-bold">
+                <div className="flex items-center gap-1.5">
+                  <Car size={11} className="shrink-0 text-primary/50" />
+                  <span className="font-medium">
                     {transferDuration > 0 && formatDuration(transferDuration)}
                     {transferDuration > 0 && transferDistance > 0 && " / "}
                     {transferDistance > 0 && formatDistance(transferDistance)}
                   </span>
-                  <span className="text-muted-foreground/50">transfer</span>
                 </div>
               )}
             </div>
           )}
-        </>
+        </div>
       ) : (
         <p className="text-sm text-muted-foreground">
           Select a day to see its summary.

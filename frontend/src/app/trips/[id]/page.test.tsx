@@ -218,7 +218,7 @@ describe("TripDetailPage", () => {
     render(<TripDetailPage />);
 
     await screen.findByText("Fail");
-    await userEvent.click(screen.getByRole("button", { name: /all trips/i }));
+    await userEvent.click(screen.getByRole("button", { name: /trips/i }));
     expect(mockPush).toHaveBeenCalledWith("/trips");
   });
 
@@ -228,7 +228,7 @@ describe("TripDetailPage", () => {
     render(<TripDetailPage />);
 
     await screen.findByText("Paris Summer");
-    await userEvent.click(screen.getByRole("button", { name: /all trips/i }));
+    await userEvent.click(screen.getByRole("button", { name: /trips/i }));
     expect(mockPush).toHaveBeenCalledWith("/trips");
   });
 
@@ -430,7 +430,7 @@ describe("TripDetailPage", () => {
     render(<TripDetailPage />);
 
     await screen.findByText("Eiffel Tower");
-    const locationsTab = screen.getByRole("tab", { name: /locations/i });
+    const locationsTab = screen.getByRole("tab", { name: /places/i });
     expect(locationsTab).toHaveTextContent("2");
   });
 
@@ -720,7 +720,7 @@ describe("TripDetailPage", () => {
     render(<TripDetailPage />);
 
     await screen.findByText("Paris Summer");
-    expect(screen.getByRole("tab", { name: /locations/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /places/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /itinerary/i })).toBeInTheDocument();
   });
 
@@ -1501,14 +1501,13 @@ describe("TripDetailPage", () => {
     await userEvent.click(screen.getByRole("tab", { name: /itinerary/i }));
     await screen.findByText("Mon, Jun 1");
 
-    await userEvent.click(screen.getByRole("button", { name: /^main plan$/i }));
+    await userEvent.click(screen.getByText("Main plan"));
     await userEvent.click(screen.getByRole("option", { name: /plan 1/i }));
 
-    await userEvent.click(
-      screen.getByRole("button", { name: /plan settings: plan 1/i })
-    );
+    // Re-open the dropdown to access rename/delete actions
+    await userEvent.click(screen.getByText("Plan 1"));
 
-    const deleteBtn = screen.getByRole("button", { name: /^delete$/i });
+    const deleteBtn = screen.getByRole("button", { name: /delete plan/i });
     expect(deleteBtn).toBeInTheDocument();
 
     await userEvent.click(deleteBtn);

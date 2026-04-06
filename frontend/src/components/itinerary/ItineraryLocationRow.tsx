@@ -4,7 +4,7 @@ import type { MutableRefObject } from "react";
 import type { ItineraryOptionLocation } from "@/lib/api";
 import { CategoryIcon } from "@/components/locations/CategoryIcon";
 import { LoadingSpinner } from "@/components/feedback/LoadingSpinner";
-import { CATEGORY_META, type CategoryKey } from "@/lib/location-constants";
+import { type CategoryKey } from "@/lib/location-constants";
 import { cn } from "@/lib/utils";
 import { useReadOnly } from "@/lib/read-only-context";
 import {
@@ -206,10 +206,6 @@ export function ItineraryLocationRow({
   const showBooking = booking === "yes" || booking === "yes_done";
   const imageUrl =
     optionLocation.location.user_image_url || optionLocation.location.image_url;
-  const catMeta = optionLocation.location.category
-    ? CATEGORY_META[optionLocation.location.category as CategoryKey]
-    : null;
-
   return (
     <div
       className={cn(
@@ -299,7 +295,7 @@ export function ItineraryLocationRow({
               ? "border-brand/30 bg-brand/5 shadow-md shadow-brand/10 ring-1 ring-brand/20"
               : expanded
                 ? "border-primary/20 bg-primary/5 shadow-sm"
-                : "border-white/80 bg-white hover:-translate-y-px hover:border-primary/10 hover:shadow-md motion-reduce:hover:translate-y-0 dark:border-card dark:bg-card"
+                : "border-border/40 bg-white hover:border-primary/10 hover:shadow-sm dark:border-card dark:bg-card"
           )}
         >
           <button
@@ -312,7 +308,7 @@ export function ItineraryLocationRow({
             aria-expanded={expanded}
           >
             <div className="relative shrink-0">
-              <div className="polaroid-img vintage-img relative h-16 w-16 overflow-hidden rounded-lg bg-muted">
+              <div className="relative h-12 w-12 overflow-hidden rounded-md bg-muted">
                 {imageUrl ? (
                   <img
                     src={imageUrl}
@@ -359,23 +355,11 @@ export function ItineraryLocationRow({
               <div className="truncate font-bold text-foreground">
                 {optionLocation.location.name}
               </div>
-              <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                {optionLocation.location.city ? (
-                  <span className="truncate">
-                    {optionLocation.location.city}
-                  </span>
-                ) : null}
-                {optionLocation.location.category ? (
-                  <span className="rounded-full bg-primary/8 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary/70">
-                    {optionLocation.location.category}
-                  </span>
-                ) : null}
-              </div>
-              {optionLocation.location.note ? (
-                <div className="journal-note mt-1 text-xs leading-5 text-muted-foreground/70">
-                  {optionLocation.location.note}
+              {optionLocation.location.city && (
+                <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                  {optionLocation.location.city}
                 </div>
-              ) : null}
+              )}
             </div>
           </button>
 
@@ -451,7 +435,8 @@ export function ItineraryLocationRow({
 
         {expanded &&
           (optionLocation.location.address ||
-            optionLocation.location.working_hours) && (
+            optionLocation.location.working_hours ||
+            optionLocation.location.note) && (
             <div className="mb-1 ml-1 mr-4 space-y-1 rounded-b-lg bg-primary/5 px-3 py-2 text-xs">
               {optionLocation.location.address && (
                 <div>
@@ -475,6 +460,11 @@ export function ItineraryLocationRow({
                       </span>
                     ))}
                   </span>
+                </div>
+              )}
+              {optionLocation.location.note && (
+                <div className="italic text-muted-foreground/70">
+                  {optionLocation.location.note}
                 </div>
               )}
             </div>

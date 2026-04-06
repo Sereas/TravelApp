@@ -3,14 +3,7 @@
 import { useMemo, useState } from "react";
 import type { Location } from "@/lib/api";
 import { useReadOnly } from "@/lib/read-only-context";
-import {
-  ChevronDown,
-  Compass,
-  Inbox,
-  MapPin,
-  Plus,
-  Search,
-} from "lucide-react";
+import { ChevronDown, Compass, MapPin, Plus, Search } from "lucide-react";
 
 const COLLAPSED_COUNT = 4;
 const SEARCH_THRESHOLD = 8;
@@ -38,66 +31,74 @@ export function UnscheduledLocationsPanel({
     (location) => !itineraryLocationMap.has(location.id)
   );
 
-  const sorted = useMemo(() => {
+  // When currentDayCities is set, restrict to same-city only.
+  // When empty, show all (fallback).
+  const cityFiltered = useMemo(() => {
     if (currentDayCities.size === 0) return unscheduled;
-    const inCity: Location[] = [];
-    const other: Location[] = [];
-    for (const loc of unscheduled) {
-      if (loc.city && currentDayCities.has(loc.city.toLowerCase())) {
-        inCity.push(loc);
-      } else {
-        other.push(loc);
-      }
-    }
-    return [...inCity, ...other];
+    return unscheduled.filter(
+      (loc) => loc.city && currentDayCities.has(loc.city.toLowerCase())
+    );
   }, [unscheduled, currentDayCities]);
 
-  const dividerIndex = useMemo(() => {
-    if (currentDayCities.size === 0) return -1;
-    const idx = sorted.findIndex(
-      (loc) => !loc.city || !currentDayCities.has(loc.city.toLowerCase())
-    );
-    return idx > 0 ? idx : -1;
-  }, [sorted, currentDayCities]);
-
+  // Apply text search on top of the city-filtered list
   const filtered = useMemo(() => {
-    if (!filter.trim()) return sorted;
+    if (!filter.trim()) return cityFiltered;
     const q = filter.toLowerCase();
-    return sorted.filter(
+    return cityFiltered.filter(
       (l) =>
         l.name.toLowerCase().includes(q) ||
         l.city?.toLowerCase().includes(q) ||
         l.category?.toLowerCase().includes(q)
     );
-  }, [sorted, filter]);
+  }, [cityFiltered, filter]);
 
   const showSearch = unscheduled.length >= SEARCH_THRESHOLD;
-  const needsCollapse = filtered.length > COLLAPSED_COUNT && !filter.trim();
+  const isSearching = !!filter.trim();
+  const needsCollapse = filtered.length > COLLAPSED_COUNT && !isSearching;
   const visible =
-    expanded || filter.trim() ? filtered : filtered.slice(0, COLLAPSED_COUNT);
+    needsCollapse && !expanded ? filtered.slice(0, COLLAPSED_COUNT) : filtered;
   const hiddenCount = filtered.length - COLLAPSED_COUNT;
 
+  // Empty state: unscheduled locations exist but none match the current day's city
+  const noNearby =
+    unscheduled.length > 0 &&
+    currentDayCities.size > 0 &&
+    cityFiltered.length === 0;
+
   return (
-    <aside className="grain-overlay overflow-hidden rounded-2xl border border-border bg-card p-4">
+    <aside className="overflow-hidden rounded-2xl border border-border bg-card p-4">
       <div className="mb-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Inbox size={14} className="text-brand" />
+          <Plus size={14} className="text-brand" />
           <span className="text-xs font-bold uppercase tracking-widest text-brand">
-            Not yet planned
+            Quick add
           </span>
         </div>
-        {unscheduled.length > 0 && (
+        {cityFiltered.length > 0 && (
           <span className="stamp-badge text-[10px] text-primary">
-            {unscheduled.length}
+            {cityFiltered.length}
           </span>
         )}
       </div>
 
+      {currentDayCities.size > 0 && cityFiltered.length > 0 && (
+        <p className="mb-2 text-[11px] text-muted-foreground/50">
+          Nearby unplanned places
+        </p>
+      )}
+
       {unscheduled.length === 0 ? (
         <div className="py-4 text-center">
-          <Compass size={24} className="mx-auto mb-2 text-brand/40" />
-          <p className="text-xs text-muted-foreground/60">
-            All places planned!
+          <p className="text-sm">🎉</p>
+          <p className="mt-1 text-xs text-muted-foreground/60">
+            Every place has a spot on the map!
+          </p>
+        </div>
+      ) : noNearby ? (
+        <div className="py-4 text-center">
+          <p className="text-sm">✨</p>
+          <p className="mt-1 text-xs text-muted-foreground/60">
+            You&apos;ve added all the spots for this area — time to explore!
           </p>
         </div>
       ) : (
@@ -123,19 +124,8 @@ export function UnscheduledLocationsPanel({
           )}
 
           <div className="scrollbar-hide -mx-1 max-h-[320px] space-y-px overflow-y-auto px-1">
-            {visible.map((location, i) => (
+            {visible.map((location) => (
               <div key={location.id}>
-                {!filter.trim() &&
-                  dividerIndex > 0 &&
-                  sorted.indexOf(location) === dividerIndex && (
-                    <div className="flex items-center gap-2 px-2 py-1.5">
-                      <div className="h-px flex-1 bg-border" />
-                      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/50">
-                        Other cities
-                      </span>
-                      <div className="h-px flex-1 bg-border" />
-                    </div>
-                  )}
                 <div className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-primary/5">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 text-[13px] leading-tight">
@@ -169,7 +159,7 @@ export function UnscheduledLocationsPanel({
             ))}
           </div>
 
-          {needsCollapse && !expanded && hiddenCount > 0 && (
+          {!expanded && !isSearching && needsCollapse && (
             <button
               type="button"
               className="mt-1 flex w-full items-center justify-center gap-1 rounded-lg py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground"
@@ -180,7 +170,7 @@ export function UnscheduledLocationsPanel({
             </button>
           )}
 
-          {expanded && needsCollapse && (
+          {expanded && (
             <button
               type="button"
               className="mt-1 flex w-full items-center justify-center gap-1 rounded-lg py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground"
@@ -190,7 +180,7 @@ export function UnscheduledLocationsPanel({
             </button>
           )}
 
-          {filter.trim() && filtered.length === 0 && (
+          {isSearching && filtered.length === 0 && (
             <p className="py-2 text-center text-xs text-muted-foreground/60">
               No matches
             </p>

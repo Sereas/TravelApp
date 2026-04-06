@@ -70,10 +70,10 @@ describe("UnscheduledLocationsPanel", () => {
       />
     );
 
-    expect(screen.getByText(/all places planned/i)).toBeInTheDocument();
+    expect(screen.getByText(/every place has a spot/i)).toBeInTheDocument();
   });
 
-  it("collapses long lists and expands on click", async () => {
+  it("collapses long lists and expands on click when currentDayCities is empty", async () => {
     const many = Array.from({ length: 6 }, (_, i) =>
       makeLocation(`loc-${i}`, `Place ${i}`)
     );
@@ -105,7 +105,7 @@ describe("UnscheduledLocationsPanel", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows search filter for 8+ items and filters results", async () => {
+  it("shows search filter for 8+ items and filters results when currentDayCities is empty", async () => {
     const many = Array.from({ length: 9 }, (_, i) =>
       makeLocation(`loc-${i}`, `Place ${i}`, i < 3 ? "Paris" : "London")
     );
@@ -131,14 +131,16 @@ describe("UnscheduledLocationsPanel", () => {
     expect(screen.queryByText("Place 3")).not.toBeInTheDocument();
   });
 
-  it("sorts locations matching current day cities first with divider", () => {
+  // --- New behavior: city-focused filtering ---
+
+  it("shows only same-city locations when currentDayCities is set", () => {
     const locs = [
       makeLocation("loc-a", "Big Ben", "London"),
       makeLocation("loc-b", "Eiffel Tower", "Paris"),
       makeLocation("loc-c", "Louvre", "Paris"),
       makeLocation("loc-d", "Colosseum", "Rome"),
     ];
-    const { container } = render(
+    render(
       <UnscheduledLocationsPanel
         locations={locs}
         itineraryLocationMap={new Map()}
@@ -148,14 +150,133 @@ describe("UnscheduledLocationsPanel", () => {
       />
     );
 
-    // Paris locations should appear first
-    const names = screen
-      .getAllByText(/^(Eiffel Tower|Louvre|Big Ben|Colosseum)$/)
-      .map((el) => el.textContent);
-    expect(names[0]).toBe("Eiffel Tower");
-    expect(names[1]).toBe("Louvre");
+    // Paris locations visible
+    expect(screen.getByText("Eiffel Tower")).toBeInTheDocument();
+    expect(screen.getByText("Louvre")).toBeInTheDocument();
 
-    // "Other cities" divider should appear
-    expect(screen.getByText(/other cities/i)).toBeInTheDocument();
+    // Non-Paris locations NOT visible
+    expect(screen.queryByText("Big Ben")).not.toBeInTheDocument();
+    expect(screen.queryByText("Colosseum")).not.toBeInTheDocument();
+  });
+
+  it("does not show 'Other cities' divider or expand button when currentDayCities is set", () => {
+    const locs = [
+      makeLocation("loc-a", "Big Ben", "London"),
+      makeLocation("loc-b", "Eiffel Tower", "Paris"),
+      makeLocation("loc-c", "Louvre", "Paris"),
+    ];
+    render(
+      <UnscheduledLocationsPanel
+        locations={locs}
+        itineraryLocationMap={new Map()}
+        currentDayId="day-1"
+        currentDayCities={new Set(["paris"])}
+        onScheduleToDay={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByText(/other cities/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /more from other cities/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows all locations when currentDayCities is empty (fallback)", () => {
+    const locs = [
+      makeLocation("loc-a", "Big Ben", "London"),
+      makeLocation("loc-b", "Eiffel Tower", "Paris"),
+      makeLocation("loc-c", "Colosseum", "Rome"),
+    ];
+    render(
+      <UnscheduledLocationsPanel
+        locations={locs}
+        itineraryLocationMap={new Map()}
+        currentDayId="day-1"
+        currentDayCities={new Set()}
+        onScheduleToDay={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("Big Ben")).toBeInTheDocument();
+    expect(screen.getByText("Eiffel Tower")).toBeInTheDocument();
+    expect(screen.getByText("Colosseum")).toBeInTheDocument();
+  });
+
+  it("search filters within same-city locations only when currentDayCities is set", async () => {
+    const locs = Array.from({ length: 9 }, (_, i) =>
+      makeLocation(
+        `loc-${i}`,
+        i < 3 ? `Paris Place ${i}` : `London Place ${i}`,
+        i < 3 ? "Paris" : "London"
+      )
+    );
+    render(
+      <UnscheduledLocationsPanel
+        locations={locs}
+        itineraryLocationMap={new Map()}
+        currentDayId="day-1"
+        currentDayCities={new Set(["paris"])}
+        onScheduleToDay={vi.fn()}
+      />
+    );
+
+    const search = screen.getByPlaceholderText(/filter places/i);
+    await userEvent.type(search, "Paris");
+
+    // Paris locations visible in search
+    expect(screen.getByText("Paris Place 0")).toBeInTheDocument();
+    expect(screen.getByText("Paris Place 1")).toBeInTheDocument();
+    expect(screen.getByText("Paris Place 2")).toBeInTheDocument();
+
+    // London locations NEVER visible, even while searching
+    expect(screen.queryByText("London Place 3")).not.toBeInTheDocument();
+    expect(screen.queryByText("London Place 4")).not.toBeInTheDocument();
+  });
+
+  it("shows empty state message when no same-city locations exist", () => {
+    const locs = [
+      makeLocation("loc-a", "Big Ben", "London"),
+      makeLocation("loc-b", "Tower Bridge", "London"),
+    ];
+    render(
+      <UnscheduledLocationsPanel
+        locations={locs}
+        itineraryLocationMap={new Map()}
+        currentDayId="day-1"
+        currentDayCities={new Set(["paris"])}
+        onScheduleToDay={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText(/added all the spots/i)).toBeInTheDocument();
+    expect(screen.queryByText("Big Ben")).not.toBeInTheDocument();
+    expect(screen.queryByText("Tower Bridge")).not.toBeInTheDocument();
+  });
+
+  it("collapses long same-city lists and expands on click", async () => {
+    const locs = Array.from({ length: 6 }, (_, i) =>
+      makeLocation(`loc-${i}`, `Paris Place ${i}`, "Paris")
+    );
+    render(
+      <UnscheduledLocationsPanel
+        locations={locs}
+        itineraryLocationMap={new Map()}
+        currentDayId="day-1"
+        currentDayCities={new Set(["paris"])}
+        onScheduleToDay={vi.fn()}
+      />
+    );
+
+    // First 4 visible
+    expect(screen.getByText("Paris Place 0")).toBeInTheDocument();
+    expect(screen.getByText("Paris Place 3")).toBeInTheDocument();
+    expect(screen.queryByText("Paris Place 4")).not.toBeInTheDocument();
+
+    // Expand shows rest of same-city locations (no other cities)
+    const showMore = screen.getByRole("button", { name: /show 2 more/i });
+    await userEvent.click(showMore);
+
+    expect(screen.getByText("Paris Place 4")).toBeInTheDocument();
+    expect(screen.getByText("Paris Place 5")).toBeInTheDocument();
   });
 });
