@@ -445,7 +445,8 @@ async def import_google_list(
     for place in scraped_places:
         display_name = place.name or f"({place.latitude}, {place.longitude})"
         has_coords = place.latitude != 0.0 and place.longitude != 0.0
-        name_is_coords = place.name and GooglePlacesClient._is_coordinate_style_place_slug(place.name)
+        is_coord_slug = GooglePlacesClient._is_coordinate_style_place_slug
+        name_is_coords = place.name and is_coord_slug(place.name)
         search_name = None if name_is_coords else (place.name or None)
 
         resolved = None
@@ -693,7 +694,8 @@ async def import_google_list_stream(
                 # If the scraped name is DMS coordinates (not a venue name),
                 # skip text search and go straight to nearby search — same
                 # strategy as resolve_from_link() in google_places.py.
-                name_is_coords = place.name and GooglePlacesClient._is_coordinate_style_place_slug(place.name)
+                is_coord_slug = GooglePlacesClient._is_coordinate_style_place_slug
+                name_is_coords = place.name and is_coord_slug(place.name)
                 search_name = None if name_is_coords else (place.name or None)
 
                 resolved = None
