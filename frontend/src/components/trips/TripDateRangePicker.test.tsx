@@ -8,7 +8,7 @@ import { TripDateRangePicker } from "./TripDateRangePicker";
 // ---------------------------------------------------------------------------
 
 function setup(
-  props?: Partial<React.ComponentProps<typeof TripDateRangePicker>>,
+  props?: Partial<React.ComponentProps<typeof TripDateRangePicker>>
 ) {
   const onDateRangeChange = vi.fn();
   render(
@@ -16,7 +16,7 @@ function setup(
       startDate={props?.startDate ?? null}
       endDate={props?.endDate ?? null}
       onDateRangeChange={props?.onDateRangeChange ?? onDateRangeChange}
-    />,
+    />
   );
   return { onDateRangeChange };
 }
@@ -49,7 +49,7 @@ describe("TripDateRangePicker — trigger button", () => {
   it("shows 'Set dates' placeholder when both dates are null", () => {
     setup({ startDate: null, endDate: null });
     expect(
-      screen.getByRole("button", { name: /date range/i }),
+      screen.getByRole("button", { name: /date range/i })
     ).toHaveTextContent(/set dates/i);
   });
 
@@ -136,7 +136,10 @@ describe("TripDateRangePicker — range selection", () => {
     await userEvent.click(getDayButton("June", 20, 2026));
 
     await waitFor(() => {
-      expect(onDateRangeChange).toHaveBeenCalledWith("2026-06-10", "2026-06-20");
+      expect(onDateRangeChange).toHaveBeenCalledWith(
+        "2026-06-10",
+        "2026-06-20"
+      );
     });
   });
 
@@ -181,7 +184,10 @@ describe("TripDateRangePicker — range selection", () => {
     // Second click completes the new range with the correct start (June 10, not June 1)
     await userEvent.click(getDayButton("June", 25, 2026));
     await waitFor(() => {
-      expect(onDateRangeChange).toHaveBeenCalledWith("2026-06-10", "2026-06-25");
+      expect(onDateRangeChange).toHaveBeenCalledWith(
+        "2026-06-10",
+        "2026-06-25"
+      );
     });
   });
 

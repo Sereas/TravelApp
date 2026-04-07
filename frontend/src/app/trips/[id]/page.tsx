@@ -243,7 +243,7 @@ export default function TripDetailPage() {
       const updated = await handleBeforeTripSave(
         payload,
         prev.start_date,
-        prev.end_date,
+        prev.end_date
       );
       setTrip(updated);
       fetchItinerary();
@@ -260,7 +260,7 @@ export default function TripDetailPage() {
   async function handleBeforeTripSave(
     payload: TripUpdatePayload,
     originalStart?: string | null,
-    originalEnd?: string | null,
+    originalEnd?: string | null
   ): Promise<Trip> {
     const hasNewDates = payload.start_date && payload.end_date;
 

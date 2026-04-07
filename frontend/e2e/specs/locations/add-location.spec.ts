@@ -48,10 +48,7 @@ test.describe("@google — Add location via Google Maps link", () => {
    * Helper: paste a Google Maps link, wait for the preview fetch to finish,
    * and return the auto-filled name (empty string if Google API is unavailable).
    */
-  async function pasteGoogleLink(
-    page: Page,
-    link: string
-  ): Promise<string> {
+  async function pasteGoogleLink(page: Page, link: string): Promise<string> {
     await page.locator("#add-location-google-link").fill(link);
     // Trigger blur to start the preview fetch
     await page.locator("#add-location-google-link").blur();

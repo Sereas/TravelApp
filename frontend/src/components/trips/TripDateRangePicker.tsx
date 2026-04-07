@@ -30,9 +30,10 @@ function fmtDate(iso: string): string {
 
 function formatTriggerText(
   startDate: string | null,
-  endDate: string | null,
+  endDate: string | null
 ): string {
-  if (startDate && endDate) return `${fmtDate(startDate)} \u2014 ${fmtDate(endDate)}`;
+  if (startDate && endDate)
+    return `${fmtDate(startDate)} \u2014 ${fmtDate(endDate)}`;
   if (startDate) return fmtDate(startDate);
   if (endDate) return fmtDate(endDate);
   return "Set dates";
@@ -88,7 +89,7 @@ export function TripDateRangePicker({
       // Was selecting (only from) → now complete → save and close
       onDateRangeChange(
         format(newRange!.from!, "yyyy-MM-dd"),
-        format(newRange!.to!, "yyyy-MM-dd"),
+        format(newRange!.to!, "yyyy-MM-dd")
       );
       setOpen(false);
     }
@@ -105,18 +106,14 @@ export function TripDateRangePicker({
           disabled={disabled}
           className={cn(
             "inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 text-sm transition-colors hover:bg-muted/60 hover:text-foreground",
-            !startDate && !endDate && "text-muted-foreground",
+            !startDate && !endDate && "text-muted-foreground"
           )}
         >
           <CalendarDays size={14} className="shrink-0 opacity-60" />
           <span>{formatTriggerText(startDate, endDate)}</span>
         </button>
       </PopoverTrigger>
-      <PopoverContent
-        className="w-auto p-0"
-        align="start"
-        sideOffset={4}
-      >
+      <PopoverContent className="w-auto p-0" align="start" sideOffset={4}>
         <Calendar
           mode="range"
           selected={range}

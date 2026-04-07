@@ -1700,7 +1700,9 @@ describe("TripDetailPage", () => {
       render(<TripDetailPage />);
 
       await screen.findByText("Paris Summer");
-      await userEvent.click(screen.getByRole("button", { name: /date range/i }));
+      await userEvent.click(
+        screen.getByRole("button", { name: /date range/i })
+      );
 
       // Calendar grid should appear
       expect(screen.getAllByRole("grid").length).toBeGreaterThanOrEqual(1);
@@ -1718,7 +1720,9 @@ describe("TripDetailPage", () => {
       render(<TripDetailPage />);
 
       await screen.findByText("Paris Summer");
-      await userEvent.click(screen.getByRole("button", { name: /date range/i }));
+      await userEvent.click(
+        screen.getByRole("button", { name: /date range/i })
+      );
 
       // Select a new range: click start day, then end day
       const june10 = screen.getByRole("button", { name: /june 10\w*, 2026/i });

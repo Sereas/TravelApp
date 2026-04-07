@@ -178,10 +178,19 @@
 
   /* Topographic contour float animation */
   @keyframes topoFloat {
-    0%, 100% { transform: translate(0, 0) scale(1); }
-    25% { transform: translate(3px, -2px) scale(1.01); }
-    50% { transform: translate(-2px, 3px) scale(1.005); }
-    75% { transform: translate(2px, 1px) scale(1.01); }
+    0%,
+    100% {
+      transform: translate(0, 0) scale(1);
+    }
+    25% {
+      transform: translate(3px, -2px) scale(1.01);
+    }
+    50% {
+      transform: translate(-2px, 3px) scale(1.005);
+    }
+    75% {
+      transform: translate(2px, 1px) scale(1.01);
+    }
   }
 
   /* Film grain overlay — vintage analog texture */
@@ -280,7 +289,9 @@
   padding: 0 !important;
   border-radius: 12px !important;
   overflow: hidden;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(0, 0, 0, 0.06) !important;
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.12),
+    0 1px 4px rgba(0, 0, 0, 0.06) !important;
   border: none !important;
 }
 

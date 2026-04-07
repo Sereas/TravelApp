@@ -92,7 +92,9 @@ export function DateChangeDialog({
   const contentDays = orphanedDays.filter(dayHasContent);
   const emptyDays = orphanedDays.filter((d) => !dayHasContent(d));
   const keepCount = Object.values(decisions).filter((d) => d === "keep").length;
-  const deleteCount = Object.values(decisions).filter((d) => d === "delete").length;
+  const deleteCount = Object.values(decisions).filter(
+    (d) => d === "delete"
+  ).length;
 
   function toggleDay(dayId: string) {
     setDecisions((prev) => ({
@@ -155,13 +157,22 @@ export function DateChangeDialog({
             <div className="space-y-2 text-sm">
               <p>
                 Your trip is changing from{" "}
-                <strong className="font-medium text-foreground">{fmtDate(oldStart)}</strong>
+                <strong className="font-medium text-foreground">
+                  {fmtDate(oldStart)}
+                </strong>
                 {" \u2013 "}
-                <strong className="font-medium text-foreground">{fmtDate(oldEnd)}</strong>
+                <strong className="font-medium text-foreground">
+                  {fmtDate(oldEnd)}
+                </strong>
                 {" to "}
-                <strong className="font-medium text-foreground">{fmtDate(newStart)}</strong>
+                <strong className="font-medium text-foreground">
+                  {fmtDate(newStart)}
+                </strong>
                 {" \u2013 "}
-                <strong className="font-medium text-foreground">{fmtDate(newEnd)}</strong>.
+                <strong className="font-medium text-foreground">
+                  {fmtDate(newEnd)}
+                </strong>
+                .
               </p>
               <p>
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
@@ -259,7 +270,9 @@ export function DateChangeDialog({
                     <div className="flex shrink-0 overflow-hidden rounded-full border border-border/50 text-[10px] font-semibold">
                       <button
                         type="button"
-                        onClick={() => setDecisions((p) => ({ ...p, [day.id]: "keep" }))}
+                        onClick={() =>
+                          setDecisions((p) => ({ ...p, [day.id]: "keep" }))
+                        }
                         className={cn(
                           "px-2.5 py-1 transition-colors",
                           isKeep
@@ -271,7 +284,9 @@ export function DateChangeDialog({
                       </button>
                       <button
                         type="button"
-                        onClick={() => setDecisions((p) => ({ ...p, [day.id]: "delete" }))}
+                        onClick={() =>
+                          setDecisions((p) => ({ ...p, [day.id]: "delete" }))
+                        }
                         className={cn(
                           "px-2.5 py-1 transition-colors",
                           !isKeep
