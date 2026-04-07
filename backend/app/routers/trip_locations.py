@@ -445,20 +445,40 @@ async def import_google_list(
     for place in scraped_places:
         display_name = place.name or f"({place.latitude}, {place.longitude})"
         has_coords = place.latitude != 0.0 and place.longitude != 0.0
+        name_is_coords = place.name and GooglePlacesClient._is_coordinate_style_place_slug(place.name)
+        search_name = None if name_is_coords else (place.name or None)
 
+        resolved = None
+        used_nearby = False
         try:
-            resolved = places_client._search_place_by_text(
-                place.name if place.name else f"{place.latitude},{place.longitude}",
-                latitude=place.latitude if has_coords else None,
-                longitude=place.longitude if has_coords else None,
-                radius_m=500.0 if has_coords else None,
-            )
-        except Exception as exc:
+            if search_name:
+                resolved = places_client._search_place_by_text(
+                    search_name,
+                    latitude=place.latitude if has_coords else None,
+                    longitude=place.longitude if has_coords else None,
+                    radius_m=500.0 if has_coords else None,
+                )
+            elif has_coords:
+                resolved = places_client._search_place_nearby(
+                    place.latitude, place.longitude,
+                )
+                used_nearby = True
+        except Exception:
+            if has_coords and search_name:
+                try:
+                    resolved = places_client._search_place_nearby(
+                        place.latitude, place.longitude,
+                    )
+                    used_nearby = True
+                except Exception:
+                    pass
+
+        if resolved is None:
             failed.append(
                 ImportedLocationSummary(
                     name=display_name,
                     status="failed",
-                    detail=f"Google Places enrichment failed: {exc}",
+                    detail="Places API lookup failed",
                 )
             )
             continue
@@ -496,13 +516,14 @@ async def import_google_list(
             "category": suggested_category,
             "latitude": resolved.latitude,
             "longitude": resolved.longitude,
-            "note": place.note,
+            "note": _build_note(place.note, used_nearby, display_name),
         }
         rows_to_insert.append((row, resolved.photos))
         imported.append(
             ImportedLocationSummary(
                 name=resolved.name or display_name,
                 status="imported",
+                detail="Nearest place to dropped pin" if used_nearby else None,
             )
         )
 
@@ -557,6 +578,18 @@ def _sse_event(data: dict) -> str:
     return f"data: {json.dumps(data)}\n\n"
 
 
+def _build_note(
+    existing_note: str | None, used_nearby: bool, original_name: str
+) -> str | None:
+    """Combine the scraped note with a nearby-fallback hint when applicable."""
+    parts: list[str] = []
+    if used_nearby:
+        parts.append(f"Nearest place to dropped pin \"{original_name}\"")
+    if existing_note:
+        parts.append(existing_note)
+    return " · ".join(parts) if parts else None
+
+
 @router.post(
     "/{trip_id}/locations/import-google-list-stream",
     response_class=StreamingResponse,
@@ -602,11 +635,21 @@ async def import_google_list_stream(
                 logger.warning(
                     "google_list_parse_error", error=str(exc), error_category="external_api"
                 )
+                # Internal/infra errors get a generic user-friendly message;
+                # user-actionable errors (empty list, bad URL) pass through.
+                raw = str(exc)
+                _INTERNAL_MARKERS = ("CAPTCHA", "rate-limit", "Playwright", "Failed to scrape")
+                if any(m in raw for m in _INTERNAL_MARKERS):
+                    user_message = (
+                        "We're having temporary technical difficulties importing this list. "
+                        "Please try again in a few minutes."
+                    )
+                else:
+                    user_message = raw
                 yield _sse_event(
                     {
                         "event": "error",
-                        "message": "Failed to parse Google Maps list. "
-                        "Please check the URL and try again.",
+                        "message": user_message,
                     }
                 )
                 return
@@ -647,20 +690,47 @@ async def import_google_list_stream(
 
                 display_name = place.name or f"({place.latitude}, {place.longitude})"
                 has_coords = place.latitude != 0.0 and place.longitude != 0.0
+                # If the scraped name is DMS coordinates (not a venue name),
+                # skip text search and go straight to nearby search — same
+                # strategy as resolve_from_link() in google_places.py.
+                name_is_coords = place.name and GooglePlacesClient._is_coordinate_style_place_slug(place.name)
+                search_name = None if name_is_coords else (place.name or None)
 
+                resolved = None
+                used_nearby = False
                 try:
-                    resolved = await asyncio.to_thread(
-                        places_client._search_place_by_text,
-                        place.name if place.name else f"{place.latitude},{place.longitude}",
-                        latitude=place.latitude if has_coords else None,
-                        longitude=place.longitude if has_coords else None,
-                        radius_m=500.0 if has_coords else None,
-                    )
-                except Exception as exc:
+                    if search_name:
+                        resolved = await asyncio.to_thread(
+                            places_client._search_place_by_text,
+                            search_name,
+                            latitude=place.latitude if has_coords else None,
+                            longitude=place.longitude if has_coords else None,
+                            radius_m=500.0 if has_coords else None,
+                        )
+                    elif has_coords:
+                        resolved = await asyncio.to_thread(
+                            places_client._search_place_nearby,
+                            place.latitude,
+                            place.longitude,
+                        )
+                        used_nearby = True
+                except Exception:
+                    # Text search failed — try nearby fallback if we have coords
+                    if has_coords and search_name:
+                        try:
+                            resolved = await asyncio.to_thread(
+                                places_client._search_place_nearby,
+                                place.latitude,
+                                place.longitude,
+                            )
+                            used_nearby = True
+                        except Exception:
+                            pass
+
+                if resolved is None:
                     logger.warning(
                         "google_list_enrichment_failed",
                         place_name=display_name,
-                        error=str(exc),
                         error_category="external_api",
                     )
                     failed.append(
@@ -719,11 +789,15 @@ async def import_google_list_stream(
                     "category": suggested_category,
                     "latitude": resolved.latitude,
                     "longitude": resolved.longitude,
-                    "note": place.note,
+                    "note": _build_note(place.note, used_nearby, display_name),
                 }
                 rows_to_insert.append((row, resolved.photos))
                 imported.append(
-                    ImportedLocationSummary(name=resolved.name or display_name, status="imported")
+                    ImportedLocationSummary(
+                        name=resolved.name or display_name,
+                        status="imported",
+                        detail="Nearest place to dropped pin" if used_nearby else None,
+                    )
                 )
                 yield _sse_event(
                     {

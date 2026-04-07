@@ -4,42 +4,42 @@
 
 @layer base {
   :root {
-    /* Page + surfaces (HSL) — single source for Tailwind theme */
-    --background: 42 33% 96%;
-    --foreground: 80 12% 11%;
+    /* Page + surfaces — warm neutral base */
+    --background: 75 25% 97%;
+    --foreground: 20 12% 14%;
 
     --card: 0 0% 100%;
-    --card-foreground: 80 12% 11%;
+    --card-foreground: 20 12% 14%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 80 12% 11%;
+    --popover-foreground: 20 12% 14%;
 
-    /* CTA / accent (terracotta) */
-    --primary: 16 45% 55%;
+    /* CTA / accent — warm clay terracotta (#BC6C5B) */
+    --primary: 12 40% 55%;
     --primary-foreground: 0 0% 100%;
-    --primary-strong: 18 42% 40%;
+    --primary-strong: 12 38% 42%;
 
-    --secondary: 30 30% 94%;
-    --secondary-foreground: 20 20% 20%;
+    --secondary: 24 20% 93%;
+    --secondary-foreground: 20 18% 22%;
 
-    --muted: 152 22% 93%;
-    --muted-foreground: 80 8% 42%;
+    --muted: 75 12% 93%;
+    --muted-foreground: 20 8% 44%;
 
-    --accent: 30 30% 94%;
-    --accent-foreground: 20 20% 20%;
+    --accent: 24 42% 72%;
+    --accent-foreground: 20 18% 22%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 40 18% 90%;
-    --input: 40 16% 88%;
-    --ring: 152 42% 32%;
+    --border: 24 14% 89%;
+    --input: 24 12% 87%;
+    --ring: 124 17% 37%;
 
-    /* Forest brand (logo, selection, links) */
-    --brand: 152 42% 32%;
+    /* Forest brand — secondary green (#4F6F52) */
+    --brand: 124 17% 37%;
     --brand-foreground: 0 0% 100%;
-    --brand-muted: 152 22% 93%;
-    --brand-strong: 152 38% 22%;
+    --brand-muted: 124 12% 93%;
+    --brand-strong: 124 20% 25%;
 
     --radius: 0.625rem;
 
@@ -83,30 +83,30 @@
     --popover: 20 20% 10%;
     --popover-foreground: 30 20% 95%;
 
-    --primary: 16 48% 58%;
+    --primary: 12 42% 60%;
     --primary-foreground: 0 0% 100%;
-    --primary-strong: 16 42% 48%;
+    --primary-strong: 12 38% 50%;
 
     --secondary: 20 15% 16%;
-    --secondary-foreground: 30 20% 95%;
+    --secondary-foreground: 24 20% 95%;
 
     --muted: 20 15% 18%;
-    --muted-foreground: 30 10% 60%;
+    --muted-foreground: 24 10% 60%;
 
-    --accent: 20 15% 16%;
-    --accent-foreground: 30 20% 95%;
+    --accent: 24 30% 22%;
+    --accent-foreground: 24 20% 95%;
 
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 100%;
 
     --border: 20 15% 16%;
     --input: 20 15% 16%;
-    --ring: 152 38% 45%;
+    --ring: 124 20% 45%;
 
-    --brand: 152 36% 48%;
+    --brand: 124 20% 48%;
     --brand-foreground: 20 20% 7%;
-    --brand-muted: 152 18% 18%;
-    --brand-strong: 152 30% 65%;
+    --brand-muted: 124 14% 18%;
+    --brand-strong: 124 18% 65%;
 
     /* Time periods (dark) */
     --time-morning-bg: 36 40% 14%;
@@ -255,6 +255,24 @@
       transform: none;
     }
   }
+}
+
+/* Native date input — brand accent for calendar highlight */
+.date-input-branded {
+  accent-color: hsl(var(--primary));
+  color-scheme: light;
+}
+
+.date-input-branded::-webkit-datetime-edit-day-field:focus,
+.date-input-branded::-webkit-datetime-edit-month-field:focus,
+.date-input-branded::-webkit-datetime-edit-year-field:focus {
+  background: hsl(var(--primary) / 0.1);
+  color: hsl(var(--primary));
+  border-radius: 2px;
+}
+
+.dark .date-input-branded {
+  color-scheme: dark;
 }
 
 /* MapLibre popup overrides — clean up default chrome */

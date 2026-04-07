@@ -479,12 +479,12 @@ export function ItineraryDayCard({
           {currentOption && (
             <div key={currentOption.id} className="animate-page-flip">
               {!readOnly && (
-                <div className="mb-4">
+                <div className="mb-5 mt-1">
                   <AddLocationsToOptionDialog
                     trigger={
                       <button
                         type="button"
-                        className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-brand/25 py-2.5 text-sm font-medium text-brand transition-colors hover:border-brand/40 hover:bg-brand/5"
+                        className="flex w-full items-center justify-center gap-2 rounded-full border border-brand/20 bg-brand/5 py-2.5 text-sm font-medium text-brand transition-all hover:border-brand/35 hover:bg-brand/10 hover:shadow-sm"
                       >
                         <Plus size={15} strokeWidth={2.5} />
                         Add locations

@@ -144,7 +144,7 @@ export function ItineraryDayHeader({
               onKeyDown={(event) => {
                 if (event.key === "Escape") setEditingDate(false);
               }}
-              className="h-9 rounded border border-input bg-background px-2 text-sm"
+              className="date-input-branded h-9 rounded-lg border border-border/50 bg-card px-2.5 text-sm shadow-sm"
             />
           ) : (
             <>
@@ -154,7 +154,7 @@ export function ItineraryDayHeader({
               {!readOnly && (
                 <button
                   onClick={() => setEditingDate(true)}
-                  className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  className="rounded-full border border-transparent p-1 text-muted-foreground/50 transition-all hover:border-border/50 hover:bg-card hover:text-primary hover:shadow-sm"
                   aria-label="Edit day date"
                   title={day.date ? "Change date" : "Assign a date"}
                 >
@@ -195,7 +195,7 @@ export function ItineraryDayHeader({
                 <div className="flex items-center gap-2">
                   <label
                     htmlFor={`sc-${currentOption.id}`}
-                    className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60"
+                    className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50"
                   >
                     From
                   </label>
@@ -214,7 +214,7 @@ export function ItineraryDayHeader({
                         starting_city: nextValue,
                       });
                     }}
-                    className="w-32 border-border/50 bg-muted/20 text-sm sm:w-36"
+                    className="w-32 rounded-lg border-border/40 bg-card text-sm font-medium shadow-sm transition-colors focus-within:border-primary/30 sm:w-36"
                   />
                 </div>
                 <ArrowRight
@@ -224,7 +224,7 @@ export function ItineraryDayHeader({
                 <div className="flex items-center gap-2">
                   <label
                     htmlFor={`ec-${currentOption.id}`}
-                    className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60"
+                    className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50"
                   >
                     To
                   </label>
@@ -243,7 +243,7 @@ export function ItineraryDayHeader({
                         ending_city: nextValue,
                       });
                     }}
-                    className="w-32 border-border/50 bg-muted/20 text-sm sm:w-36"
+                    className="w-32 rounded-lg border-border/40 bg-card text-sm font-medium shadow-sm transition-colors focus-within:border-primary/30 sm:w-36"
                   />
                 </div>
               </div>

@@ -118,7 +118,7 @@ export function ItineraryPlanSwitcher({
           <button
             type="button"
             id={`plan-switch-${day.id}`}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-muted/30 px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+            className="inline-flex items-center gap-1.5 rounded-full bg-foreground px-3 py-1.5 text-xs font-medium text-background shadow-sm outline-none transition-all hover:bg-foreground/85 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             title="Choose plan for this day"
             aria-haspopup="listbox"
             aria-expanded={planMenuOpen}
@@ -127,7 +127,7 @@ export function ItineraryPlanSwitcher({
               {currentLabel}
             </span>
             <ChevronDown
-              className="h-3 w-3 shrink-0 text-muted-foreground"
+              className="h-3 w-3 shrink-0 opacity-60"
               aria-hidden
             />
           </button>

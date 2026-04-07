@@ -182,6 +182,7 @@ def test_import_partial_resolve_failures(client: TestClient):
 
     mock_client = MagicMock()
     mock_client._search_place_by_text.side_effect = fake_search
+    mock_client._search_place_nearby.side_effect = RuntimeError("Nearby search also failed")
     _setup_overrides(sb, places_client=mock_client)
 
     with patch("backend.app.routers.trip_locations.GoogleListScraper") as MockScraper:
@@ -197,7 +198,7 @@ def test_import_partial_resolve_failures(client: TestClient):
             data = r.json()
             assert data["imported_count"] == 1
             assert data["failed_count"] == 1
-            assert "Places search returned no candidates" in data["failed"][0]["detail"]
+            assert "Places API lookup failed" in data["failed"][0]["detail"]
         finally:
             app.dependency_overrides.clear()
 

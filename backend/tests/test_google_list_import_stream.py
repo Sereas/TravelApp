@@ -192,13 +192,20 @@ def test_stream_scraper_error_yields_error_event(client: TestClient):
     """Scraper raises GoogleListParseError → events: scraping → error.
 
     No scraping_done, no enriching, no complete — just error.
+    The error message must be the scraper's actual message, not a generic fallback.
     """
+    captcha_message = (
+        "Google returned a CAPTCHA or rate-limit response. "
+        "Try again later or open the list in your browser first."
+    )
     sb = _mock_supabase()
     _setup_overrides(sb, places_client=MagicMock())
 
     with patch("backend.app.routers.trip_locations.GoogleListScraper") as MockScraper:
         scraper_instance = MockScraper.return_value
-        scraper_instance.extract_places = AsyncMock(side_effect=GoogleListParseError("CAPTCHA"))
+        scraper_instance.extract_places = AsyncMock(
+            side_effect=GoogleListParseError(captcha_message)
+        )
 
         try:
             resp = client.post(STREAM_URL, json=REQUEST_BODY)
@@ -220,6 +227,105 @@ def test_stream_scraper_error_yields_error_event(client: TestClient):
             # No scraping_done or complete should appear
             assert "scraping_done" not in event_types
             assert "complete" not in event_types
+
+            # Internal errors (CAPTCHA, Playwright) get a user-friendly generic message.
+            assert "technical difficulties" in error_event["message"], (
+                f"Expected user-friendly message but got: {error_event['message']!r}"
+            )
+            assert "CAPTCHA" not in error_event["message"], (
+                "Internal error details must not leak to the user"
+            )
+        finally:
+            app.dependency_overrides.clear()
+
+
+def test_stream_empty_list_error_passes_through_scraper_message(client: TestClient):
+    """Scraper raises GoogleListParseError for an empty/private list.
+
+    The SSE error event must carry the scraper's specific message
+    ("No list items found on the page. The list may be empty, private, or the
+    URL may be invalid.") rather than the generic "Failed to parse Google Maps
+    list. Please check the URL and try again." fallback.
+
+    This test is in RED phase — it FAILS until the catch block is updated to
+    yield str(exc) instead of the hardcoded generic string.
+    """
+    empty_list_message = (
+        "No list items found on the page. "
+        "The list may be empty, private, or the URL may be invalid."
+    )
+    sb = _mock_supabase()
+    _setup_overrides(sb, places_client=MagicMock())
+
+    with patch("backend.app.routers.trip_locations.GoogleListScraper") as MockScraper:
+        scraper_instance = MockScraper.return_value
+        scraper_instance.extract_places = AsyncMock(
+            side_effect=GoogleListParseError(empty_list_message)
+        )
+
+        try:
+            resp = client.post(STREAM_URL, json=REQUEST_BODY)
+
+            assert resp.status_code == 200
+            assert "text/event-stream" in resp.headers["content-type"]
+
+            events = _parse_sse_events(resp.text)
+            event_types = [e["event"] for e in events]
+
+            assert event_types[0] == "scraping"
+            assert event_types[-1] == "error"
+
+            assert "scraping_done" not in event_types
+            assert "complete" not in event_types
+
+            error_event = events[-1]
+
+            # The specific scraper message must be forwarded verbatim.
+            # FAILS with current code because the catch block uses a hardcoded string.
+            assert "No list items found" in error_event["message"], (
+                f"Expected 'No list items found' in message but got: {error_event['message']!r}"
+            )
+            assert "Failed to parse Google Maps list" not in error_event["message"], (
+                "Generic fallback message must not overwrite the specific scraper error"
+            )
+        finally:
+            app.dependency_overrides.clear()
+
+
+def test_stream_captcha_error_passes_through_scraper_message(client: TestClient):
+    """Scraper raises GoogleListParseError for a CAPTCHA/rate-limit hit.
+
+    Internal errors like CAPTCHA should be replaced with a user-friendly
+    generic message — the raw error must not leak to the user.
+    """
+    captcha_message = (
+        "Google returned a CAPTCHA or rate-limit response. "
+        "Try again later or open the list in your browser first."
+    )
+    sb = _mock_supabase()
+    _setup_overrides(sb, places_client=MagicMock())
+
+    with patch("backend.app.routers.trip_locations.GoogleListScraper") as MockScraper:
+        scraper_instance = MockScraper.return_value
+        scraper_instance.extract_places = AsyncMock(
+            side_effect=GoogleListParseError(captcha_message)
+        )
+
+        try:
+            resp = client.post(STREAM_URL, json=REQUEST_BODY)
+
+            assert resp.status_code == 200
+
+            events = _parse_sse_events(resp.text)
+            error_event = next(e for e in events if e["event"] == "error")
+
+            # Internal error details must be hidden from the user
+            assert "technical difficulties" in error_event["message"], (
+                f"Expected user-friendly message but got: {error_event['message']!r}"
+            )
+            assert "CAPTCHA" not in error_event["message"], (
+                "Internal error details must not leak to the user"
+            )
         finally:
             app.dependency_overrides.clear()
 
@@ -247,6 +353,8 @@ def test_stream_enrichment_failure_continues(client: TestClient):
 
     mock_places = MagicMock()
     mock_places._search_place_by_text.side_effect = fake_search
+    # Nearby fallback must also fail for the "Bad One" place
+    mock_places._search_place_nearby.side_effect = RuntimeError("Nearby search also failed")
     _setup_overrides(sb, places_client=mock_places)
 
     with patch("backend.app.routers.trip_locations.GoogleListScraper") as MockScraper:

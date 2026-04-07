@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { api, type Trip, type Location } from "@/lib/api";
@@ -47,6 +47,37 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { useItineraryState } from "@/features/itinerary/useItineraryState";
+
+/** Controlled date input that tracks value via state so jsdom tests work. */
+function InlineDateInput({
+  ariaLabel,
+  defaultValue,
+  onSave,
+  onCancel,
+}: {
+  ariaLabel: string;
+  defaultValue: string;
+  onSave: (value: string) => void;
+  onCancel: () => void;
+}) {
+  const [value, setValue] = useState(defaultValue);
+  return (
+    <input
+      type="date"
+      aria-label={ariaLabel}
+      autoFocus
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={() => {
+        onCancel();
+        if (value && value !== defaultValue) {
+          onSave(value);
+        }
+      }}
+      className="date-input-branded inline rounded border border-border/50 bg-card px-1.5 py-0.5 text-sm shadow-sm"
+    />
+  );
+}
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr + "T00:00:00");
@@ -95,6 +126,10 @@ export default function TripDetailPage() {
   const [groupByPerson, setGroupByPerson] = useState(false);
   const [locationNameSearch, setLocationNameSearch] = useState("");
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [editingStartDate, setEditingStartDate] = useState(false);
+  const [editingEndDate, setEditingEndDate] = useState(false);
+  const nameCancelledRef = useRef(false);
 
   const [activeTab, setActiveTab] = useState<"locations" | "itinerary">(
     "locations"
@@ -233,6 +268,33 @@ export default function TripDetailPage() {
     setTrip(updated);
     setEditingTrip(false);
     fetchItinerary();
+  }
+
+  async function handleInlineNameSave(name: string) {
+    try {
+      const updated = await api.trips.update(tripId, { name });
+      setTrip(updated);
+    } catch {
+      // Silently revert — the UI already shows the old value
+    }
+  }
+
+  async function handleInlineDateSave(field: "start_date" | "end_date", value: string) {
+    if (!trip) return;
+    // Build the full date payload (both dates) so orphan detection works
+    const payload: TripUpdatePayload = {
+      name: trip.name,
+      start_date: field === "start_date" ? value : (trip.start_date ?? null),
+      end_date: field === "end_date" ? value : (trip.end_date ?? null),
+    };
+
+    try {
+      const updated = await handleBeforeTripSave(payload);
+      setTrip(updated);
+      fetchItinerary();
+    } catch {
+      // User cancelled reconciliation dialog or save failed — revert
+    }
   }
 
   /**
@@ -502,24 +564,29 @@ export default function TripDetailPage() {
             </Popover>
             <button
               type="button"
-              className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className="rounded-full border border-border/50 bg-card p-2 text-muted-foreground shadow-sm transition-all hover:border-primary/30 hover:text-primary hover:shadow"
               aria-label="Share trip"
               onClick={() => setShareDialogOpen(true)}
             >
-              <Share2 size={16} />
+              <Share2 size={15} />
             </button>
             <button
               type="button"
-              className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              onClick={() => setEditingTrip(true)}
+              className="rounded-full border border-border/50 bg-card p-2 text-muted-foreground shadow-sm transition-all hover:border-primary/30 hover:text-primary hover:shadow"
+              onClick={() => {
+                setEditingName(false);
+                setEditingStartDate(false);
+                setEditingEndDate(false);
+                setEditingTrip(true);
+              }}
               aria-label="Edit trip"
             >
-              <Pencil size={16} />
+              <Pencil size={15} />
             </button>
           </div>
         </div>
 
-        {editingTrip ? (
+        {editingTrip && (
           <EditTripForm
             trip={trip}
             onUpdated={handleTripUpdated}
@@ -527,16 +594,52 @@ export default function TripDetailPage() {
             onDelete={handleDeleteTrip}
             onBeforeSave={handleBeforeTripSave}
           />
-        ) : (
+        )}
+        {!editingTrip && (
           <motion.div
             className="relative pb-4 pt-2"
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
           >
-            <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-              {trip.name}
-            </h1>
+            {editingName ? (
+              <input
+                type="text"
+                aria-label="Trip name"
+                autoFocus
+                defaultValue={trip.name}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.currentTarget.blur();
+                  } else if (e.key === "Escape") {
+                    nameCancelledRef.current = true;
+                    e.currentTarget.blur();
+                  }
+                }}
+                onBlur={(e) => {
+                  if (nameCancelledRef.current) {
+                    nameCancelledRef.current = false;
+                    setEditingName(false);
+                    return;
+                  }
+                  const val = e.target.value.trim();
+                  setEditingName(false);
+                  if (val && val !== trip.name) {
+                    handleInlineNameSave(val);
+                  }
+                }}
+                className="w-full bg-transparent text-3xl font-bold tracking-tight text-foreground outline-none ring-1 ring-primary/30 rounded-lg px-1 sm:text-4xl"
+              />
+            ) : (
+              <button
+                type="button"
+                aria-label={trip.name}
+                onClick={() => setEditingName(true)}
+                className="cursor-text text-left text-3xl font-bold tracking-tight text-foreground rounded-lg px-1 -mx-1 transition-colors hover:bg-muted/50 sm:text-4xl"
+              >
+                {trip.name}
+              </button>
+            )}
 
             {/* Meta line */}
             <motion.p
@@ -545,7 +648,50 @@ export default function TripDetailPage() {
               animate={{ opacity: 1 }}
               transition={{ delay: 0.15, duration: 0.4 }}
             >
-              {dateDisplay && <>{dateDisplay} &ensp;/&ensp; </>}
+              {(trip.start_date || trip.end_date) && (
+                <>
+                  {trip.start_date && (
+                    editingStartDate ? (
+                      <InlineDateInput
+                        ariaLabel="Start date"
+                        defaultValue={trip.start_date}
+                        onSave={(val) => handleInlineDateSave("start_date", val)}
+                        onCancel={() => setEditingStartDate(false)}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        aria-label={formatDate(trip.start_date)}
+                        onClick={() => setEditingStartDate(true)}
+                        className="cursor-text rounded px-0.5 transition-colors hover:bg-muted/60 hover:text-foreground"
+                      >
+                        {formatDate(trip.start_date)}
+                      </button>
+                    )
+                  )}
+                  {trip.start_date && trip.end_date && " \u2014 "}
+                  {trip.end_date && (
+                    editingEndDate ? (
+                      <InlineDateInput
+                        ariaLabel="End date"
+                        defaultValue={trip.end_date}
+                        onSave={(val) => handleInlineDateSave("end_date", val)}
+                        onCancel={() => setEditingEndDate(false)}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        aria-label={formatDate(trip.end_date)}
+                        onClick={() => setEditingEndDate(true)}
+                        className="cursor-text rounded px-0.5 transition-colors hover:bg-muted/60 hover:text-foreground"
+                      >
+                        {formatDate(trip.end_date)}
+                      </button>
+                    )
+                  )}
+                  {" "}&ensp;/&ensp;{" "}
+                </>
+              )}
               {locations.length} places
               {itinerary && itinerary.days.length > 0 && (
                 <> &ensp;/&ensp; {itinerary.days.length} days</>
@@ -598,8 +744,8 @@ export default function TripDetailPage() {
       </div>
 
       {/* Tabs — bold primary navigation */}
-      <div className="sticky top-14 z-30 -mx-4 border-b border-border/60 bg-background/95 px-4 backdrop-blur-sm sm:-mx-6 sm:px-6 md:-mx-8 md:px-8">
-        <nav className="flex" role="tablist" aria-label="Trip sections">
+      <div className="sticky top-14 z-30 -mx-4 bg-background/95 px-4 pb-2 pt-3 backdrop-blur-sm sm:-mx-6 sm:px-6 md:-mx-8 md:px-8">
+        <nav className="flex gap-2" role="tablist" aria-label="Trip sections">
           <button
             type="button"
             role="tab"
@@ -607,44 +753,27 @@ export default function TripDetailPage() {
             aria-controls="tab-panel-locations"
             id="tab-locations"
             className={cn(
-              "group relative flex items-center gap-2 px-5 py-3 text-sm font-semibold transition-colors",
+              "inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-all",
               activeTab === "locations"
-                ? "text-brand"
-                : "text-muted-foreground hover:text-foreground"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "border border-border/60 bg-card text-muted-foreground shadow-sm hover:border-primary/30 hover:text-foreground"
             )}
             onClick={() => setActiveTab("locations")}
           >
-            <MapPin
-              size={16}
-              className={cn(
-                "transition-colors",
-                activeTab === "locations"
-                  ? "text-brand"
-                  : "text-muted-foreground/50 group-hover:text-foreground"
-              )}
-            />
+            <MapPin size={15} />
             Places
             {locations.length > 0 && (
               <span
                 className={cn(
-                  "inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold transition-colors",
+                  "inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold",
                   activeTab === "locations"
-                    ? "bg-brand/10 text-brand"
+                    ? "bg-primary-foreground/20 text-primary-foreground"
                     : "bg-muted text-muted-foreground"
                 )}
               >
                 {locations.length}
               </span>
             )}
-            <AnimatePresence>
-              {activeTab === "locations" && (
-                <motion.span
-                  layoutId="tab-indicator"
-                  className="absolute inset-x-1 bottom-0 h-[2px] rounded-full bg-brand"
-                  transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                />
-              )}
-            </AnimatePresence>
           </button>
           <button
             type="button"
@@ -653,32 +782,15 @@ export default function TripDetailPage() {
             aria-controls="tab-panel-itinerary"
             id="tab-itinerary"
             className={cn(
-              "group relative flex items-center gap-2 px-5 py-3 text-sm font-semibold transition-colors",
+              "inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-all",
               activeTab === "itinerary"
-                ? "text-brand"
-                : "text-muted-foreground hover:text-foreground"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "border border-border/60 bg-card text-muted-foreground shadow-sm hover:border-primary/30 hover:text-foreground"
             )}
             onClick={() => setActiveTab("itinerary")}
           >
-            <Compass
-              size={16}
-              className={cn(
-                "transition-colors",
-                activeTab === "itinerary"
-                  ? "text-brand"
-                  : "text-muted-foreground/50 group-hover:text-foreground"
-              )}
-            />
+            <Compass size={15} />
             Itinerary
-            <AnimatePresence>
-              {activeTab === "itinerary" && (
-                <motion.span
-                  layoutId="tab-indicator"
-                  className="absolute inset-x-1 bottom-0 h-[2px] rounded-full bg-brand"
-                  transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                />
-              )}
-            </AnimatePresence>
           </button>
         </nav>
       </div>

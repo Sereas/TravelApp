@@ -140,7 +140,9 @@ describe("TripDetailPage", () => {
     render(<TripDetailPage />);
 
     expect(await screen.findByText("Paris Summer")).toBeInTheDocument();
-    expect(screen.getByText(/Jun 1, 2026 — Jun 15, 2026/)).toBeInTheDocument();
+    // Dates are now in separate clickable buttons
+    expect(screen.getByRole("button", { name: /Jun 1, 2026/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Jun 15, 2026/ })).toBeInTheDocument();
 
     expect(screen.getByText("Eiffel Tower")).toBeInTheDocument();
     expect(screen.getByText("Must visit at sunset")).toBeInTheDocument();
@@ -1553,5 +1555,262 @@ describe("TripDetailPage", () => {
     expect(
       await screen.findByRole("button", { name: /add locations/i })
     ).toBeInTheDocument();
+  });
+
+  // --- Inline trip name editing ---
+
+  describe("Inline trip name editing", () => {
+    it("displays the trip name as a clickable element", async () => {
+      mockGetTrip.mockResolvedValue(sampleTrip);
+      mockListLocations.mockResolvedValue([]);
+      render(<TripDetailPage />);
+
+      await screen.findByText("Paris Summer");
+      // The trip name should be a button or have role="button" so it's clickable
+      const tripNameEl = screen.getByRole("button", {
+        name: /paris summer/i,
+      });
+      expect(tripNameEl).toBeInTheDocument();
+    });
+
+    it("shows an input pre-filled with the trip name when the name is clicked", async () => {
+      mockGetTrip.mockResolvedValue(sampleTrip);
+      mockListLocations.mockResolvedValue([]);
+      render(<TripDetailPage />);
+
+      await screen.findByText("Paris Summer");
+      await userEvent.click(
+        screen.getByRole("button", { name: /paris summer/i })
+      );
+
+      const input = screen.getByRole("textbox", { name: /trip name/i });
+      expect(input).toBeInTheDocument();
+      expect(input).toHaveValue("Paris Summer");
+    });
+
+    it("calls the update API and shows new name when Enter is pressed", async () => {
+      mockGetTrip.mockResolvedValue(sampleTrip);
+      mockListLocations.mockResolvedValue([]);
+      mockUpdateTrip.mockResolvedValue({ ...sampleTrip, name: "Paris Winter" });
+      render(<TripDetailPage />);
+
+      await screen.findByText("Paris Summer");
+      await userEvent.click(
+        screen.getByRole("button", { name: /paris summer/i })
+      );
+
+      const input = screen.getByRole("textbox", { name: /trip name/i });
+      await userEvent.clear(input);
+      await userEvent.type(input, "Paris Winter");
+      await userEvent.keyboard("{Enter}");
+
+      await waitFor(() => {
+        expect(mockUpdateTrip).toHaveBeenCalledWith(
+          "trip-1",
+          expect.objectContaining({ name: "Paris Winter" })
+        );
+      });
+      expect(await screen.findByText("Paris Winter")).toBeInTheDocument();
+    });
+
+    it("calls the update API when the name input loses focus (blur)", async () => {
+      mockGetTrip.mockResolvedValue(sampleTrip);
+      mockListLocations.mockResolvedValue([]);
+      mockUpdateTrip.mockResolvedValue({
+        ...sampleTrip,
+        name: "Nice & Cannes",
+      });
+      render(<TripDetailPage />);
+
+      await screen.findByText("Paris Summer");
+      await userEvent.click(
+        screen.getByRole("button", { name: /paris summer/i })
+      );
+
+      const input = screen.getByRole("textbox", { name: /trip name/i });
+      await userEvent.clear(input);
+      await userEvent.type(input, "Nice & Cannes");
+      await userEvent.tab(); // moves focus away, triggers blur
+
+      await waitFor(() => {
+        expect(mockUpdateTrip).toHaveBeenCalledWith(
+          "trip-1",
+          expect.objectContaining({ name: "Nice & Cannes" })
+        );
+      });
+    });
+
+    it("reverts to the original name and hides the input when Escape is pressed", async () => {
+      mockGetTrip.mockResolvedValue(sampleTrip);
+      mockListLocations.mockResolvedValue([]);
+      render(<TripDetailPage />);
+
+      await screen.findByText("Paris Summer");
+      await userEvent.click(
+        screen.getByRole("button", { name: /paris summer/i })
+      );
+
+      const input = screen.getByRole("textbox", { name: /trip name/i });
+      await userEvent.clear(input);
+      await userEvent.type(input, "Something Else");
+      await userEvent.keyboard("{Escape}");
+
+      expect(
+        screen.queryByRole("textbox", { name: /trip name/i })
+      ).not.toBeInTheDocument();
+      expect(screen.getByText("Paris Summer")).toBeInTheDocument();
+      expect(mockUpdateTrip).not.toHaveBeenCalled();
+    });
+
+    it("does not call the update API when the name is unchanged on blur", async () => {
+      mockGetTrip.mockResolvedValue(sampleTrip);
+      mockListLocations.mockResolvedValue([]);
+      render(<TripDetailPage />);
+
+      await screen.findByText("Paris Summer");
+      await userEvent.click(
+        screen.getByRole("button", { name: /paris summer/i })
+      );
+
+      // Tab away without changing anything
+      await userEvent.tab();
+
+      expect(mockUpdateTrip).not.toHaveBeenCalled();
+    });
+  });
+
+  // --- Inline date editing ---
+
+  describe("Inline date editing", () => {
+    it("displays the start date as a clickable element", async () => {
+      mockGetTrip.mockResolvedValue(sampleTrip);
+      mockListLocations.mockResolvedValue([]);
+      render(<TripDetailPage />);
+
+      await screen.findByText("Paris Summer");
+      // Start date should be clickable (button or role="button")
+      const startDateEl = screen.getByRole("button", { name: /jun 1, 2026/i });
+      expect(startDateEl).toBeInTheDocument();
+    });
+
+    it("displays the end date as a clickable element", async () => {
+      mockGetTrip.mockResolvedValue(sampleTrip);
+      mockListLocations.mockResolvedValue([]);
+      render(<TripDetailPage />);
+
+      await screen.findByText("Paris Summer");
+      const endDateEl = screen.getByRole("button", { name: /jun 15, 2026/i });
+      expect(endDateEl).toBeInTheDocument();
+    });
+
+    it("shows a date input when the start date is clicked", async () => {
+      mockGetTrip.mockResolvedValue(sampleTrip);
+      mockListLocations.mockResolvedValue([]);
+      render(<TripDetailPage />);
+
+      await screen.findByText("Paris Summer");
+      await userEvent.click(screen.getByRole("button", { name: /jun 1, 2026/i }));
+
+      const dateInput = screen.getByLabelText(/start date/i);
+      expect(dateInput).toBeInTheDocument();
+      expect(dateInput).toHaveAttribute("type", "date");
+      expect(dateInput).toHaveValue("2026-06-01");
+    });
+
+    it("shows a date input when the end date is clicked", async () => {
+      mockGetTrip.mockResolvedValue(sampleTrip);
+      mockListLocations.mockResolvedValue([]);
+      render(<TripDetailPage />);
+
+      await screen.findByText("Paris Summer");
+      await userEvent.click(
+        screen.getByRole("button", { name: /jun 15, 2026/i })
+      );
+
+      const dateInput = screen.getByLabelText(/end date/i);
+      expect(dateInput).toBeInTheDocument();
+      expect(dateInput).toHaveAttribute("type", "date");
+      expect(dateInput).toHaveValue("2026-06-15");
+    });
+
+    it("calls the update API with the new start date when changed", async () => {
+      mockGetTrip.mockResolvedValue(sampleTrip);
+      mockListLocations.mockResolvedValue([]);
+      mockGetItinerary.mockResolvedValue({ days: [] });
+      mockUpdateTrip.mockResolvedValue({
+        ...sampleTrip,
+        start_date: "2026-06-05",
+      });
+      render(<TripDetailPage />);
+
+      await screen.findByText("Paris Summer");
+      await userEvent.click(screen.getByRole("button", { name: /jun 1, 2026/i }));
+
+      const dateInput = screen.getByLabelText(/start date/i);
+      await userEvent.clear(dateInput);
+      await userEvent.type(dateInput, "2026-06-05");
+      // Trigger change by tabbing away
+      await userEvent.tab();
+
+      await waitFor(() => {
+        expect(mockUpdateTrip).toHaveBeenCalledWith(
+          "trip-1",
+          expect.objectContaining({ start_date: "2026-06-05" })
+        );
+      });
+    });
+
+    it("calls the update API with the new end date when changed", async () => {
+      mockGetTrip.mockResolvedValue(sampleTrip);
+      mockListLocations.mockResolvedValue([]);
+      mockGetItinerary.mockResolvedValue({ days: [] });
+      mockUpdateTrip.mockResolvedValue({
+        ...sampleTrip,
+        end_date: "2026-06-20",
+      });
+      render(<TripDetailPage />);
+
+      await screen.findByText("Paris Summer");
+      await userEvent.click(
+        screen.getByRole("button", { name: /jun 15, 2026/i })
+      );
+
+      const dateInput = screen.getByLabelText(/end date/i);
+      await userEvent.clear(dateInput);
+      await userEvent.type(dateInput, "2026-06-20");
+      await userEvent.tab();
+
+      await waitFor(() => {
+        expect(mockUpdateTrip).toHaveBeenCalledWith(
+          "trip-1",
+          expect.objectContaining({ end_date: "2026-06-20" })
+        );
+      });
+    });
+
+    it("shows updated date text in the header after a date save", async () => {
+      mockGetTrip.mockResolvedValue(sampleTrip);
+      mockListLocations.mockResolvedValue([]);
+      mockGetItinerary.mockResolvedValue({ days: [] });
+      mockUpdateTrip.mockResolvedValue({
+        ...sampleTrip,
+        start_date: "2026-06-05",
+      });
+      render(<TripDetailPage />);
+
+      await screen.findByText("Paris Summer");
+      await userEvent.click(screen.getByRole("button", { name: /jun 1, 2026/i }));
+
+      const dateInput = screen.getByLabelText(/start date/i);
+      await userEvent.clear(dateInput);
+      await userEvent.type(dateInput, "2026-06-05");
+      await userEvent.tab();
+
+      await waitFor(() => {
+        expect(mockUpdateTrip).toHaveBeenCalled();
+      });
+      // The header should reflect the new date
+      expect(await screen.findByText(/jun 5, 2026/i)).toBeInTheDocument();
+    });
   });
 });

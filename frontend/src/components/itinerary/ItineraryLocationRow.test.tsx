@@ -96,9 +96,8 @@ describe("ItineraryLocationRow", () => {
   it("shows extra details when expanded", () => {
     renderRow({ expanded: true });
 
-    expect(screen.getByText(/address:/i)).toBeInTheDocument();
     expect(screen.getByText(/champ de mars/i)).toBeInTheDocument();
-    expect(screen.getByText(/hours:/i)).toBeInTheDocument();
+    expect(screen.getByText(/9:00-23:00/)).toBeInTheDocument();
   });
 
   it("renders a location image when one is available", () => {

@@ -4,7 +4,11 @@ import type { MutableRefObject } from "react";
 import type { ItineraryOptionLocation } from "@/lib/api";
 import { CategoryIcon } from "@/components/locations/CategoryIcon";
 import { LoadingSpinner } from "@/components/feedback/LoadingSpinner";
-import { type CategoryKey } from "@/lib/location-constants";
+import {
+  CATEGORY_META,
+  CATEGORY_OPTIONS,
+  type CategoryKey,
+} from "@/lib/location-constants";
 import { cn } from "@/lib/utils";
 import { useReadOnly } from "@/lib/read-only-context";
 import {
@@ -19,7 +23,9 @@ import {
   X,
   ChevronDown,
   Car,
+  Clock,
   Footprints,
+  MapPin,
   TrainFront,
 } from "lucide-react";
 
@@ -206,6 +212,12 @@ export function ItineraryLocationRow({
   const showBooking = booking === "yes" || booking === "yes_done";
   const imageUrl =
     optionLocation.location.user_image_url || optionLocation.location.image_url;
+  const catKey: CategoryKey =
+    optionLocation.location.category &&
+    CATEGORY_OPTIONS.includes(optionLocation.location.category as CategoryKey)
+      ? (optionLocation.location.category as CategoryKey)
+      : "Other";
+  const catColor = CATEGORY_META[catKey].hexText;
   return (
     <div
       className={cn(
@@ -308,7 +320,7 @@ export function ItineraryLocationRow({
             aria-expanded={expanded}
           >
             <div className="relative shrink-0">
-              <div className="relative h-12 w-12 overflow-hidden rounded-md bg-muted">
+              <div className="relative h-16 w-16 overflow-hidden rounded-lg bg-muted">
                 {imageUrl ? (
                   <img
                     src={imageUrl}
@@ -319,9 +331,7 @@ export function ItineraryLocationRow({
                   <div className="flex h-full w-full items-center justify-center bg-primary/5">
                     {optionLocation.location.category ? (
                       <CategoryIcon
-                        category={
-                          optionLocation.location.category as CategoryKey
-                        }
+                        category={catKey}
                         size={20}
                         className="text-primary/40"
                       />
@@ -334,11 +344,11 @@ export function ItineraryLocationRow({
                 )}
               </div>
               {routeInfos.length > 0 && (
-                <span className="absolute -bottom-1 -right-1 inline-flex items-center gap-px rounded-full bg-white p-0.5 shadow-sm">
+                <span className="absolute -bottom-1.5 -right-1.5 inline-flex items-center gap-0.5 rounded-full bg-white p-[3px] shadow-sm">
                   {routeInfos.map((info) => (
                     <span
                       key={info.route.route_id}
-                      className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 text-[7px] font-bold"
+                      className="inline-flex h-[18px] w-[18px] items-center justify-center rounded-full border-2 text-[9px] font-bold"
                       style={{
                         borderColor: info.color.hex,
                         color: info.color.hex,
@@ -355,11 +365,19 @@ export function ItineraryLocationRow({
               <div className="truncate font-bold text-foreground">
                 {optionLocation.location.name}
               </div>
-              {optionLocation.location.city && (
-                <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                  {optionLocation.location.city}
-                </div>
-              )}
+              <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                {optionLocation.location.city && (
+                  <span className="truncate">{optionLocation.location.city}</span>
+                )}
+                {optionLocation.location.city && catKey !== "Other" && (
+                  <span className="text-muted-foreground/30">·</span>
+                )}
+                {catKey !== "Other" && (
+                  <span className="shrink-0 truncate text-[10px]" style={{ color: catColor }}>
+                    {catKey}
+                  </span>
+                )}
+              </div>
             </div>
           </button>
 
@@ -437,34 +455,41 @@ export function ItineraryLocationRow({
           (optionLocation.location.address ||
             optionLocation.location.working_hours ||
             optionLocation.location.note) && (
-            <div className="mb-1 ml-1 mr-4 space-y-1 rounded-b-lg bg-primary/5 px-3 py-2 text-xs">
-              {optionLocation.location.address && (
-                <div>
-                  <span className="font-bold text-muted-foreground">
-                    Address:
-                  </span>{" "}
-                  {optionLocation.location.address}
-                </div>
-              )}
-              {optionLocation.location.working_hours && (
-                <div>
-                  <span className="font-bold text-muted-foreground">
-                    Hours:
-                  </span>{" "}
-                  <span className="whitespace-pre-wrap">
-                    {formatHoursLines(
-                      optionLocation.location.working_hours
-                    ).map((line, index) => (
-                      <span key={index} className="block">
-                        {line}
-                      </span>
-                    ))}
-                  </span>
-                </div>
-              )}
+            <div className="mb-1 ml-1 mr-4 space-y-2.5 rounded-b-xl border border-border/40 bg-card px-4 py-3 shadow-sm">
+              {/* Note — primary content, shown first and prominently */}
               {optionLocation.location.note && (
-                <div className="italic text-muted-foreground/70">
+                <p className="text-sm leading-relaxed text-foreground">
                   {optionLocation.location.note}
+                </p>
+              )}
+
+              {/* Address + Hours — secondary metadata, muted and compact */}
+              {(optionLocation.location.address ||
+                optionLocation.location.working_hours) && (
+                <div className={cn(
+                  "space-y-1.5 text-xs text-muted-foreground",
+                  optionLocation.location.note && "border-t border-border/30 pt-2.5"
+                )}>
+                  {optionLocation.location.address && (
+                    <div className="flex items-start gap-1.5">
+                      <MapPin size={11} className="mt-0.5 shrink-0 opacity-40" />
+                      <span>{optionLocation.location.address}</span>
+                    </div>
+                  )}
+                  {optionLocation.location.working_hours && (
+                    <div className="flex items-start gap-1.5">
+                      <Clock size={11} className="mt-0.5 shrink-0 opacity-40" />
+                      <span className="whitespace-pre-wrap">
+                        {formatHoursLines(
+                          optionLocation.location.working_hours
+                        ).map((line, index) => (
+                          <span key={index} className="block">
+                            {line}
+                          </span>
+                        ))}
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
