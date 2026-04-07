@@ -461,14 +461,16 @@ async def import_google_list(
                 )
             elif has_coords:
                 resolved = places_client._search_place_nearby(
-                    place.latitude, place.longitude,
+                    place.latitude,
+                    place.longitude,
                 )
                 used_nearby = True
         except Exception:
             if has_coords and search_name:
                 try:
                     resolved = places_client._search_place_nearby(
-                        place.latitude, place.longitude,
+                        place.latitude,
+                        place.longitude,
                     )
                     used_nearby = True
                 except Exception:
@@ -579,13 +581,11 @@ def _sse_event(data: dict) -> str:
     return f"data: {json.dumps(data)}\n\n"
 
 
-def _build_note(
-    existing_note: str | None, used_nearby: bool, original_name: str
-) -> str | None:
+def _build_note(existing_note: str | None, used_nearby: bool, original_name: str) -> str | None:
     """Combine the scraped note with a nearby-fallback hint when applicable."""
     parts: list[str] = []
     if used_nearby:
-        parts.append(f"Nearest place to dropped pin \"{original_name}\"")
+        parts.append(f'Nearest place to dropped pin "{original_name}"')
     if existing_note:
         parts.append(existing_note)
     return " · ".join(parts) if parts else None
