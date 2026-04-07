@@ -367,13 +367,18 @@ export function ItineraryLocationRow({
               </div>
               <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
                 {optionLocation.location.city && (
-                  <span className="truncate">{optionLocation.location.city}</span>
+                  <span className="truncate">
+                    {optionLocation.location.city}
+                  </span>
                 )}
                 {optionLocation.location.city && catKey !== "Other" && (
                   <span className="text-muted-foreground/30">·</span>
                 )}
                 {catKey !== "Other" && (
-                  <span className="shrink-0 truncate text-[10px]" style={{ color: catColor }}>
+                  <span
+                    className="shrink-0 truncate text-[10px]"
+                    style={{ color: catColor }}
+                  >
                     {catKey}
                   </span>
                 )}
@@ -466,13 +471,19 @@ export function ItineraryLocationRow({
               {/* Address + Hours — secondary metadata, muted and compact */}
               {(optionLocation.location.address ||
                 optionLocation.location.working_hours) && (
-                <div className={cn(
-                  "space-y-1.5 text-xs text-muted-foreground",
-                  optionLocation.location.note && "border-t border-border/30 pt-2.5"
-                )}>
+                <div
+                  className={cn(
+                    "space-y-1.5 text-xs text-muted-foreground",
+                    optionLocation.location.note &&
+                      "border-t border-border/30 pt-2.5"
+                  )}
+                >
                   {optionLocation.location.address && (
                     <div className="flex items-start gap-1.5">
-                      <MapPin size={11} className="mt-0.5 shrink-0 opacity-40" />
+                      <MapPin
+                        size={11}
+                        className="mt-0.5 shrink-0 opacity-40"
+                      />
                       <span>{optionLocation.location.address}</span>
                     </div>
                   )}

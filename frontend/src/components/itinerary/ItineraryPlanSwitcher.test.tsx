@@ -164,8 +164,12 @@ describe("ItineraryPlanSwitcher", () => {
     // Open the plan dropdown (rename/delete are now inside it)
     await userEvent.click(screen.getByText("Main plan"));
 
-    expect(screen.getByRole("button", { name: /rename plan/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /delete plan/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /rename plan/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /delete plan/i })
+    ).toBeInTheDocument();
     expect(props.onSelectOption).not.toHaveBeenCalled();
   });
 

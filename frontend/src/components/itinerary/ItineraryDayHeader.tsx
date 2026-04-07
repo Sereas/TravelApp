@@ -176,13 +176,12 @@ export function ItineraryDayHeader({
                       {currentOption.starting_city}
                     </span>
                   )}
-                  {currentOption.starting_city &&
-                    currentOption.ending_city && (
-                      <ArrowRight
-                        size={13}
-                        className="shrink-0 text-muted-foreground/40"
-                      />
-                    )}
+                  {currentOption.starting_city && currentOption.ending_city && (
+                    <ArrowRight
+                      size={13}
+                      className="shrink-0 text-muted-foreground/40"
+                    />
+                  )}
                   {currentOption.ending_city && (
                     <span className="font-medium text-foreground">
                       {currentOption.ending_city}
@@ -205,10 +204,7 @@ export function ItineraryDayHeader({
                     initialValue={currentOption.starting_city ?? ""}
                     onSave={async (value) => {
                       const nextValue = value || null;
-                      if (
-                        nextValue ===
-                        (currentOption.starting_city ?? null)
-                      )
+                      if (nextValue === (currentOption.starting_city ?? null))
                         return;
                       onSaveOptionDetails(day.id, currentOption.id, {
                         starting_city: nextValue,
@@ -234,10 +230,7 @@ export function ItineraryDayHeader({
                     initialValue={currentOption.ending_city ?? ""}
                     onSave={async (value) => {
                       const nextValue = value || null;
-                      if (
-                        nextValue ===
-                        (currentOption.ending_city ?? null)
-                      )
+                      if (nextValue === (currentOption.ending_city ?? null))
                         return;
                       onSaveOptionDetails(day.id, currentOption.id, {
                         ending_city: nextValue,

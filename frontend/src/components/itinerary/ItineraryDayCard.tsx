@@ -281,7 +281,6 @@ export function ItineraryDayCard({
     [currentOption]
   );
 
-
   // Drag handlers
   function onDragStart(locId: string, e: React.DragEvent) {
     setDragId(locId);
@@ -553,7 +552,6 @@ export function ItineraryDayCard({
                 onSaveRoute={handleSaveRoute}
                 onDeleteRoute={handleDeleteRoute}
               />
-
             </div>
           )}
           {!currentOption && (

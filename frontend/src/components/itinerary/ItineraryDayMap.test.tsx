@@ -40,7 +40,14 @@ vi.mock("maplibre-gl", () => {
     isEmpty: vi.fn().mockReturnValue(true),
   }));
   const NavigationControl = vi.fn();
-  return { default: { Map, Marker, Popup, LngLatBounds, NavigationControl }, Map, Marker, Popup, LngLatBounds, NavigationControl };
+  return {
+    default: { Map, Marker, Popup, LngLatBounds, NavigationControl },
+    Map,
+    Marker,
+    Popup,
+    LngLatBounds,
+    NavigationControl,
+  };
 });
 
 // react-dom/client's createRoot is called inside the map effect; stub it so
@@ -111,13 +118,12 @@ describe("ItineraryDayMap — selectedRouteId / onRouteSelect prop contract", ()
   it("renders without errors when selectedRouteId prop is undefined (no selection)", () => {
     // The component must not crash when the new prop is absent
     render(
-      <ItineraryDayMap
-        locations={sampleLocations}
-        routes={sampleRoutes}
-      />
+      <ItineraryDayMap locations={sampleLocations} routes={sampleRoutes} />
     );
     // The map container div should be in the document
-    expect(document.querySelector(".h-full.min-h-\\[200px\\]")).toBeInTheDocument();
+    expect(
+      document.querySelector(".h-full.min-h-\\[200px\\]")
+    ).toBeInTheDocument();
   });
 
   it("renders without errors when selectedRouteId is set to a known route id", () => {
@@ -129,7 +135,9 @@ describe("ItineraryDayMap — selectedRouteId / onRouteSelect prop contract", ()
         selectedRouteId="route-1"
       />
     );
-    expect(document.querySelector(".h-full.min-h-\\[200px\\]")).toBeInTheDocument();
+    expect(
+      document.querySelector(".h-full.min-h-\\[200px\\]")
+    ).toBeInTheDocument();
   });
 
   it("renders without errors when selectedRouteId is null (explicit deselect)", () => {
@@ -140,7 +148,9 @@ describe("ItineraryDayMap — selectedRouteId / onRouteSelect prop contract", ()
         selectedRouteId={null}
       />
     );
-    expect(document.querySelector(".h-full.min-h-\\[200px\\]")).toBeInTheDocument();
+    expect(
+      document.querySelector(".h-full.min-h-\\[200px\\]")
+    ).toBeInTheDocument();
   });
 
   it("exposes data-selected-route-id on the container", () => {
@@ -160,7 +170,9 @@ describe("ItineraryDayMap — selectedRouteId / onRouteSelect prop contract", ()
 // Helper: render PopupCard with sensible defaults; override per test.
 // ---------------------------------------------------------------------------
 function renderPopupCard(
-  props: Partial<React.ComponentProps<typeof PopupCard>> & { name?: string } = {}
+  props: Partial<React.ComponentProps<typeof PopupCard>> & {
+    name?: string;
+  } = {}
 ) {
   const defaults = {
     name: "Eiffel Tower",
@@ -194,7 +206,10 @@ describe("PopupCard", () => {
     });
     const img = screen.getByRole("img", { name: /sacré-cœur/i });
     expect(img).toBeInTheDocument();
-    expect(img).toHaveAttribute("src", "https://images.example.com/sacre-coeur.jpg");
+    expect(img).toHaveAttribute(
+      "src",
+      "https://images.example.com/sacre-coeur.jpg"
+    );
   });
 
   it("prefers user_image_url over image_url when both are provided", () => {
@@ -204,7 +219,10 @@ describe("PopupCard", () => {
       user_image_url: "https://images.example.com/notredame-user.jpg",
     });
     const img = screen.getByRole("img", { name: /notre-dame/i });
-    expect(img).toHaveAttribute("src", "https://images.example.com/notredame-user.jpg");
+    expect(img).toHaveAttribute(
+      "src",
+      "https://images.example.com/notredame-user.jpg"
+    );
   });
 
   it("does not render a photo element when neither image_url nor user_image_url is provided", () => {
@@ -219,7 +237,10 @@ describe("PopupCard", () => {
       user_image_url: "https://images.example.com/arc-user.jpg",
     });
     const img = screen.getByRole("img", { name: /arc de triomphe/i });
-    expect(img).toHaveAttribute("src", "https://images.example.com/arc-user.jpg");
+    expect(img).toHaveAttribute(
+      "src",
+      "https://images.example.com/arc-user.jpg"
+    );
   });
 
   // --- Category badge ---
@@ -236,7 +257,9 @@ describe("PopupCard", () => {
 
   it("does not show a category badge when category is null", () => {
     renderPopupCard({ category: null });
-    expect(screen.queryByTestId("popup-category-badge")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("popup-category-badge")
+    ).not.toBeInTheDocument();
   });
 
   // --- Booking status badge ---
@@ -278,7 +301,9 @@ describe("PopupCard", () => {
 
   it("renders the note when provided", () => {
     renderPopupCard({ note: "Best visited at sunset" });
-    expect(screen.getByTestId("popup-note")).toHaveTextContent("Best visited at sunset");
+    expect(screen.getByTestId("popup-note")).toHaveTextContent(
+      "Best visited at sunset"
+    );
   });
 
   it("does not render note element when note is null", () => {
@@ -307,10 +332,9 @@ describe("PopupCard", () => {
 
     expect(screen.getByText("Versailles Palace")).toBeInTheDocument();
     expect(screen.getByTestId("popup-city")).toHaveTextContent("Versailles");
-    expect(screen.getByRole("img", { name: /versailles palace/i })).toHaveAttribute(
-      "src",
-      "https://images.example.com/versailles.jpg"
-    );
+    expect(
+      screen.getByRole("img", { name: /versailles palace/i })
+    ).toHaveAttribute("src", "https://images.example.com/versailles.jpg");
     expect(screen.getByLabelText(/booked/i)).toBeInTheDocument();
     expect(screen.getByText(/historic site/i)).toBeInTheDocument();
   });

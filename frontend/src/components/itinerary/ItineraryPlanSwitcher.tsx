@@ -12,13 +12,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useReadOnly } from "@/lib/read-only-context";
-import {
-  Check,
-  ChevronDown,
-  Pencil,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { Check, ChevronDown, Pencil, Plus, Trash2 } from "lucide-react";
 
 interface ItineraryPlanSwitcherProps {
   day: ItineraryDay;
@@ -126,10 +120,7 @@ export function ItineraryPlanSwitcher({
             <span className="min-w-0 max-w-[10rem] truncate">
               {currentLabel}
             </span>
-            <ChevronDown
-              className="h-3 w-3 shrink-0 opacity-60"
-              aria-hidden
-            />
+            <ChevronDown className="h-3 w-3 shrink-0 opacity-60" aria-hidden />
           </button>
         </PopoverTrigger>
         <PopoverContent
@@ -228,7 +219,10 @@ export function ItineraryPlanSwitcher({
               </div>
             ) : renamingOptionId === currentOption?.id ? (
               <div className="p-1.5">
-                <label className="sr-only" htmlFor={`rename-${currentOption?.id}`}>
+                <label
+                  className="sr-only"
+                  htmlFor={`rename-${currentOption?.id}`}
+                >
                   Plan name
                 </label>
                 <Input

@@ -17,7 +17,7 @@ describe("TripGradient", () => {
 
   it("applies the provided className", () => {
     const { container } = render(
-      <TripGradient name="Tokyo Adventure" className="h-48 w-full" />,
+      <TripGradient name="Tokyo Adventure" className="h-48 w-full" />
     );
     const div = container.firstChild as HTMLElement;
     expect(div.className).toContain("h-48");
@@ -26,7 +26,9 @@ describe("TripGradient", () => {
 
   it("sets aria-hidden on the root div", () => {
     const { container } = render(<TripGradient name="Rome" />);
-    expect((container.firstChild as HTMLElement).getAttribute("aria-hidden")).toBe("true");
+    expect(
+      (container.firstChild as HTMLElement).getAttribute("aria-hidden")
+    ).toBe("true");
   });
 
   it("contains an SVG element with contour paths", () => {
@@ -45,7 +47,9 @@ describe("TripGradient", () => {
   });
 
   it("same name via helper produces the same output", () => {
-    expect(generateTripBackground("Iceland")).toBe(generateTripBackground("Iceland"));
+    expect(generateTripBackground("Iceland")).toBe(
+      generateTripBackground("Iceland")
+    );
   });
 
   it("different names produce different contours", () => {
@@ -55,7 +59,9 @@ describe("TripGradient", () => {
   });
 
   it("case sensitivity — different case produces different output", () => {
-    expect(generateTripBackground("tokyo")).not.toBe(generateTripBackground("Tokyo"));
+    expect(generateTripBackground("tokyo")).not.toBe(
+      generateTripBackground("Tokyo")
+    );
   });
 
   // SVG structure
@@ -81,7 +87,9 @@ describe("TripGradient", () => {
   });
 
   it("handles very long name", () => {
-    expect(() => render(<TripGradient name={"A".repeat(1000)} />)).not.toThrow();
+    expect(() =>
+      render(<TripGradient name={"A".repeat(1000)} />)
+    ).not.toThrow();
   });
 
   it("handles unicode / emoji", () => {
@@ -89,7 +97,9 @@ describe("TripGradient", () => {
   });
 
   it("handles special characters", () => {
-    expect(() => render(<TripGradient name="Trip; DROP TABLE;" />)).not.toThrow();
+    expect(() =>
+      render(<TripGradient name="Trip; DROP TABLE;" />)
+    ).not.toThrow();
   });
 
   // Re-render
@@ -101,7 +111,9 @@ describe("TripGradient", () => {
   });
 
   it("stable when only className changes", () => {
-    const { container, rerender } = render(<TripGradient name="Stable" className="h-32" />);
+    const { container, rerender } = render(
+      <TripGradient name="Stable" className="h-32" />
+    );
     const bg1 = getDataAttr(container);
     rerender(<TripGradient name="Stable" className="h-64" />);
     expect(getDataAttr(container)).toBe(bg1);

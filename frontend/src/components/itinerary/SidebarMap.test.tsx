@@ -235,7 +235,9 @@ const sampleTrip = {
 };
 
 /** Minimal itinerary state shape required by ItineraryTab */
-function makeItineraryState(overrides: Partial<ReturnType<typeof buildState>> = {}) {
+function makeItineraryState(
+  overrides: Partial<ReturnType<typeof buildState>> = {}
+) {
   return buildState(overrides);
 }
 
@@ -284,7 +286,11 @@ function renderItineraryTab(stateOverrides: Record<string, unknown> = {}) {
           trip={sampleTrip as Parameters<typeof ItineraryTab>[0]["trip"]}
           tripId="trip-1"
           locations={tripLocations}
-          itineraryState={itineraryState as Parameters<typeof ItineraryTab>[0]["itineraryState"]}
+          itineraryState={
+            itineraryState as Parameters<
+              typeof ItineraryTab
+            >[0]["itineraryState"]
+          }
         />
       </ReadOnlyProvider>
     ),
@@ -316,7 +322,9 @@ describe("SidebarMap — route card click selection in expanded dialog", () => {
 
     // Each route card must be a <button> with role="button" and accessible name containing "select route"
     // (This requires the implementation to render route cards as interactive buttons)
-    const routeButtons = within(dialog).getAllByRole("button", { name: /select route/i });
+    const routeButtons = within(dialog).getAllByRole("button", {
+      name: /select route/i,
+    });
     expect(routeButtons).toHaveLength(2);
   });
 
@@ -340,7 +348,9 @@ describe("SidebarMap — route card click selection in expanded dialog", () => {
     const dialog = await openExpandedDialog();
 
     // Route card buttons must exist (implementation must render them as buttons)
-    const cards = within(dialog).getAllByRole("button", { name: /select route/i });
+    const cards = within(dialog).getAllByRole("button", {
+      name: /select route/i,
+    });
     expect(cards.length).toBeGreaterThanOrEqual(1);
 
     // None should be in the selected state on first open
@@ -356,7 +366,9 @@ describe("SidebarMap — route card click selection in expanded dialog", () => {
     const dialog = await openExpandedDialog();
 
     // Find the first route card by its test id and click it
-    const cards = within(dialog).getAllByRole("button", { name: /select route/i });
+    const cards = within(dialog).getAllByRole("button", {
+      name: /select route/i,
+    });
     expect(cards.length).toBeGreaterThanOrEqual(1);
 
     await userEvent.click(cards[0]);
@@ -368,7 +380,9 @@ describe("SidebarMap — route card click selection in expanded dialog", () => {
     renderItineraryTab();
     const dialog = await openExpandedDialog();
 
-    const cards = within(dialog).getAllByRole("button", { name: /select route/i });
+    const cards = within(dialog).getAllByRole("button", {
+      name: /select route/i,
+    });
     await userEvent.click(cards[0]);
 
     // The map container inside the dialog must receive a data-selected-route-id attribute
@@ -383,7 +397,9 @@ describe("SidebarMap — route card click selection in expanded dialog", () => {
     renderItineraryTab();
     const dialog = await openExpandedDialog();
 
-    const cards = within(dialog).getAllByRole("button", { name: /select route/i });
+    const cards = within(dialog).getAllByRole("button", {
+      name: /select route/i,
+    });
 
     await userEvent.click(cards[0]);
     expect(cards[0]).toHaveAttribute("aria-pressed", "true");
@@ -396,7 +412,9 @@ describe("SidebarMap — route card click selection in expanded dialog", () => {
     renderItineraryTab();
     const dialog = await openExpandedDialog();
 
-    const cards = within(dialog).getAllByRole("button", { name: /select route/i });
+    const cards = within(dialog).getAllByRole("button", {
+      name: /select route/i,
+    });
     await userEvent.click(cards[0]);
     await userEvent.click(cards[0]);
 
@@ -412,7 +430,9 @@ describe("SidebarMap — route card click selection in expanded dialog", () => {
     renderItineraryTab();
     const dialog = await openExpandedDialog();
 
-    const cards = within(dialog).getAllByRole("button", { name: /select route/i });
+    const cards = within(dialog).getAllByRole("button", {
+      name: /select route/i,
+    });
     expect(cards.length).toBeGreaterThanOrEqual(2);
 
     await userEvent.click(cards[0]);
@@ -428,7 +448,9 @@ describe("SidebarMap — route card click selection in expanded dialog", () => {
     renderItineraryTab();
     const dialog = await openExpandedDialog();
 
-    const cards = within(dialog).getAllByRole("button", { name: /select route/i });
+    const cards = within(dialog).getAllByRole("button", {
+      name: /select route/i,
+    });
     await userEvent.click(cards[0]);
     await userEvent.click(cards[1]);
 

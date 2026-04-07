@@ -35,15 +35,25 @@ function derive(hash: number, salt: number, min: number, max: number): number {
 function generateContourPaths(
   name: string,
   viewW: number,
-  viewH: number,
+  viewH: number
 ): { d: string; color: string; strokeWidth: number; opacity: number }[] {
   const hash = djb2(name || "trip");
   const paletteIdx = derive(hash, 1, 0, LINE_PALETTES.length - 1);
   const palette = LINE_PALETTES[paletteIdx];
 
   // Offset center — not dead center, more organic
-  const peakX = derive(hash, 2, Math.round(viewW * 0.2), Math.round(viewW * 0.8));
-  const peakY = derive(hash, 3, Math.round(viewH * 0.15), Math.round(viewH * 0.85));
+  const peakX = derive(
+    hash,
+    2,
+    Math.round(viewW * 0.2),
+    Math.round(viewW * 0.8)
+  );
+  const peakY = derive(
+    hash,
+    3,
+    Math.round(viewH * 0.15),
+    Math.round(viewH * 0.85)
+  );
 
   // Fewer rings, more spread
   const ringCount = derive(hash, 4, 4, 6);
@@ -52,7 +62,12 @@ function generateContourPaths(
   // Elongation factor — how elliptical (1.3-2.2 ratio)
   const elongation = derive(hash, 6, 130, 220) / 100;
 
-  const paths: { d: string; color: string; strokeWidth: number; opacity: number }[] = [];
+  const paths: {
+    d: string;
+    color: string;
+    strokeWidth: number;
+    opacity: number;
+  }[] = [];
 
   for (let ring = 1; ring <= ringCount; ring++) {
     const t = ring / ringCount;
@@ -86,7 +101,10 @@ function generateContourPaths(
     }
     d += " Z";
 
-    const colorIdx = Math.min(Math.floor(t * palette.length), palette.length - 1);
+    const colorIdx = Math.min(
+      Math.floor(t * palette.length),
+      palette.length - 1
+    );
     // Inner rings slightly more visible, outer ones fade
     const opacity = 0.2 + (1 - t) * 0.25;
 
@@ -118,7 +136,12 @@ export function TripGradient({ name, className }: TripGradientProps) {
       paths: p,
       rotDeg: derive(hash, 5, 0, 360),
       peakX: derive(hash, 2, Math.round(viewW * 0.2), Math.round(viewW * 0.8)),
-      peakY: derive(hash, 3, Math.round(viewH * 0.15), Math.round(viewH * 0.85)),
+      peakY: derive(
+        hash,
+        3,
+        Math.round(viewH * 0.15),
+        Math.round(viewH * 0.85)
+      ),
     };
   }, [name]);
 

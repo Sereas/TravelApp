@@ -14,17 +14,8 @@ import {
 import { ItineraryInspectorPanel } from "@/components/itinerary/ItineraryInspectorPanel";
 import { UnscheduledLocationsPanel } from "@/components/itinerary/UnscheduledLocationsPanel";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import type {
-  ItineraryDay,
-  ItineraryOption,
-  Location,
-  Trip,
-} from "@/lib/api";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import type { ItineraryDay, ItineraryOption, Location, Trip } from "@/lib/api";
 import { ROUTE_COLORS } from "@/components/itinerary/ItineraryDayCard";
 import type { useItineraryState } from "@/features/itinerary/useItineraryState";
 import { cn } from "@/lib/utils";
@@ -51,7 +42,11 @@ function fmtDist(meters: number) {
 
 const TRANSPORT_ICONS: Record<
   string,
-  React.ComponentType<{ size?: number | string; className?: string; style?: React.CSSProperties }>
+  React.ComponentType<{
+    size?: number | string;
+    className?: string;
+    style?: React.CSSProperties;
+  }>
 > = { walk: Footprints, drive: Car, transit: TrainFront };
 
 // ---------------------------------------------------------------------------
@@ -79,7 +74,7 @@ const SidebarMap = React.memo(function SidebarMap({
   const mapLocations = useMemo(() => {
     if (!selectedOption) return [];
     const sorted = [...selectedOption.locations].sort(
-      (a, b) => a.sort_order - b.sort_order,
+      (a, b) => a.sort_order - b.sort_order
     );
     // Deduplicate by location_id — a location can appear multiple times
     // in an option (e.g. depart and return to same spot). Show only the
@@ -94,7 +89,7 @@ const SidebarMap = React.memo(function SidebarMap({
         (item): item is NonNullable<typeof item> =>
           !!item &&
           typeof item.loc.latitude === "number" &&
-          typeof item.loc.longitude === "number",
+          typeof item.loc.longitude === "number"
       )
       .filter(({ loc }) => {
         if (seen.has(loc.id)) return false;
@@ -124,8 +119,10 @@ const SidebarMap = React.memo(function SidebarMap({
           .sort((a, b) => a.segment_order - b.segment_order)
           .map((s) => s.encoded_polyline!);
         if (polylines.length === 0) return null;
-        const dur = route.duration_seconds != null ? fmtDur(route.duration_seconds) : "";
-        const dist = route.distance_meters != null ? fmtDist(route.distance_meters) : "";
+        const dur =
+          route.duration_seconds != null ? fmtDur(route.duration_seconds) : "";
+        const dist =
+          route.distance_meters != null ? fmtDist(route.distance_meters) : "";
         return {
           routeId: route.route_id,
           color: ROUTE_COLORS[ri % ROUTE_COLORS.length].hex,
@@ -149,7 +146,7 @@ const SidebarMap = React.memo(function SidebarMap({
 
   const getStopNames = useCallback(
     (olIds: string[]) => olIds.map((id) => stopNameLookup.get(id) ?? "?"),
-    [stopNameLookup],
+    [stopNameLookup]
   );
 
   if (mapLocations.length === 0) {
@@ -170,7 +167,11 @@ const SidebarMap = React.memo(function SidebarMap({
       {/* Compact preview — map is fully interactive */}
       <div className="relative overflow-hidden rounded-2xl border border-border bg-card">
         <div className="h-[180px]">
-          <ItineraryDayMap locations={mapLocations} routes={mapRoutes} compact />
+          <ItineraryDayMap
+            locations={mapLocations}
+            routes={mapRoutes}
+            compact
+          />
         </div>
         <button
           type="button"
@@ -183,11 +184,17 @@ const SidebarMap = React.memo(function SidebarMap({
       </div>
 
       {/* Expanded dialog — map + route details */}
-      <Dialog open={expanded} onOpenChange={(open) => { setExpanded(open); if (!open) setSelectedRouteId(null); }}>
+      <Dialog
+        open={expanded}
+        onOpenChange={(open) => {
+          setExpanded(open);
+          if (!open) setSelectedRouteId(null);
+        }}
+      >
         <DialogContent
           className={cn(
             "flex max-w-[90vw] flex-col gap-0 overflow-hidden p-0",
-            routes.length > 0 ? "h-[90vh]" : "h-[85vh]",
+            routes.length > 0 ? "h-[90vh]" : "h-[85vh]"
           )}
         >
           <DialogTitle className="sr-only">Day map</DialogTitle>
@@ -217,83 +224,89 @@ const SidebarMap = React.memo(function SidebarMap({
               </div>
               <div className="relative min-h-0 flex-1">
                 {/* Fade gradient — signals more content below */}
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-10 bg-gradient-to-t from-background to-transparent transition-opacity duration-200" id="route-scroll-fade" />
+                <div
+                  className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-10 bg-gradient-to-t from-background to-transparent transition-opacity duration-200"
+                  id="route-scroll-fade"
+                />
                 <div
                   className="h-full space-y-1.5 overflow-y-auto px-5 pb-3 pt-1"
                   onScroll={(e) => {
                     const el = e.currentTarget;
-                    const fade = el.parentElement?.querySelector("#route-scroll-fade") as HTMLElement | null;
+                    const fade = el.parentElement?.querySelector(
+                      "#route-scroll-fade"
+                    ) as HTMLElement | null;
                     if (fade) {
-                      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 8;
+                      const atBottom =
+                        el.scrollHeight - el.scrollTop - el.clientHeight < 8;
                       fade.style.opacity = atBottom ? "0" : "1";
                     }
                   }}
                 >
-                {routes.map((route, ri) => {
-                  const Icon = TRANSPORT_ICONS[route.transport_mode];
-                  const color = ROUTE_COLORS[ri % ROUTE_COLORS.length].hex;
-                  const names = getStopNames(route.option_location_ids);
-                  const hasDur = route.duration_seconds != null;
-                  const hasDist = route.distance_meters != null;
-                  const isSelected = selectedRouteId === route.route_id;
-                  return (
-                    <button
-                      type="button"
-                      key={route.route_id}
-                      aria-label={`Select route: ${names.join(" → ")}`}
-                      aria-pressed={isSelected}
-                      onClick={() =>
-                        setSelectedRouteId((prev) =>
-                          prev === route.route_id ? null : route.route_id
-                        )
-                      }
-                      className={cn(
-                        "flex w-full items-start gap-3 rounded-lg border bg-background py-2.5 pl-3 pr-4 text-left transition-all duration-150",
-                        isSelected
-                          ? "border-current ring-1 ring-current/20"
-                          : "border-border/40 hover:border-border hover:shadow-sm"
-                      )}
-                      style={isSelected ? { borderColor: color, color } : undefined}
-                    >
-                      <div
-                        className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
-                        style={{ backgroundColor: color + "18" }}
+                  {routes.map((route, ri) => {
+                    const Icon = TRANSPORT_ICONS[route.transport_mode];
+                    const color = ROUTE_COLORS[ri % ROUTE_COLORS.length].hex;
+                    const names = getStopNames(route.option_location_ids);
+                    const hasDur = route.duration_seconds != null;
+                    const hasDist = route.distance_meters != null;
+                    const isSelected = selectedRouteId === route.route_id;
+                    return (
+                      <button
+                        type="button"
+                        key={route.route_id}
+                        aria-label={`Select route: ${names.join(" → ")}`}
+                        aria-pressed={isSelected}
+                        onClick={() =>
+                          setSelectedRouteId((prev) =>
+                            prev === route.route_id ? null : route.route_id
+                          )
+                        }
+                        className={cn(
+                          "flex w-full items-start gap-3 rounded-lg border bg-background py-2.5 pl-3 pr-4 text-left transition-all duration-150",
+                          isSelected
+                            ? "border-current ring-1 ring-current/20"
+                            : "border-border/40 hover:border-border hover:shadow-sm"
+                        )}
+                        style={
+                          isSelected ? { borderColor: color, color } : undefined
+                        }
                       >
-                        {Icon && (
-                          <Icon size={13} style={{ color }} />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm text-foreground">
-                          {names.map((n, i) => (
-                            <span
-                              key={`${route.route_id}-${i}`}
-                              className="flex items-center gap-1.5"
-                            >
-                              {i > 0 && (
-                                <span
-                                  className="text-xs"
-                                  style={{ color: color + "80" }}
-                                >
-                                  →
-                                </span>
-                              )}
-                              <span className="font-medium">{n}</span>
-                            </span>
-                          ))}
+                        <div
+                          className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
+                          style={{ backgroundColor: color + "18" }}
+                        >
+                          {Icon && <Icon size={13} style={{ color }} />}
                         </div>
-                        {(hasDur || hasDist) && (
-                          <div className="mt-0.5 text-xs text-muted-foreground">
-                            {hasDur && fmtDur(route.duration_seconds!)}
-                            {hasDur && hasDist && " · "}
-                            {hasDist && fmtDist(route.distance_meters!)}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm text-foreground">
+                            {names.map((n, i) => (
+                              <span
+                                key={`${route.route_id}-${i}`}
+                                className="flex items-center gap-1.5"
+                              >
+                                {i > 0 && (
+                                  <span
+                                    className="text-xs"
+                                    style={{ color: color + "80" }}
+                                  >
+                                    →
+                                  </span>
+                                )}
+                                <span className="font-medium">{n}</span>
+                              </span>
+                            ))}
                           </div>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+                          {(hasDur || hasDist) && (
+                            <div className="mt-0.5 text-xs text-muted-foreground">
+                              {hasDur && fmtDur(route.duration_seconds!)}
+                              {hasDur && hasDist && " · "}
+                              {hasDist && fmtDist(route.distance_meters!)}
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}

@@ -123,7 +123,12 @@ function MapMarkerContent({
             border: `1.5px solid ${colors.text}`,
           }}
         >
-          <CategoryIcon category={categoryKey} size={12} className="shrink-0" style={{ color: colors.text }} />
+          <CategoryIcon
+            category={categoryKey}
+            size={12}
+            className="shrink-0"
+            style={{ color: colors.text }}
+          />
           <span
             className="max-w-[120px] truncate text-[11px] font-semibold leading-none"
             style={{ color: colors.text }}
@@ -138,7 +143,11 @@ function MapMarkerContent({
         style={{
           width: 34,
           height: 40,
-          transform: active ? "scale(1.2)" : hovered ? "scale(1.08)" : "scale(1)",
+          transform: active
+            ? "scale(1.2)"
+            : hovered
+              ? "scale(1.08)"
+              : "scale(1)",
         }}
       >
         <svg
@@ -257,9 +266,14 @@ export function PopupCard({
         )
       )}
       <div className="px-3 pb-3 pt-2.5">
-        <p className="text-sm font-semibold leading-snug text-foreground">{name}</p>
+        <p className="text-sm font-semibold leading-snug text-foreground">
+          {name}
+        </p>
         {city && (
-          <p data-testid="popup-city" className="mt-0.5 text-xs text-muted-foreground">
+          <p
+            data-testid="popup-city"
+            className="mt-0.5 text-xs text-muted-foreground"
+          >
             {city}
           </p>
         )}
@@ -297,7 +311,9 @@ export function ItineraryDayMap({
     locations: ItineraryDayMapLocation[];
   } | null>(null);
   // Track route layer source IDs and coords so the highlight effect can update paint properties and fit bounds
-  const routeSourceIdsRef = useRef<{ routeId: string; sourceId: string; coords: [number, number][] }[]>([]);
+  const routeSourceIdsRef = useRef<
+    { routeId: string; sourceId: string; coords: [number, number][] }[]
+  >([]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -412,7 +428,11 @@ export function ItineraryDayMap({
         renderMarker(false, false);
       });
 
-      const marker = new maplibregl.Marker({ element: el, anchor: "bottom", offset: [0, 0] })
+      const marker = new maplibregl.Marker({
+        element: el,
+        anchor: "bottom",
+        offset: [0, 0],
+      })
         .setLngLat(lngLat)
         .setPopup(popup)
         .addTo(map);
@@ -434,7 +454,11 @@ export function ItineraryDayMap({
       coords: [number, number][];
     }[] = [];
 
-    const routeSources: { routeId: string; sourceId: string; coords: [number, number][] }[] = [];
+    const routeSources: {
+      routeId: string;
+      sourceId: string;
+      coords: [number, number][];
+    }[] = [];
 
     map.once("load", () => {
       // Add route polylines
@@ -453,7 +477,11 @@ export function ItineraryDayMap({
           }
 
           const sourceId = `route-${route.routeId}-${routeIdx}`;
-          routeSources.push({ routeId: route.routeId, sourceId, coords: allCoords });
+          routeSources.push({
+            routeId: route.routeId,
+            sourceId,
+            coords: allCoords,
+          });
           const color = route.color;
 
           map.addSource(sourceId, {
@@ -701,12 +729,36 @@ export function ItineraryDayMap({
       if (isSelected) selectedCoords = coords;
 
       try {
-        map.setPaintProperty(`${sourceId}-line`, "line-opacity", isDimmed ? 0.25 : 0.85);
-        map.setPaintProperty(`${sourceId}-line`, "line-width", isSelected ? 5 : 3.5);
-        map.setPaintProperty(`${sourceId}-outline`, "line-opacity", isDimmed ? 0.3 : 0.85);
-        map.setPaintProperty(`${sourceId}-outline`, "line-width", isSelected ? 8 : 6);
-        map.setPaintProperty(`${sourceId}-glow`, "line-opacity", isSelected ? 0.15 : isDimmed ? 0.02 : 0.08);
-        map.setPaintProperty(`${sourceId}-arrows`, "text-opacity", isDimmed ? 0.15 : isSelected ? 0.9 : 0.7);
+        map.setPaintProperty(
+          `${sourceId}-line`,
+          "line-opacity",
+          isDimmed ? 0.25 : 0.85
+        );
+        map.setPaintProperty(
+          `${sourceId}-line`,
+          "line-width",
+          isSelected ? 5 : 3.5
+        );
+        map.setPaintProperty(
+          `${sourceId}-outline`,
+          "line-opacity",
+          isDimmed ? 0.3 : 0.85
+        );
+        map.setPaintProperty(
+          `${sourceId}-outline`,
+          "line-width",
+          isSelected ? 8 : 6
+        );
+        map.setPaintProperty(
+          `${sourceId}-glow`,
+          "line-opacity",
+          isSelected ? 0.15 : isDimmed ? 0.02 : 0.08
+        );
+        map.setPaintProperty(
+          `${sourceId}-arrows`,
+          "text-opacity",
+          isDimmed ? 0.15 : isSelected ? 0.9 : 0.7
+        );
       } catch {
         // Layers may not exist yet if map hasn't loaded
       }
