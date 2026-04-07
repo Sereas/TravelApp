@@ -140,9 +140,10 @@ describe("TripDetailPage", () => {
     render(<TripDetailPage />);
 
     expect(await screen.findByText("Paris Summer")).toBeInTheDocument();
-    // Dates are now in separate clickable buttons
-    expect(screen.getByRole("button", { name: /Jun 1, 2026/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Jun 15, 2026/ })).toBeInTheDocument();
+    // Date range picker shows both dates in one button
+    const dateBtn = screen.getByRole("button", { name: /date range/i });
+    expect(dateBtn).toHaveTextContent(/Jun 1/);
+    expect(dateBtn).toHaveTextContent(/Jun 15/);
 
     expect(screen.getByText("Eiffel Tower")).toBeInTheDocument();
     expect(screen.getByText("Must visit at sunset")).toBeInTheDocument();
@@ -1679,138 +1680,61 @@ describe("TripDetailPage", () => {
     });
   });
 
-  // --- Inline date editing ---
+  // --- Date range picker ---
 
-  describe("Inline date editing", () => {
-    it("displays the start date as a clickable element", async () => {
+  describe("Date range picker", () => {
+    it("displays a date range button with both dates", async () => {
       mockGetTrip.mockResolvedValue(sampleTrip);
       mockListLocations.mockResolvedValue([]);
       render(<TripDetailPage />);
 
       await screen.findByText("Paris Summer");
-      // Start date should be clickable (button or role="button")
-      const startDateEl = screen.getByRole("button", { name: /jun 1, 2026/i });
-      expect(startDateEl).toBeInTheDocument();
+      const dateBtn = screen.getByRole("button", { name: /date range/i });
+      expect(dateBtn).toHaveTextContent(/Jun 1/);
+      expect(dateBtn).toHaveTextContent(/Jun 15/);
     });
 
-    it("displays the end date as a clickable element", async () => {
+    it("opens a calendar popover when the date range button is clicked", async () => {
       mockGetTrip.mockResolvedValue(sampleTrip);
       mockListLocations.mockResolvedValue([]);
       render(<TripDetailPage />);
 
       await screen.findByText("Paris Summer");
-      const endDateEl = screen.getByRole("button", { name: /jun 15, 2026/i });
-      expect(endDateEl).toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: /date range/i }));
+
+      // Calendar grid should appear
+      expect(screen.getAllByRole("grid").length).toBeGreaterThanOrEqual(1);
     });
 
-    it("shows a date input when the start date is clicked", async () => {
-      mockGetTrip.mockResolvedValue(sampleTrip);
-      mockListLocations.mockResolvedValue([]);
-      render(<TripDetailPage />);
-
-      await screen.findByText("Paris Summer");
-      await userEvent.click(screen.getByRole("button", { name: /jun 1, 2026/i }));
-
-      const dateInput = screen.getByLabelText(/start date/i);
-      expect(dateInput).toBeInTheDocument();
-      expect(dateInput).toHaveAttribute("type", "date");
-      expect(dateInput).toHaveValue("2026-06-01");
-    });
-
-    it("shows a date input when the end date is clicked", async () => {
-      mockGetTrip.mockResolvedValue(sampleTrip);
-      mockListLocations.mockResolvedValue([]);
-      render(<TripDetailPage />);
-
-      await screen.findByText("Paris Summer");
-      await userEvent.click(
-        screen.getByRole("button", { name: /jun 15, 2026/i })
-      );
-
-      const dateInput = screen.getByLabelText(/end date/i);
-      expect(dateInput).toBeInTheDocument();
-      expect(dateInput).toHaveAttribute("type", "date");
-      expect(dateInput).toHaveValue("2026-06-15");
-    });
-
-    it("calls the update API with the new start date when changed", async () => {
+    it("calls the update API after selecting a new date range", async () => {
       mockGetTrip.mockResolvedValue(sampleTrip);
       mockListLocations.mockResolvedValue([]);
       mockGetItinerary.mockResolvedValue({ days: [] });
       mockUpdateTrip.mockResolvedValue({
         ...sampleTrip,
-        start_date: "2026-06-05",
-      });
-      render(<TripDetailPage />);
-
-      await screen.findByText("Paris Summer");
-      await userEvent.click(screen.getByRole("button", { name: /jun 1, 2026/i }));
-
-      const dateInput = screen.getByLabelText(/start date/i);
-      await userEvent.clear(dateInput);
-      await userEvent.type(dateInput, "2026-06-05");
-      // Trigger change by tabbing away
-      await userEvent.tab();
-
-      await waitFor(() => {
-        expect(mockUpdateTrip).toHaveBeenCalledWith(
-          "trip-1",
-          expect.objectContaining({ start_date: "2026-06-05" })
-        );
-      });
-    });
-
-    it("calls the update API with the new end date when changed", async () => {
-      mockGetTrip.mockResolvedValue(sampleTrip);
-      mockListLocations.mockResolvedValue([]);
-      mockGetItinerary.mockResolvedValue({ days: [] });
-      mockUpdateTrip.mockResolvedValue({
-        ...sampleTrip,
+        start_date: "2026-06-10",
         end_date: "2026-06-20",
       });
       render(<TripDetailPage />);
 
       await screen.findByText("Paris Summer");
-      await userEvent.click(
-        screen.getByRole("button", { name: /jun 15, 2026/i })
-      );
+      await userEvent.click(screen.getByRole("button", { name: /date range/i }));
 
-      const dateInput = screen.getByLabelText(/end date/i);
-      await userEvent.clear(dateInput);
-      await userEvent.type(dateInput, "2026-06-20");
-      await userEvent.tab();
+      // Select a new range: click start day, then end day
+      const june10 = screen.getByRole("button", { name: /june 10\w*, 2026/i });
+      const june20 = screen.getByRole("button", { name: /june 20\w*, 2026/i });
+      await userEvent.click(june10);
+      await userEvent.click(june20);
 
       await waitFor(() => {
         expect(mockUpdateTrip).toHaveBeenCalledWith(
           "trip-1",
-          expect.objectContaining({ end_date: "2026-06-20" })
+          expect.objectContaining({
+            start_date: "2026-06-10",
+            end_date: "2026-06-20",
+          })
         );
       });
-    });
-
-    it("shows updated date text in the header after a date save", async () => {
-      mockGetTrip.mockResolvedValue(sampleTrip);
-      mockListLocations.mockResolvedValue([]);
-      mockGetItinerary.mockResolvedValue({ days: [] });
-      mockUpdateTrip.mockResolvedValue({
-        ...sampleTrip,
-        start_date: "2026-06-05",
-      });
-      render(<TripDetailPage />);
-
-      await screen.findByText("Paris Summer");
-      await userEvent.click(screen.getByRole("button", { name: /jun 1, 2026/i }));
-
-      const dateInput = screen.getByLabelText(/start date/i);
-      await userEvent.clear(dateInput);
-      await userEvent.type(dateInput, "2026-06-05");
-      await userEvent.tab();
-
-      await waitFor(() => {
-        expect(mockUpdateTrip).toHaveBeenCalled();
-      });
-      // The header should reflect the new date
-      expect(await screen.findByText(/jun 5, 2026/i)).toBeInTheDocument();
     });
   });
 });

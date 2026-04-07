@@ -63,6 +63,8 @@ export interface OptionResponse {
 }
 
 export interface OptionLocationResponse {
+  /** Surrogate key for the option_locations row (ol_id). Use this for update/reorder/delete. */
+  id: string;
   option_id: string;
   location_id: string;
   sort_order: number;
@@ -84,7 +86,8 @@ export interface RouteResponse {
   duration_seconds: number | null;
   distance_meters: number | null;
   sort_order: number;
-  location_ids: string[];
+  /** Ordered stop option_locations.id values (ol_ids), not raw location_ids. */
+  option_location_ids: string[];
   route_status: string;
 }
 
@@ -437,11 +440,12 @@ export class ApiClient {
     tripId: string,
     dayId: string,
     optionId: string,
-    locationId: string,
+    /** Surrogate key: option_locations.id (ol_id), NOT the raw location_id. */
+    olId: string,
     body: { sort_order?: number; time_period?: string }
   ): Promise<OptionLocationResponse> {
     return this.request<OptionLocationResponse>(
-      `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/locations/${locationId}`,
+      `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/locations/${olId}`,
       { method: "PATCH", body: JSON.stringify(body) }
     );
   }
@@ -450,10 +454,11 @@ export class ApiClient {
     tripId: string,
     dayId: string,
     optionId: string,
-    locationId: string
+    /** Surrogate key: option_locations.id (ol_id), NOT the raw location_id. */
+    olId: string
   ): Promise<void> {
     await this.request<void>(
-      `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/locations/${locationId}`,
+      `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/locations/${olId}`,
       { method: "DELETE" }
     );
   }
@@ -462,13 +467,14 @@ export class ApiClient {
     tripId: string,
     dayId: string,
     optionId: string,
-    locationIds: string[]
+    /** Ordered surrogate keys: option_locations.id (ol_ids), NOT raw location_ids. */
+    olIds: string[]
   ): Promise<OptionLocationResponse[]> {
     return this.request<OptionLocationResponse[]>(
       `/api/v1/trips/${tripId}/days/${dayId}/options/${optionId}/locations/reorder`,
       {
         method: "PATCH",
-        body: JSON.stringify({ location_ids: locationIds }),
+        body: JSON.stringify({ ol_ids: olIds }),
       }
     );
   }
@@ -482,7 +488,8 @@ export class ApiClient {
     body: {
       transport_mode: string;
       label?: string | null;
-      location_ids: string[];
+      /** Ordered stop surrogate keys: option_locations.id (ol_ids), NOT raw location_ids. */
+      option_location_ids: string[];
     }
   ): Promise<RouteResponse> {
     return this.request<RouteResponse>(
@@ -567,6 +574,13 @@ export class ApiClient {
     days: DayResponse[];
     dayId: string;
     optionId: string;
+    /**
+     * The option_locations rows in sort_order sequence.
+     * Each item has an `id` field (the ol_id / surrogate key) that must be
+     * used when calling updateOptionLocation, reorderOptionLocations, or
+     * createRoute — the backend routes are keyed on ol_id, not location_id.
+     */
+    optionLocations: OptionLocationResponse[];
   }> {
     const trip = await this.createTrip({
       name: opts.name,
@@ -595,8 +609,8 @@ export class ApiClient {
     }
     const optionId = firstDay.options[0].id;
 
-    // Schedule all locations to the first day
-    await this.batchAddLocationsToOption(
+    // Schedule all locations to the first day; capture the returned ol_ids
+    const optionLocations = await this.batchAddLocationsToOption(
       trip.id,
       dayId,
       optionId,
@@ -607,6 +621,6 @@ export class ApiClient {
       }))
     );
 
-    return { trip, locations, days, dayId, optionId };
+    return { trip, locations, days, dayId, optionId, optionLocations };
   }
 }

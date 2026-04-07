@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "motion/react";
+import { motion } from "motion/react";
 import { api, type Trip, type Location } from "@/lib/api";
 import { LocationCard } from "@/components/locations/LocationCard";
 import { AddLocationForm } from "@/components/locations/AddLocationForm";
@@ -15,6 +15,7 @@ import {
   DateChangeDialog,
   type DateChangeResult,
 } from "@/components/trips/DateChangeDialog";
+import { TripDateRangePicker } from "@/components/trips/TripDateRangePicker";
 import { ItineraryTab } from "@/components/itinerary/ItineraryTab";
 import { ShareTripDialog } from "@/components/trips/ShareTripDialog";
 import { TripGradient } from "@/components/trips/TripGradient";
@@ -48,56 +49,6 @@ import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { useItineraryState } from "@/features/itinerary/useItineraryState";
 
-/** Controlled date input that tracks value via state so jsdom tests work. */
-function InlineDateInput({
-  ariaLabel,
-  defaultValue,
-  onSave,
-  onCancel,
-}: {
-  ariaLabel: string;
-  defaultValue: string;
-  onSave: (value: string) => void;
-  onCancel: () => void;
-}) {
-  const [value, setValue] = useState(defaultValue);
-  return (
-    <input
-      type="date"
-      aria-label={ariaLabel}
-      autoFocus
-      value={value}
-      onChange={(e) => setValue(e.target.value)}
-      onBlur={() => {
-        onCancel();
-        if (value && value !== defaultValue) {
-          onSave(value);
-        }
-      }}
-      className="date-input-branded inline rounded border border-border/50 bg-card px-1.5 py-0.5 text-sm shadow-sm"
-    />
-  );
-}
-
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr + "T00:00:00");
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function formatDateRange(
-  start?: string | null,
-  end?: string | null
-): string | null {
-  if (!start && !end) return null;
-  if (start && end) return `${formatDate(start)} \u2014 ${formatDate(end)}`;
-  if (start) return `Starts ${formatDate(start)}`;
-  return `Ends ${formatDate(end!)}`;
-}
-
 export default function TripDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -111,6 +62,8 @@ export default function TripDetailPage() {
   const [editingTrip, setEditingTrip] = useState(false);
   const [dateChangeDialog, setDateChangeDialog] = useState<{
     payload: TripUpdatePayload;
+    oldStart: string;
+    oldEnd: string;
     resolve: (trip: Trip) => void;
     reject: (err: Error) => void;
   } | null>(null);
@@ -127,8 +80,6 @@ export default function TripDetailPage() {
   const [locationNameSearch, setLocationNameSearch] = useState("");
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [editingName, setEditingName] = useState(false);
-  const [editingStartDate, setEditingStartDate] = useState(false);
-  const [editingEndDate, setEditingEndDate] = useState(false);
   const nameCancelledRef = useRef(false);
 
   const [activeTab, setActiveTab] = useState<"locations" | "itinerary">(
@@ -262,8 +213,6 @@ export default function TripDetailPage() {
 
   if (!trip) return null;
 
-  const dateDisplay = formatDateRange(trip.start_date, trip.end_date);
-
   function handleTripUpdated(updated: Trip) {
     setTrip(updated);
     setEditingTrip(false);
@@ -279,21 +228,27 @@ export default function TripDetailPage() {
     }
   }
 
-  async function handleInlineDateSave(field: "start_date" | "end_date", value: string) {
+  async function handleDateRangeSave(newStart: string, newEnd: string) {
     if (!trip) return;
-    // Build the full date payload (both dates) so orphan detection works
+    const prev = { ...trip };
+    setTrip({ ...trip, start_date: newStart, end_date: newEnd });
+
     const payload: TripUpdatePayload = {
       name: trip.name,
-      start_date: field === "start_date" ? value : (trip.start_date ?? null),
-      end_date: field === "end_date" ? value : (trip.end_date ?? null),
+      start_date: newStart,
+      end_date: newEnd,
     };
 
     try {
-      const updated = await handleBeforeTripSave(payload);
+      const updated = await handleBeforeTripSave(
+        payload,
+        prev.start_date,
+        prev.end_date,
+      );
       setTrip(updated);
       fetchItinerary();
     } catch {
-      // User cancelled reconciliation dialog or save failed — revert
+      setTrip(prev);
     }
   }
 
@@ -303,7 +258,9 @@ export default function TripDetailPage() {
    * that resolves when the user picks an action and the save completes.
    */
   async function handleBeforeTripSave(
-    payload: TripUpdatePayload
+    payload: TripUpdatePayload,
+    originalStart?: string | null,
+    originalEnd?: string | null,
   ): Promise<Trip> {
     const hasNewDates = payload.start_date && payload.end_date;
 
@@ -319,9 +276,23 @@ export default function TripDetailPage() {
       return api.trips.update(tripId, payload);
     }
 
-    // Show reconciliation dialog and wait for user choice
+    // If ALL orphaned days are empty (no locations), silently delete them
+    const allEmpty = orphaned.every(
+      (day) => !day.options.some((opt) => opt.locations.length > 0)
+    );
+    if (allEmpty) {
+      await api.itinerary.reconcileDays(tripId, {
+        action: "delete",
+        day_ids: orphaned.map((d) => d.id),
+      });
+      return api.trips.update(tripId, payload);
+    }
+
+    // Some days have content — show reconciliation dialog
+    const oldStart = originalStart ?? payload.start_date!;
+    const oldEnd = originalEnd ?? payload.end_date!;
     return new Promise<Trip>((resolve, reject) => {
-      setDateChangeDialog({ payload, resolve, reject });
+      setDateChangeDialog({ payload, oldStart, oldEnd, resolve, reject });
     });
   }
 
@@ -330,14 +301,30 @@ export default function TripDetailPage() {
     const { payload, resolve, reject } = dateChangeDialog;
 
     try {
-      // 1. Execute the reconciliation action
-      await api.itinerary.reconcileDays(tripId, {
-        action: result.action,
-        offset_days: result.offsetDays,
-        day_ids: result.dayIds,
-      });
+      if (result.action === "per_day") {
+        // Per-day decisions: delete some, keep (clear dates on) others
+        if (result.deleteDayIds && result.deleteDayIds.length > 0) {
+          await api.itinerary.reconcileDays(tripId, {
+            action: "delete",
+            day_ids: result.deleteDayIds,
+          });
+        }
+        if (result.keepDayIds && result.keepDayIds.length > 0) {
+          await api.itinerary.reconcileDays(tripId, {
+            action: "clear_dates",
+            day_ids: result.keepDayIds,
+          });
+        }
+      } else {
+        // Bulk action (shift, clear_dates, delete)
+        await api.itinerary.reconcileDays(tripId, {
+          action: result.action,
+          offset_days: result.offsetDays,
+          day_ids: result.dayIds,
+        });
+      }
 
-      // 2. Now save the trip dates
+      // Save the trip dates
       const updated = await api.trips.update(tripId, payload);
 
       setDateChangeDialog(null);
@@ -575,8 +562,6 @@ export default function TripDetailPage() {
               className="rounded-full border border-border/50 bg-card p-2 text-muted-foreground shadow-sm transition-all hover:border-primary/30 hover:text-primary hover:shadow"
               onClick={() => {
                 setEditingName(false);
-                setEditingStartDate(false);
-                setEditingEndDate(false);
                 setEditingTrip(true);
               }}
               aria-label="Edit trip"
@@ -648,50 +633,12 @@ export default function TripDetailPage() {
               animate={{ opacity: 1 }}
               transition={{ delay: 0.15, duration: 0.4 }}
             >
-              {(trip.start_date || trip.end_date) && (
-                <>
-                  {trip.start_date && (
-                    editingStartDate ? (
-                      <InlineDateInput
-                        ariaLabel="Start date"
-                        defaultValue={trip.start_date}
-                        onSave={(val) => handleInlineDateSave("start_date", val)}
-                        onCancel={() => setEditingStartDate(false)}
-                      />
-                    ) : (
-                      <button
-                        type="button"
-                        aria-label={formatDate(trip.start_date)}
-                        onClick={() => setEditingStartDate(true)}
-                        className="cursor-text rounded px-0.5 transition-colors hover:bg-muted/60 hover:text-foreground"
-                      >
-                        {formatDate(trip.start_date)}
-                      </button>
-                    )
-                  )}
-                  {trip.start_date && trip.end_date && " \u2014 "}
-                  {trip.end_date && (
-                    editingEndDate ? (
-                      <InlineDateInput
-                        ariaLabel="End date"
-                        defaultValue={trip.end_date}
-                        onSave={(val) => handleInlineDateSave("end_date", val)}
-                        onCancel={() => setEditingEndDate(false)}
-                      />
-                    ) : (
-                      <button
-                        type="button"
-                        aria-label={formatDate(trip.end_date)}
-                        onClick={() => setEditingEndDate(true)}
-                        className="cursor-text rounded px-0.5 transition-colors hover:bg-muted/60 hover:text-foreground"
-                      >
-                        {formatDate(trip.end_date)}
-                      </button>
-                    )
-                  )}
-                  {" "}&ensp;/&ensp;{" "}
-                </>
-              )}
+              <TripDateRangePicker
+                startDate={trip.start_date}
+                endDate={trip.end_date}
+                onDateRangeChange={handleDateRangeSave}
+              />
+              {(trip.start_date || trip.end_date) && <>&ensp;/&ensp;</>}
               {locations.length} places
               {itinerary && itinerary.days.length > 0 && (
                 <> &ensp;/&ensp; {itinerary.days.length} days</>
@@ -1120,15 +1067,13 @@ export default function TripDetailPage() {
 
       {dateChangeDialog &&
         (() => {
-          const { payload } = dateChangeDialog;
+          const { payload, oldStart, oldEnd } = dateChangeDialog;
           const newStart = payload.start_date!;
           const newEnd = payload.end_date!;
           const orphaned = getOrphanedDays(newStart, newEnd);
-          const oldStart = trip?.start_date ?? newStart;
-          const oldEnd = trip?.end_date ?? newEnd;
 
           // Compute offset and whether shift is viable
-          const hasOldDates = !!(trip?.start_date && trip?.end_date);
+          const hasOldDates = !!(oldStart && oldEnd);
           const offsetMs = hasOldDates
             ? new Date(newStart + "T00:00:00").getTime() -
               new Date(oldStart + "T00:00:00").getTime()

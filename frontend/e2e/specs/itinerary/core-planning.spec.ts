@@ -21,7 +21,7 @@ test.describe("core planning features", () => {
   }) => {
     const locationName = "E2E TimePeriod Spot";
 
-    const { trip, locations, dayId, optionId } =
+    const { trip, optionLocations, dayId, optionId } =
       await apiClient.setupTripWithScheduledLocations({
         name: `E2E TimePeriod ${Date.now()}`,
         startDate: "2026-08-01",
@@ -44,11 +44,12 @@ test.describe("core planning features", () => {
     ).toBeVisible({ timeout: 5_000 });
 
     // Change the time period via API to "afternoon"
+    // Must pass the ol_id (option_locations.id surrogate key), not the location_id.
     await apiClient.updateOptionLocation(
       trip.id,
       dayId,
       optionId,
-      locations[0].id,
+      optionLocations[0].id,
       { time_period: "afternoon" }
     );
 
@@ -123,7 +124,7 @@ test.describe("core planning features", () => {
     page,
     apiClient,
   }) => {
-    const { trip, locations, dayId, optionId } =
+    const { trip, optionLocations, dayId, optionId } =
       await apiClient.setupTripWithScheduledLocations({
         name: `E2E Reorder ${Date.now()}`,
         startDate: "2026-08-01",
@@ -134,6 +135,8 @@ test.describe("core planning features", () => {
           { name: "Gamma Stop" },
         ],
       });
+    // optionLocations are returned in sort_order sequence (0=Alpha, 1=Beta, 2=Gamma)
+    const [olAlpha, olBeta, olGamma] = optionLocations;
 
     const detail = new TripDetailPage(page);
     const itinerary = new ItineraryPage(page);
@@ -153,11 +156,11 @@ test.describe("core planning features", () => {
     });
 
     // Use API to reorder: Gamma, Alpha, Beta
-    const [gamma, alpha, beta] = [locations[2], locations[0], locations[1]];
+    // reorderOptionLocations expects ol_ids (option_locations.id surrogate keys)
     await apiClient.reorderOptionLocations(trip.id, dayId, optionId, [
-      gamma.id,
-      alpha.id,
-      beta.id,
+      olGamma.id,
+      olAlpha.id,
+      olBeta.id,
     ]);
 
     // Reload page to see the new order
@@ -166,8 +169,11 @@ test.describe("core planning features", () => {
     await detail.switchToItineraryTab();
 
     // After reorder, check that Gamma appears before Alpha in the page
-    // by finding the text of the first "Reorder" button (drag handle)
-    const reorderButtons = page.getByRole("button", { name: /Reorder/ });
+    // by finding drag handle buttons (aria-roledescription="draggable").
+    // These have aria-label="Reorder {location name}".
+    // Scope to draggable buttons to avoid matching the trip name button whose
+    // aria-label also starts with the trip name "E2E Reorder …".
+    const reorderButtons = page.locator('[aria-roledescription="draggable"]');
     await expect(reorderButtons.first()).toHaveAccessibleName(/Gamma/, {
       timeout: 10_000,
     });

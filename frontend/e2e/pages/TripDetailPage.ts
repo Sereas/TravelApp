@@ -19,17 +19,31 @@ export class TripDetailPage {
   }
 
   async waitForLoaded(): Promise<void> {
+    // The trip name is rendered as a <button aria-label="Trip name"> (inline-editable)
+    // since the UI was updated from a plain <h1>. Wait for the tab nav to appear —
+    // it's rendered after data loads and is a reliable "page ready" indicator.
     await this.page
-      .locator("h1")
+      .getByRole("tablist", { name: "Trip sections" })
       .waitFor({ state: "visible", timeout: 20_000 });
   }
 
   async getTripName(): Promise<string> {
-    return this.page.locator("h1").innerText();
+    // The trip name renders as an inline-editable <button> — the aria-label equals the trip name.
+    // We can get the visible text from the first button in the "Trip name" area.
+    // Fallback: find the button in the tablist container's sibling heading area.
+    return this.page.locator('[aria-label="Trip name"]').inputValue();
   }
 
   async switchToLocationsTab(): Promise<void> {
-    await this.page.getByRole("tab", { name: /Locations/i }).click();
+    // The tab label changed from "Locations" to "Places" in the UI enhancement.
+    // Try "Places" first, fall back to "Locations" for backwards compatibility.
+    const placesTab = this.page.getByRole("tab", { name: /Places/i });
+    const locationsTab = this.page.getByRole("tab", { name: /Locations/i });
+    if (await placesTab.isVisible({ timeout: 3_000 }).catch(() => false)) {
+      await placesTab.click();
+    } else {
+      await locationsTab.click();
+    }
     await this.page.waitForTimeout(500);
   }
 

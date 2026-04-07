@@ -22,9 +22,25 @@ export class ItineraryPage {
 
   async switchToItineraryTab(): Promise<void> {
     await this.page.getByRole("tab", { name: "Itinerary" }).click();
+    // The itinerary tab panel is a plain <div>, not a role="tabpanel".
+    // Wait for the ItineraryTab component to mount by looking for a landmark
+    // element that is only present inside the itinerary view.
+    // The day rail or "Generate days" / "Add day" button are reliable anchors.
     await this.page
       .getByRole("tabpanel", { name: /Itinerary/i })
-      .waitFor({ state: "visible", timeout: 10_000 });
+      .waitFor({ state: "visible", timeout: 10_000 })
+      .catch(async () => {
+        // Fallback for the new UI where the itinerary panel is a plain <div>.
+        // Wait for any itinerary-specific element: day rail or the add-day button.
+        await Promise.race([
+          this.page.locator("button").filter({ hasText: DAY_RAIL_BUTTON_REGEX }).first()
+            .waitFor({ state: "visible", timeout: 8_000 }),
+          this.page.getByRole("button", { name: /Generate|Add day/i }).first()
+            .waitFor({ state: "visible", timeout: 8_000 }),
+        ]).catch(() => {
+          // If neither appears, the tab switch itself may be enough — proceed.
+        });
+      });
   }
 
   // ── Day generation ────────────────────────────────────────────────────────
@@ -322,7 +338,9 @@ export class ItineraryPage {
   // ── Unscheduled panel ─────────────────────────────────────────────────────
 
   getUnscheduledPanel(): Locator {
-    return this.page.locator("aside").filter({ hasText: /Not yet planned/i });
+    // The panel header changed from "Not yet planned" to "Quick add" in the UI refresh.
+    // Match either to stay resilient to future label changes.
+    return this.page.locator("aside").filter({ hasText: /Quick add|Not yet planned/i });
   }
 
   /**

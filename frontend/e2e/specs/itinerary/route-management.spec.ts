@@ -97,7 +97,7 @@ test.describe("route management", () => {
     const loc1Name = "E2E Del Route A";
     const loc2Name = "E2E Del Route B";
 
-    const { trip, locations, dayId, optionId } =
+    const { trip, optionLocations, dayId, optionId } =
       await apiClient.setupTripWithScheduledLocations({
         name: `E2E DeleteRoute ${Date.now()}`,
         startDate: "2026-08-01",
@@ -105,10 +105,11 @@ test.describe("route management", () => {
         locations: [{ name: loc1Name }, { name: loc2Name }],
       });
 
-    // Create a walking route via API between the two locations
+    // Create a walking route via API between the two locations.
+    // createRoute expects option_location_ids (ol_ids), not raw location_ids.
     const route = await apiClient.createRoute(trip.id, dayId, optionId, {
       transport_mode: "walk",
-      location_ids: [locations[0].id, locations[1].id],
+      option_location_ids: [optionLocations[0].id, optionLocations[1].id],
     });
 
     const detail = new TripDetailPage(page);
