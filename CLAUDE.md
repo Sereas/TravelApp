@@ -38,6 +38,13 @@ npm run test:watch   # Vitest watch mode
 npm run lint         # eslint + prettier check
 npm run lint:fix     # Auto-fix lint/format
 npm run typecheck    # tsc --noEmit
+
+# E2E (Playwright)
+npm run test:e2e         # Headless
+npm run test:e2e:headed  # With browser
+npm run test:e2e:ui      # Interactive UI mode
+npm run test:e2e:debug   # Debug mode
+npm run test:e2e:report  # View last report
 ```
 
 ### Docker
@@ -54,34 +61,76 @@ docker-compose --profile dev up   # Dev with hot-reload
 - `SUPABASE_JWT_SECRET` — HS256 fallback for local/test (ES256 via JWKS is preferred in prod)
 - `GOOGLE_PLACES_API_KEY`, `GOOGLE_ROUTES_API_KEY` — optional; Google integrations disabled when absent
 - `CORS_ALLOWED_ORIGINS` — comma-separated list (defaults include `localhost:3000` and `shtabtravel.vercel.app`)
+- `LOG_LEVEL`, `LOG_FORMAT` — structlog config (`INFO`/`json` defaults)
+- `FRONTEND_BASE_URL` — used for share link generation
 
 **Frontend** (`.env.local` inside `frontend/`):
 - `NEXT_PUBLIC_API_URL` — backend base URL (defaults to `http://localhost:8000`)
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
+**E2E** (`.env.e2e` inside `frontend/`):
+- Test credentials and URLs for Playwright E2E tests (see `.env.e2e.example`)
+
 ## Architecture
 
 ### Backend (`backend/app/`)
 
-- **`main.py`** — FastAPI app; registers all routers under `/api/v1/`; includes `RequestLoggingMiddleware` for request timing
+- **`main.py`** — FastAPI app with lifespan for singleton client init; registers all routers under `/api/v1/` (except `infra`); middleware stack: SecurityHeaders → RequestLogging → SlowAPI → CORS; custom exception handlers for rate limits (429) and disabled Google APIs (503); exposes perf headers (`X-Itinerary-Ownership-Ms`, `X-Itinerary-Rpc-Ms`)
+- **`middleware.py`** — `RequestLoggingMiddleware` (logs method/path/status/duration with request IDs) + `SecurityHeadersMiddleware` (X-Content-Type-Options, X-Frame-Options, Referrer-Policy)
 - **`core/config.py`** — Settings loaded from env via `get_settings()` (lru_cached)
-- **`dependencies.py`** — `get_current_user_id()` FastAPI dependency; validates Supabase JWT (ES256 JWKS → HS256 fallback); extracts `user_id: UUID`
-- **`db/supabase.py`** — `get_supabase_client()` dependency; backend always uses `SUPABASE_SERVICE_ROLE_KEY` (bypasses Supabase RLS — ownership is enforced manually in Python)
-- **`models/schemas.py`** — All Pydantic request/response models
-- **`routers/trip_ownership.py`** — `_ensure_trip_owned(supabase, trip_id, user_id)` helper; raises 404 if trip missing or not owned by caller — used at the top of every nested-resource endpoint
-- **`services/route_calculation.py`** — Route segment computation via Google Routes API; "retry-on-view" caching in `segment_cache` table
-- **`clients/`** — Thin wrappers around Google Places and Google Routes APIs
+- **`core/logging.py`** — Structlog setup; JSON logs in production, pretty console in dev
+- **`core/rate_limit.py`** — Slowapi limiter; user-id-based for auth endpoints, IP-based for public; default 100/minute
+- **`dependencies.py`** — `get_current_user_id()` and `get_current_user_email()` FastAPI dependencies; validates Supabase JWT (ES256 JWKS → HS256 fallback); Google client singletons (`get_google_places_client()`, `get_google_places_client_optional()`, `get_google_routes_client()`)
+- **`db/supabase.py`** — `get_supabase_client()` dependency with instrumentation wrapper; logs every `.execute()` at DEBUG with table/rpc name, operation type, duration, row counts; uses `SUPABASE_SERVICE_ROLE_KEY` exclusively (bypasses RLS — ownership enforced in Python)
+- **`models/schemas.py`** — All Pydantic request/response models with validators (category, required_booking, image type/size)
+- **`utils/url_validation.py`** — SSRF prevention for Google Maps list import; validates scheme, hostname whitelist, rejects IPs
+
+#### Routers (`backend/app/routers/`)
+
+| Router | Purpose |
+|--------|---------|
+| `trips.py` | Trip CRUD (create, list, get, update, delete) |
+| `trip_locations.py` | Location CRUD + image upload + Google Maps list import (SSE streaming) |
+| `locations_google.py` | Google Places preview/resolution (read-only, no DB writes) |
+| `itinerary_days.py` | Day CRUD + date reconciliation + reorder/generate |
+| `itinerary_options.py` | Option CRUD + reorder; tracks starting/ending cities |
+| `itinerary_option_locations.py` | Option-location CRUD + reorder + batch-add |
+| `itinerary_routes.py` | Route CRUD + segment recalculation |
+| `itinerary_tree.py` | Full itinerary tree in one shot (`get_itinerary_tree` RPC) |
+| `shared_trips.py` | Public share tokens + owner sharing management; rate-limited by IP |
+| `trip_ownership.py` | `_ensure_resource_chain()` helper (single DB round-trip ownership check) |
+| `infra.py` | Health check (`/health`) for probes |
+
+#### Services (`backend/app/services/`)
+
+- **`route_calculation.py`** — Route segment computation via Google Routes API; "retry-on-view" caching in `segment_cache` table with TTLs and cooldowns
+- **`place_photos.py`** — Fetch and cache Google Places photos in Supabase Storage; returns public URLs; handles race conditions with ON CONFLICT DO NOTHING
+
+#### Clients (`backend/app/clients/`)
+
+- **`google_places.py`** — Google Places API v1 wrapper (SearchText); returns `PlaceResolution` dataclass
+- **`google_routes.py`** — Google Routes API client; returns `RouteLegResult` (distance, duration, polyline)
+- **`google_list_scraper.py`** — Playwright-based scraper for Google Maps shared lists; hybrid DOM + getlist endpoint approach; handles pagination and consent
 
 ### Database Tables (Supabase/Postgres)
 
-Key tables: `trips`, `locations`, `trip_days`, `day_options`, `option_locations`, `option_routes`, `route_stops`, `route_segments`, `segment_cache`.
+Key tables: `trips`, `locations`, `trip_days`, `day_options`, `option_locations`, `option_routes`, `route_stops`, `route_segments`, `segment_cache`, `place_photos`, `trip_shares`.
 
 Key Supabase RPCs called from Python:
-- `get_itinerary_tree(p_trip_id)` — returns full nested itinerary as flat rows
-- `create_route_with_stops(p_option_id, p_transport_mode, p_label, p_location_ids)`
+- `get_itinerary_tree(p_trip_id, p_user_id)` — returns full nested itinerary; ownership baked in via `EXISTS`
+- `get_itinerary_routes(p_option_ids)` — batch route fetch with `LEFT JOIN LATERAL`
+- `create_route_with_stops(p_option_id, p_transport_mode, p_label, p_option_location_ids)`
+- `update_route_with_stops(p_route_id, p_option_id, ...)` — atomic route+stops update
 - `get_option_routes(p_option_id)`
 - `batch_insert_option_locations(p_option_id, p_location_ids, p_sort_orders, p_time_periods)`
-- `reorder_option_locations(p_option_id, p_location_ids)`
+- `reorder_option_locations(p_option_id, p_ol_ids)`
+- `reorder_trip_days(p_trip_id, p_day_ids)`, `reorder_day_options(p_day_id, p_option_ids)`
+- `delete_days_batch(p_trip_id, p_day_ids)`, `delete_location_cascade(p_trip_id, p_location_id)`
+- `remove_location_from_option(p_option_id, p_ol_id)`
+- `move_option_to_day(p_option_id, p_source_day_id, p_target_day_id)`
+- `reconcile_clear_dates(p_trip_id, p_day_ids)`, `shift_day_dates(p_trip_id, p_offset_days)`
+- `get_shared_trip_data(p_share_token)` — public share data without auth
+- `verify_resource_chain(p_trip_id, p_user_id, p_day_id, p_option_id)` — single-query ownership chain
 
 ### Itinerary Data Model (hierarchical)
 
@@ -90,7 +139,7 @@ Trip
  └── Days (trip_days) — ordered by sort_order
       └── Options (day_options) — option_index 1 = main, 2+ = alternatives
            ├── Locations (option_locations) — ordered by sort_order; each has time_period
-           └── Routes (option_routes) — each route has ordered stops (route_stops)
+           └── Routes (option_routes) — each route has ordered stops (route_stops → option_location_id)
                 └── Segments (route_segments → segment_cache) — per-leg distance/duration/polyline
 ```
 
@@ -102,30 +151,81 @@ Route metrics are computed lazily: segments are only calculated when the user vi
 
 ### Frontend (`frontend/src/`)
 
-- **`lib/api.ts`** — Single typed `api` object with all backend calls. Gets Supabase access token from the browser session and injects it as `Authorization: Bearer` on every request.
-- **`app/trips/[id]/page.tsx`** — The main trip detail page. Manages trip-level and locations-tab state; delegates itinerary state and rendering to `ItineraryTab` + `useItineraryState`.
-- **`features/itinerary/useItineraryState.ts`** — Central hook for all itinerary state management: fetching the itinerary tree, optimistic updates (time_period, reorder, option details), and server sync with rollback on error.
-- **`components/itinerary/ItineraryTab.tsx`** — Orchestrates the itinerary tab: wires `useItineraryState` to the component tree.
-- **`components/itinerary/`** — Modular itinerary components: `ItineraryDayCard`, `ItineraryDayHeader`, `ItineraryDayRail`, `ItineraryDayTimeline`, `ItineraryLocationRow`, `ItineraryPlanSwitcher`, `ItineraryInspectorPanel`, `ItineraryRouteManager`, `UnscheduledLocationsPanel`.
-- **`middleware.ts`** — Next.js middleware that runs `updateSession` on every request to keep the Supabase session cookie fresh.
-- **`lib/supabase/`** — Three Supabase client factories: `client.ts` (browser), `server.ts` (Server Components), `middleware.ts` (middleware).
-- **`components/`** — Organized by domain: `itinerary/`, `locations/`, `trips/`, `layout/`, `feedback/`, `ui/` (shadcn primitives).
+#### App Routes
+
+| Route | Purpose |
+|-------|---------|
+| `/` | Home/redirect |
+| `/login` | Supabase Auth (email/password) |
+| `/auth/callback` | OAuth callback, sets session cookies |
+| `/auth/logout` | Logout handler |
+| `/auth/update-password` | Password recovery |
+| `/trips` | Trip listing |
+| `/trips/[id]` | Trip detail page (locations + itinerary tabs) |
+| `/shared/[token]` | Public shared trip viewer (read-only, no auth) |
+
+#### Key Files
+
+- **`lib/api.ts`** — Single typed `api` object (~827 lines) with namespaced endpoints (`api.trips`, `api.locations`, `api.google`, `api.itinerary`, `api.sharing`); SSE streaming support for Google List imports; custom `ApiError` class
+- **`features/itinerary/useItineraryState.ts`** — Central hook (~960 lines) for all itinerary state: fetching tree, optimistic updates (time_period, reorder, option details), auto-recalculating routes with missing segments, server sync with rollback
+- **`middleware.ts`** — Skips Supabase refresh for `/shared/*` paths; delegates auth to `updateSession()`
+- **`lib/supabase/`** — Three Supabase client factories: `client.ts` (browser), `server.ts` (Server Components), `middleware.ts` (middleware with public path config)
+- **`lib/location-constants.ts`** — 31 category definitions with colors, icons, gradients; `REQUIRES_BOOKING_OPTIONS`; `CATEGORY_META` styling metadata
+- **`lib/read-only-context.ts`** — React context for read-only mode (shared trips)
+
+#### Components (organized by domain)
+
+- **`itinerary/`** — `ItineraryTab`, `ItineraryDayCard`, `ItineraryDayHeader`, `ItineraryDayRail`, `ItineraryDayTimeline`, `ItineraryLocationRow`, `ItineraryPlanSwitcher`, `ItineraryInspectorPanel`, `ItineraryRouteManager`, `ItineraryDayMap`, `SidebarMap`, `AddLocationsToOptionDialog`, `UnscheduledLocationsPanel`
+- **`locations/`** — `LocationCard`, `AddLocationForm`, `EditLocationRow`, `PhotoUploadDialog`, `ImportGoogleListDialog`, `CategoryIcon`
+- **`trips/`** — `TripCard`, `CreateTripDialog`, `ShareTripDialog`, `EditTripForm`, `TripDateRangePicker`, `InlineDateInput`, `DateChangeDialog`, `TripGradient`
+- **`layout/`** — `PageShell`, `SiteHeader`, `UserNav`
+- **`feedback/`** — `LoadingSpinner`, `ErrorBanner`, `EmptyState`
+- **`ui/`** — shadcn/Radix primitives: button, card, input, label, dialog, popover, tabs, badge, progress, calendar, date-picker, confirm-dialog
+
+#### Key Dependencies
+
+- **Framework:** Next.js 14.2, React 18.3, TypeScript 5.6
+- **UI:** Radix UI, Tailwind CSS 3.4, lucide-react icons, class-variance-authority
+- **Maps:** MapLibre GL 4.3 (open-source)
+- **Auth/DB:** @supabase/ssr, @supabase/supabase-js 2.97
+- **Date:** date-fns 4.1, react-day-picker 9.14
+- **Animation:** motion 12.38
 
 ### Authentication Flow
 
 1. User logs in via Supabase Auth (email/password) on `/login`.
 2. Auth callback at `/auth/callback` sets session cookies via `@supabase/ssr`.
-3. Next.js middleware refreshes session on every request.
+3. Next.js middleware refreshes session on every request (skips `/shared/*`).
 4. Frontend reads session → gets `access_token` → sends as `Bearer` to backend.
 5. Backend validates JWT via Supabase JWKS (ES256), falls back to HS256 secret for local dev.
+6. Shared trips bypass auth entirely — `GET /shared/{token}` is public, rate-limited by IP.
 
 ### Testing
 
-**Backend:** pytest with fully mocked Supabase clients in `conftest.py`. No real DB or network calls in unit tests. `mock_supabase_trips_and_days` is the most comprehensive fixture, simulating the full trips/days/options/locations/option_locations table hierarchy including RPC responses.
+**Backend:** pytest (32 test files) with fully mocked Supabase clients in `conftest.py`. No real DB or network calls in unit tests. `mock_supabase_trips_and_days` is the most comprehensive fixture, simulating the full table hierarchy including RPC responses. Live Google Places tests marked with `@live` marker (excluded by default).
 
 **Frontend:** Vitest + React Testing Library (jsdom). Test files co-located with components (`*.test.tsx`).
 
-**Performance:** Playwright-based frontend perf tests in `tests/perf/frontend/` (trip load timing); Python backend load tests in `tests/perf/` (`workspace_perf.py`, `run_trip_load.py`). Playwright config at `frontend/playwright.config.ts`.
+**E2E:** Playwright tests in `frontend/e2e/specs/` organized by domain:
+- `auth/` — login, logout, signup-and-reset
+- `locations/` — add, edit/delete, features, Google list import
+- `itinerary/` — core-planning, day-options, plan-switcher, routes, schedule-locations, state-edge-cases
+- `sharing/` — share-trip, sharing-advanced
+- `smoke/` — critical-path (smoke test)
+
+Page Object Models in `frontend/e2e/pages/`, helpers in `frontend/e2e/helpers/`, global setup/teardown for auth.
+
+**Performance:** Backend load tests in `tests/perf/` with JSON artifacts in `tests/perf/artifacts/`.
+
+### CI/CD (`.github/workflows/ci.yml`)
+
+| Job | What it runs |
+|-----|-------------|
+| `lint` | `ruff check` + `ruff format --check` |
+| `test` | `pytest` (backend) |
+| `frontend-lint` | `tsc --noEmit` + ESLint |
+| `frontend-test` | Vitest unit tests |
+| `e2e` | Playwright E2E (push to main only); starts backend + frontend, uploads artifacts on failure |
 
 ## Database Performance Rules
 
@@ -176,26 +276,26 @@ These rules are non-negotiable for every new endpoint or DB interaction.
 | `google_raw` in list endpoint `SELECT` | Use `_LOCATIONS_SELECT` (not WITH_RAW) |
 | `.select("*")` | Explicit column list |
 
-## ⚠️ CRITICAL: Multi-Agent Team Architecture
+## CRITICAL: Multi-Agent Team Architecture
 
 **YOU ARE THE ORCHESTRATOR. YOU MUST DELEGATE TO YOUR TEAM.**
 
 This is a multi-agent team system. You (the main Claude Code session) are the **team lead**. You coordinate work by dispatching to specialist teammates. You do NOT:
 
-- ❌ Perform code review yourself before committing
-- ❌ Analyse SQL or schema changes inline
-- ❌ Debug build/type errors ad-hoc in the main thread
-- ❌ Do security audits with a casual "looks fine"
-- ❌ Identify dead code by manual grep
-- ❌ Skip dispatch because a task "feels simple"
+- Perform code review yourself before committing
+- Analyse SQL or schema changes inline
+- Debug build/type errors ad-hoc in the main thread
+- Do security audits with a casual "looks fine"
+- Identify dead code by manual grep
+- Skip dispatch because a task "feels simple"
 
 You DO:
 
-- ✅ Dispatch to the right teammate for every task listed below
-- ✅ Run teammates in **parallel** when tasks are independent
-- ✅ Run teammates **sequentially** when output from one feeds the next
-- ✅ Synthesise teammate output into a coherent result for the user
-- ✅ Enforce mandatory workflow gates — no exceptions
+- Dispatch to the right teammate for every task listed below
+- Run teammates in **parallel** when tasks are independent
+- Run teammates **sequentially** when output from one feeds the next
+- Synthesise teammate output into a coherent result for the user
+- Enforce mandatory workflow gates — no exceptions
 
 **If you find yourself about to handle one of the tasks below inline, STOP and dispatch to the appropriate teammate instead.**
 
@@ -293,3 +393,6 @@ Skills are loaded by you or your teammates as reference during task execution. T
 - **Ownership baked into read:** `get_itinerary_tree(p_trip_id, p_user_id)` — `EXISTS` inline
 - **Lazy 404:** `itinerary_tree.py::get_itinerary` — skip ownership RT if RPC returns data
 - **Optimistic frontend update:** `handleSaveOptionDetails` in `useItineraryState.ts` — patch local state, no refetch
+- **Atomic route update:** `update_route_with_stops` SQL — updates route + stops in one transaction
+- **Cascade delete:** `delete_location_cascade` SQL — removes location from all options/routes atomically
+- **SSRF prevention:** `utils/url_validation.py` — whitelist-based URL validation for external imports
