@@ -173,9 +173,7 @@ export function AddLocationForm({
       if (preview.address) setAddress((prev) => prev || preview.address || "");
       if (preview.city) setCity((prev) => prev || preview.city || "");
       if (preview.working_hours.length > 0)
-        setWorkingHours(
-          (prev) => prev || condenseHours(preview.working_hours)
-        );
+        setWorkingHours((prev) => prev || condenseHours(preview.working_hours));
       if (preview.suggested_category)
         setCategory((prev) => prev || preview.suggested_category || "");
       // Transition to full form after successful preview in link-entry mode
@@ -384,7 +382,7 @@ export function AddLocationForm({
                 </div>
               )}
 
-          {/* Fields */}
+              {/* Fields */}
               {showFieldsReady && (
                 <motion.div
                   key="fields"

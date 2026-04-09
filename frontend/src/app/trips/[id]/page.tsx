@@ -83,9 +83,9 @@ export default function TripDetailPage() {
   const [cityPopoverOpen, setCityPopoverOpen] = useState(false);
   const [categoryPopoverOpen, setCategoryPopoverOpen] = useState(false);
   const [personPopoverOpen, setPersonPopoverOpen] = useState(false);
-  const [groupBy, setGroupBy] = useState<
-    "city" | "category" | "person" | null
-  >(null);
+  const [groupBy, setGroupBy] = useState<"city" | "category" | "person" | null>(
+    null
+  );
   const [locationNameSearch, setLocationNameSearch] = useState("");
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [editingName, setEditingName] = useState(false);
@@ -506,100 +506,98 @@ export default function TripDetailPage() {
         </button>
 
         <motion.div
-            className="relative pb-3 pt-3"
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
-          >
-            {/* Status line: PLANNING badge + dates (left) ... progress + share (right) */}
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <span className="rounded-full bg-brand-muted px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-brand-strong">
-                  Planning
-                </span>
-                <TripDateRangePicker
-                  startDate={trip.start_date}
-                  endDate={trip.end_date}
-                  onDateRangeChange={handleDateRangeSave}
-                />
-              </div>
-              <div className="flex items-center gap-4">
-                {itinerary &&
-                  itinerary.days.length > 0 &&
-                  (() => {
-                    const totalDays = itinerary.days.length;
-                    const plannedDays = itinerary.days.filter((day) =>
-                      day.options.some((opt) => opt.locations.length > 0)
-                    ).length;
-                    return (
-                      <div className="hidden items-center gap-2.5 sm:flex">
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                          Progress
-                        </span>
-                        <Progress
-                          value={Math.round(
-                            (plannedDays / totalDays) * 100
-                          )}
-                          className="h-1.5 w-24"
-                        />
-                        <span className="text-xs font-semibold tabular-nums text-primary">
-                          {plannedDays}/{totalDays} days
-                        </span>
-                      </div>
-                    );
-                  })()}
-                <button
-                  type="button"
-                  className="rounded-full bg-primary px-5 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-primary-strong hover:shadow-md"
-                  onClick={() => setShareDialogOpen(true)}
-                >
-                  Share
-                </button>
-              </div>
+          className="relative pb-3 pt-3"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
+        >
+          {/* Status line: PLANNING badge + dates (left) ... progress + share (right) */}
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span className="rounded-full bg-brand-muted px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-brand-strong">
+                Planning
+              </span>
+              <TripDateRangePicker
+                startDate={trip.start_date}
+                endDate={trip.end_date}
+                onDateRangeChange={handleDateRangeSave}
+              />
             </div>
+            <div className="flex items-center gap-4">
+              {itinerary &&
+                itinerary.days.length > 0 &&
+                (() => {
+                  const totalDays = itinerary.days.length;
+                  const plannedDays = itinerary.days.filter((day) =>
+                    day.options.some((opt) => opt.locations.length > 0)
+                  ).length;
+                  return (
+                    <div className="hidden items-center gap-2.5 sm:flex">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Progress
+                      </span>
+                      <Progress
+                        value={Math.round((plannedDays / totalDays) * 100)}
+                        className="h-1.5 w-24"
+                      />
+                      <span className="text-xs font-semibold tabular-nums text-primary">
+                        {plannedDays}/{totalDays} days
+                      </span>
+                    </div>
+                  );
+                })()}
+              <button
+                type="button"
+                className="rounded-full bg-primary px-5 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-primary-strong hover:shadow-md"
+                onClick={() => setShareDialogOpen(true)}
+              >
+                Share
+              </button>
+            </div>
+          </div>
 
-            {/* Trip name */}
-            <div className="mt-1">
-              {editingName ? (
-                <input
-                  type="text"
-                  aria-label="Trip name"
-                  autoFocus
-                  defaultValue={trip.name}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.currentTarget.blur();
-                    } else if (e.key === "Escape") {
-                      nameCancelledRef.current = true;
-                      e.currentTarget.blur();
-                    }
-                  }}
-                  onBlur={(e) => {
-                    if (nameCancelledRef.current) {
-                      nameCancelledRef.current = false;
-                      setEditingName(false);
-                      return;
-                    }
-                    const val = e.target.value.trim();
+          {/* Trip name */}
+          <div className="mt-1">
+            {editingName ? (
+              <input
+                type="text"
+                aria-label="Trip name"
+                autoFocus
+                defaultValue={trip.name}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.currentTarget.blur();
+                  } else if (e.key === "Escape") {
+                    nameCancelledRef.current = true;
+                    e.currentTarget.blur();
+                  }
+                }}
+                onBlur={(e) => {
+                  if (nameCancelledRef.current) {
+                    nameCancelledRef.current = false;
                     setEditingName(false);
-                    if (val && val !== trip.name) {
-                      handleInlineNameSave(val);
-                    }
-                  }}
-                  className="w-full bg-transparent text-3xl font-bold tracking-tight text-foreground outline-none ring-1 ring-primary/30 rounded-lg px-1 sm:text-4xl"
-                />
-              ) : (
-                <button
-                  type="button"
-                  aria-label={trip.name}
-                  onClick={() => setEditingName(true)}
-                  className="cursor-text text-left text-3xl font-bold tracking-tight text-foreground rounded-lg px-1 -mx-1 transition-colors hover:bg-muted/50 sm:text-4xl"
-                >
-                  {trip.name}
-                </button>
-              )}
-            </div>
-          </motion.div>
+                    return;
+                  }
+                  const val = e.target.value.trim();
+                  setEditingName(false);
+                  if (val && val !== trip.name) {
+                    handleInlineNameSave(val);
+                  }
+                }}
+                className="w-full bg-transparent text-3xl font-bold tracking-tight text-foreground outline-none ring-1 ring-primary/30 rounded-lg px-1 sm:text-4xl"
+              />
+            ) : (
+              <button
+                type="button"
+                aria-label={trip.name}
+                onClick={() => setEditingName(true)}
+                className="cursor-text text-left text-3xl font-bold tracking-tight text-foreground rounded-lg px-1 -mx-1 transition-colors hover:bg-muted/50 sm:text-4xl"
+              >
+                {trip.name}
+              </button>
+            )}
+          </div>
+        </motion.div>
       </div>
 
       {/* Tabs — underline navigation */}
@@ -629,37 +627,37 @@ export default function TripDetailPage() {
           ).map(({ key, label, icon: Icon, ...rest }) => {
             const disabled = "disabled" in rest && rest.disabled;
             return (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === key}
-              aria-disabled={disabled || undefined}
-              aria-controls={`tab-panel-${key}`}
-              id={`tab-${key}`}
-              className={cn(
-                "-mb-px inline-flex items-center gap-1.5 border-b-2 pb-2.5 text-sm font-medium transition-colors",
-                disabled
-                  ? "cursor-not-allowed border-transparent text-muted-foreground/40"
-                  : activeTab === key
-                    ? "border-primary text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-              )}
-              onClick={() => !disabled && setActiveTab(key)}
-            >
-              <Icon size={15} />
-              {label}
-              {disabled && (
-                <span className="text-[10px] font-normal text-muted-foreground/40">
-                  Soon
-                </span>
-              )}
-              {key === "locations" && locations.length > 0 && (
-                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1.5 text-[10px] font-bold text-muted-foreground">
-                  {locations.length}
-                </span>
-              )}
-            </button>
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === key}
+                aria-disabled={disabled || undefined}
+                aria-controls={`tab-panel-${key}`}
+                id={`tab-${key}`}
+                className={cn(
+                  "-mb-px inline-flex items-center gap-1.5 border-b-2 pb-2.5 text-sm font-medium transition-colors",
+                  disabled
+                    ? "cursor-not-allowed border-transparent text-muted-foreground/40"
+                    : activeTab === key
+                      ? "border-primary text-foreground"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                )}
+                onClick={() => !disabled && setActiveTab(key)}
+              >
+                <Icon size={15} />
+                {label}
+                {disabled && (
+                  <span className="text-[10px] font-normal text-muted-foreground/40">
+                    Soon
+                  </span>
+                )}
+                {key === "locations" && locations.length > 0 && (
+                  <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1.5 text-[10px] font-bold text-muted-foreground">
+                    {locations.length}
+                  </span>
+                )}
+              </button>
             );
           })}
         </nav>
@@ -683,7 +681,6 @@ export default function TripDetailPage() {
             <div>
               {/* Smart location input — visible only when locations exist */}
               {!addingLocation && locations.length > 0 && (
-
                 <SmartLocationInput
                   tripId={tripId}
                   onSubmit={handleSmartInputSubmit}
@@ -1131,9 +1128,7 @@ export default function TripDetailPage() {
                       </p>
                       <button
                         type="button"
-                        onClick={() =>
-                          setAddingLocation({ mode: "manual" })
-                        }
+                        onClick={() => setAddingLocation({ mode: "manual" })}
                         className="mt-4 w-full rounded-full border border-border bg-secondary/80 px-5 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-secondary"
                       >
                         Add Manually

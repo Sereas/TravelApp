@@ -89,10 +89,7 @@ describe("AddLocationForm", () => {
     );
     await userEvent.type(screen.getByLabelText(/city/i), "Paris");
     await userEvent.type(screen.getByLabelText(/opening hours/i), "9-18");
-    await userEvent.selectOptions(
-      screen.getByLabelText(/booking/i),
-      "yes"
-    );
+    await userEvent.selectOptions(screen.getByLabelText(/booking/i), "yes");
     await userEvent.selectOptions(screen.getByLabelText(/category/i), "Museum");
     await userEvent.type(
       screen.getByLabelText(/personal notes/i),
