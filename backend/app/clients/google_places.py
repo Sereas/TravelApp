@@ -126,7 +126,7 @@ class GooglePlacesClient:
         qs = parse_qs(parsed.query)
         for val in qs.get("q", []):
             if val.startswith("place_id:"):
-                pid = val[len("place_id:"):]
+                pid = val[len("place_id:") :]
                 if pid and _PLACE_ID_RE.match(pid):
                     return pid
         return None
