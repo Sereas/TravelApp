@@ -51,6 +51,15 @@ export default function TripsPage() {
     router.push(`/trips/${trip.id}`);
   }
 
+  async function handleDeleteTrip(tripId: string) {
+    try {
+      await api.trips.delete(tripId);
+      setTrips((prev) => prev.filter((t) => t.id !== tripId));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete trip");
+    }
+  }
+
   const filteredTrips = useMemo(() => {
     if (filter === "all") return trips;
     if (filter === "upcoming") return trips.filter(isUpcoming);
@@ -62,7 +71,7 @@ export default function TripsPage() {
       {/* Page header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-serif text-3xl font-bold tracking-tight text-foreground">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
             My Trips
           </h1>
           {!loading && trips.length > 0 && (
@@ -100,7 +109,7 @@ export default function TripsPage() {
             <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-brand-muted">
               <Compass size={32} className="text-brand opacity-40" />
             </div>
-            <h2 className="font-serif text-2xl font-bold text-foreground">
+            <h2 className="text-2xl font-bold tracking-tight text-foreground">
               Plan your first <span className="text-brand">adventure</span>
             </h2>
             <p className="mt-3 text-sm text-muted-foreground">
@@ -154,6 +163,7 @@ export default function TripsPage() {
                   startDate={trip.start_date}
                   endDate={trip.end_date}
                   href={`/trips/${trip.id}`}
+                  onDelete={handleDeleteTrip}
                 />
               ))}
             </div>

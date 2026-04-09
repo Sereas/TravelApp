@@ -106,6 +106,15 @@ class _LocationFieldsMixin(BaseModel):
             raise ValueError(f"must be one of: {sorted(CATEGORY_VALUES)}")
         return v
 
+    @field_validator("google_link", check_fields=False)
+    @classmethod
+    def validate_google_link_scheme(cls, v: str | None) -> str | None:
+        if v is not None:
+            stripped = v.strip().lower()
+            if not (stripped.startswith("https://") or stripped.startswith("http://")):
+                raise ValueError("google_link must be an http/https URL")
+        return v
+
     @field_validator("google_raw", check_fields=False)
     @classmethod
     def validate_google_raw_size(cls, v: dict | None) -> dict | None:

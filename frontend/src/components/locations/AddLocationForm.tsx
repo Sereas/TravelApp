@@ -1,16 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { useEffect, useState } from "react";
+import { motion } from "motion/react";
 import { Label } from "@/components/ui/label";
 import { ErrorBanner } from "@/components/feedback/ErrorBanner";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Popover,
@@ -19,22 +18,94 @@ import {
 } from "@/components/ui/popover";
 import { api, type Location } from "@/lib/api";
 import {
-  formInputClass,
-  formSelectClass,
-  formLabelClass,
-  OptionalMark,
-} from "@/lib/form-styles";
-import {
   REQUIRES_BOOKING_OPTIONS,
   CATEGORY_OPTIONS,
   type DayChoice,
 } from "@/lib/location-constants";
-import { CalendarPlus, ChevronDown, Link2, X } from "lucide-react";
+import {
+  CalendarPlus,
+  ChevronDown,
+  Clock,
+  ExternalLink,
+  Link2,
+  Loader2,
+  MapPin,
+  Building2,
+  Tag,
+  Ticket,
+  X,
+} from "lucide-react";
+
+/* ── Shared field styling ────────────────────────────────────── */
+
+const fieldLabel =
+  "text-[10px] font-semibold uppercase tracking-wider text-primary";
+
+const fieldInput =
+  "h-10 w-full rounded-full bg-secondary/80 px-3.5 text-sm text-foreground placeholder:text-muted-foreground/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 border border-transparent focus-visible:border-primary/20";
+
+const fieldSelect =
+  "h-10 w-full appearance-none rounded-full bg-secondary/80 pl-9 pr-8 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 border border-transparent focus-visible:border-primary/20";
+
+const fieldTextarea =
+  "w-full resize-none rounded-2xl bg-secondary/80 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 border border-transparent focus-visible:border-primary/20";
+
+const iconClass = "shrink-0 text-primary/50";
+
+/* ── Helpers ─────────────────────────────────────────────────── */
+
+const DAY_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+/** Condense Google working_hours like ["Mon: 9-6", "Tue: 9-6", …] into
+ *  compact ranges like "Mon-Fri: 9-6 | Sat-Sun: 10-4" or "Daily: 9-6". */
+function condenseHours(hours: string[]): string {
+  // Parse "Day: hours" entries
+  const parsed: { day: string; time: string }[] = [];
+  for (const h of hours) {
+    const colonIdx = h.indexOf(":");
+    if (colonIdx === -1) return hours.join(" | "); // unparseable, bail
+    const day = h.slice(0, colonIdx).trim();
+    const time = h.slice(colonIdx + 1).trim();
+    parsed.push({ day, time });
+  }
+
+  // Group consecutive days with same hours
+  const groups: { days: string[]; time: string }[] = [];
+  for (const { day, time } of parsed) {
+    const last = groups[groups.length - 1];
+    if (last && last.time === time) {
+      last.days.push(day);
+    } else {
+      groups.push({ days: [day], time });
+    }
+  }
+
+  // If single group covering all 7 days → "Daily: …"
+  if (groups.length === 1 && groups[0].days.length === DAY_ORDER.length) {
+    return `Daily: ${groups[0].time}`;
+  }
+
+  return groups
+    .map((g) => {
+      const label =
+        g.days.length === 1
+          ? g.days[0]
+          : `${g.days[0]}-${g.days[g.days.length - 1]}`;
+      return `${label}: ${g.time}`;
+    })
+    .join(" | ");
+}
+
+/* ── Component ───────────────────────────────────────────────── */
 
 interface AddLocationFormProps {
   tripId: string;
   existingLocations: Location[];
   availableDays?: DayChoice[];
+  initialGoogleLink?: string;
+  initialName?: string;
+  /** When true, show only a link input first; reveal full form after preview. */
+  linkEntryMode?: boolean;
   onAdded: (location: Location, scheduleDayId?: string | null) => void;
   onCancel: () => void;
 }
@@ -43,38 +114,43 @@ export function AddLocationForm({
   tripId,
   existingLocations,
   availableDays,
+  initialGoogleLink,
+  initialName,
+  linkEntryMode,
   onAdded,
   onCancel,
 }: AddLocationFormProps) {
-  const [name, setName] = useState("");
+  const [name, setName] = useState(initialName ?? "");
   const [address, setAddress] = useState("");
-  const [googleLink, setGoogleLink] = useState("");
+  const [googleLink, setGoogleLink] = useState(initialGoogleLink ?? "");
   const [note, setNote] = useState("");
   const [city, setCity] = useState("");
   const [workingHours, setWorkingHours] = useState("");
-  const [requiresBooking, setRequiresBooking] = useState("");
-  const [category, setCategory] = useState("");
+  const [requiresBooking, setRequiresBooking] = useState("no");
+  const [category, setCategory] = useState("Other");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewed, setPreviewed] = useState(false);
 
   const [googlePlaceId, setGooglePlaceId] = useState<string | null>(null);
-  const [googleSourceType, setGoogleSourceType] = useState<string | null>(null);
   const [googleRaw, setGoogleRaw] = useState<Record<string, unknown> | null>(
     null
   );
   const [duplicateName, setDuplicateName] = useState<string | null>(null);
   const [scheduleDayId, setScheduleDayId] = useState("");
 
-  async function handleGoogleLinkBlur() {
-    const trimmed = googleLink.trim();
-    if (!trimmed) {
-      return;
-    }
-    if (previewed) {
-      return;
-    }
+  // Link-entry phase: when linkEntryMode, start in "link" phase until preview completes
+  const [linkPhase, setLinkPhase] = useState<"link" | "form">(
+    linkEntryMode && !initialGoogleLink ? "link" : "form"
+  );
+  const [linkInput, setLinkInput] = useState("");
+
+  const hasInitialLink = Boolean(initialGoogleLink);
+
+  async function triggerPreview(url: string) {
+    const trimmed = url.trim();
+    if (!trimmed) return;
     setPreviewLoading(true);
     setError(null);
     try {
@@ -83,7 +159,6 @@ export function AddLocationForm({
       });
       setPreviewed(true);
       setGooglePlaceId(preview.google_place_id);
-      setGoogleSourceType("manual_url");
       setGoogleRaw(preview.google_raw);
 
       const existing = existingLocations.find(
@@ -94,21 +169,17 @@ export function AddLocationForm({
       } else {
         setDuplicateName(null);
       }
-      if (!name) {
-        setName(preview.name);
-      }
-      if (!address && preview.address) {
-        setAddress(preview.address);
-      }
-      if (!city && preview.city) {
-        setCity(preview.city);
-      }
-      if (!workingHours && preview.working_hours.length > 0) {
-        setWorkingHours(preview.working_hours.join(" | "));
-      }
-      if (!category && preview.suggested_category) {
-        setCategory(preview.suggested_category);
-      }
+      setName((prev) => prev || preview.name);
+      if (preview.address) setAddress((prev) => prev || preview.address || "");
+      if (preview.city) setCity((prev) => prev || preview.city || "");
+      if (preview.working_hours.length > 0)
+        setWorkingHours(
+          (prev) => prev || condenseHours(preview.working_hours)
+        );
+      if (preview.suggested_category)
+        setCategory((prev) => prev || preview.suggested_category || "");
+      // Transition to full form after successful preview in link-entry mode
+      if (linkPhase === "link") setLinkPhase("form");
     } catch (err) {
       setError(
         err instanceof Error
@@ -119,6 +190,26 @@ export function AddLocationForm({
       setPreviewLoading(false);
     }
   }
+
+  function handleLinkSubmit() {
+    const trimmed = linkInput.trim();
+    if (!trimmed) return;
+    setGoogleLink(trimmed);
+    void triggerPreview(trimmed);
+  }
+
+  function handleGoogleLinkBlur() {
+    if (previewed) return;
+    void triggerPreview(googleLink);
+  }
+
+  useEffect(() => {
+    if (initialGoogleLink) {
+      void triggerPreview(initialGoogleLink);
+    }
+    // Run once on mount — initialGoogleLink is a string prop that doesn't change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -131,7 +222,7 @@ export function AddLocationForm({
         address: address || null,
         google_link: googleLink || null,
         google_place_id: googlePlaceId,
-        google_source_type: googleSourceType,
+        google_source_type: googlePlaceId ? "manual_url" : null,
         google_raw: googleRaw,
         note: note || null,
         city: city || null,
@@ -146,273 +237,457 @@ export function AddLocationForm({
     }
   }
 
-  const inputClass = formInputClass;
-  const selectClass = formSelectClass;
-  const labelClass = formLabelClass;
-  const optionalMark = OptionalMark;
+  const showFieldsReady =
+    !hasInitialLink || previewed || (!!error && !previewLoading);
 
   return (
     <Dialog open onOpenChange={(open) => !open && onCancel()}>
-      <DialogContent className="max-w-md gap-0 p-0">
-        <DialogHeader className="px-5 pb-3 pt-5">
-          <DialogTitle>Add Location</DialogTitle>
-          <DialogDescription className="sr-only">
-            Add a new location to your trip
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent
+        className="max-w-lg gap-0 p-0 focus:outline-none"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
+        {/* ── Link-entry phase ── */}
+        {linkPhase === "link" && (
+          <>
+            <DialogHeader className="px-6 pb-0 pt-5">
+              <DialogTitle className="text-xl font-bold tracking-tight">
+                Paste a Google Maps Link
+              </DialogTitle>
+              <DialogDescription className="text-sm text-muted-foreground">
+                We&#39;ll fetch the details and fill everything in for you.
+              </DialogDescription>
+            </DialogHeader>
 
-        <form onSubmit={handleSubmit}>
-          {/* Hero: Google Maps link */}
-          <div className="mx-5 rounded-xl bg-brand-muted/40 px-4 py-3">
-            <div className="mb-2 flex items-center gap-2">
-              <Link2 size={14} className="text-brand" />
-              <Label
-                htmlFor="add-location-google-link"
-                className="text-sm font-semibold text-foreground"
+            <div className="px-6 pb-5 pt-4">
+              {!previewLoading ? (
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Link2
+                      size={14}
+                      className={`absolute left-3.5 top-1/2 -translate-y-1/2 ${iconClass}`}
+                    />
+                    <input
+                      type="url"
+                      autoFocus
+                      placeholder="https://maps.app.goo.gl/..."
+                      value={linkInput}
+                      onChange={(e) => {
+                        setLinkInput(e.target.value);
+                        setError(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleLinkSubmit();
+                        }
+                      }}
+                      autoComplete="off"
+                      className={`${fieldInput} pl-9`}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    disabled={!linkInput.trim()}
+                    onClick={handleLinkSubmit}
+                    className="shrink-0 rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-primary-strong hover:shadow-md disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Fetch
+                  </button>
+                </div>
+              ) : (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="flex flex-col items-center gap-3 py-8"
+                >
+                  <div className="relative flex h-12 w-12 items-center justify-center">
+                    <div className="absolute inset-0 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
+                    <Link2 size={18} className="text-primary" />
+                  </div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Looking up location details…
+                  </p>
+                  <p className="max-w-xs truncate text-xs text-muted-foreground/60">
+                    {linkInput}
+                  </p>
+                </motion.div>
+              )}
+
+              {error && (
+                <div className="mt-3">
+                  <ErrorBanner message={error} />
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setLinkPhase("form")}
+                className="mt-3 text-xs font-medium text-muted-foreground/60 transition-colors hover:text-foreground"
               >
-                Google Maps link
-              </Label>
+                or fill in manually instead →
+              </button>
             </div>
-            <Input
-              id="add-location-google-link"
-              type="url"
-              placeholder="https://maps.google.com/..."
-              value={googleLink}
-              onChange={(e) => {
-                setGoogleLink(e.target.value);
-                setPreviewed(false);
-                setDuplicateName(null);
-              }}
-              onBlur={() => void handleGoogleLinkBlur()}
-              autoFocus
-              autoComplete="off"
-              className="h-9 rounded-lg border-brand/30 bg-white text-sm focus-visible:ring-brand"
-            />
-            <p className="mt-1.5 text-[11px] leading-relaxed text-brand-strong/70">
-              Auto-fills details &amp; enables map pin. You can also fill in
-              fields manually below.
-            </p>
-            {previewLoading && (
-              <p className="mt-1 text-xs text-brand">Fetching details…</p>
-            )}
-            {duplicateName && (
-              <p className="mt-1 text-xs font-medium text-amber-600">
-                &quot;{duplicateName}&quot; already exists in this trip.
-              </p>
-            )}
-          </div>
+          </>
+        )}
 
-          {error && (
-            <div className="px-5 pt-3">
-              <ErrorBanner message={error} />
-            </div>
-          )}
+        {/* ── Full form phase ── */}
+        {linkPhase === "form" && (
+          <>
+            <DialogHeader className="px-6 pb-0 pt-5">
+              <DialogTitle className="text-xl font-bold tracking-tight">
+                Add Location
+              </DialogTitle>
+              <DialogDescription className="text-sm text-muted-foreground">
+                Add a new destination to your curated journey.
+              </DialogDescription>
+            </DialogHeader>
+
+            <form onSubmit={handleSubmit} className="min-w-0 overflow-hidden">
+              {/* Pre-filled Google link chip (when opened via link or from link-entry) */}
+              {(hasInitialLink || (linkEntryMode && googleLink)) && (
+                <div className="mx-6 mt-3 flex items-center gap-2 rounded-full bg-secondary px-3.5 py-2">
+                  <Link2 size={14} className={iconClass} />
+                  <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                    {googleLink}
+                  </span>
+                  <a
+                    href={googleLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 rounded-full p-0.5 text-muted-foreground/50 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                    aria-label="Open Google Maps link in new tab"
+                  >
+                    <ExternalLink size={12} />
+                  </a>
+                </div>
+              )}
+
+              {duplicateName && (
+                <p className="mx-6 mt-2 text-xs font-medium text-amber-600">
+                  &quot;{duplicateName}&quot; already exists in this trip.
+                </p>
+              )}
+
+              {error && (
+                <div className="px-6 pt-3">
+                  <ErrorBanner message={error} />
+                </div>
+              )}
+
+              {/* Loading state for Google link preview */}
+              {hasInitialLink && previewLoading && (
+                <div className="flex flex-col items-center gap-3 py-12">
+                  <Loader2 size={24} className="animate-spin text-primary" />
+                  <p className="text-sm text-muted-foreground">
+                    Looking up location details…
+                  </p>
+                </div>
+              )}
 
           {/* Fields */}
-          <div className="grid grid-cols-2 gap-x-3 gap-y-2.5 px-5 pt-4">
-            {/* Name — required, full width */}
-            <div className="col-span-2 flex flex-col gap-1">
-              <Label htmlFor="add-location-name" className={labelClass}>
-                Location name
-              </Label>
-              <input
-                id="add-location-name"
-                placeholder="e.g. Eiffel Tower"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                autoComplete="off"
-                className={inputClass}
-              />
-            </div>
-
-            {/* City */}
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="add-location-city" className={labelClass}>
-                City {optionalMark}
-              </Label>
-              <input
-                id="add-location-city"
-                placeholder="e.g. Paris"
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                autoComplete="off"
-                className={inputClass}
-              />
-            </div>
-
-            {/* Category */}
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="add-location-category" className={labelClass}>
-                Category {optionalMark}
-              </Label>
-              <select
-                id="add-location-category"
-                className={selectClass}
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-              >
-                <option value="">—</option>
-                {CATEGORY_OPTIONS.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Address — full width */}
-            <div className="col-span-2 flex flex-col gap-1">
-              <Label htmlFor="add-location-address" className={labelClass}>
-                Address {optionalMark}
-              </Label>
-              <input
-                id="add-location-address"
-                placeholder="e.g. 5 Avenue Anatole France, 75007 Paris"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                autoComplete="off"
-                className={inputClass}
-              />
-            </div>
-
-            {/* Working hours */}
-            <div className="flex flex-col gap-1">
-              <Label
-                htmlFor="add-location-working-hours"
-                className={labelClass}
-              >
-                Hours {optionalMark}
-              </Label>
-              <input
-                id="add-location-working-hours"
-                placeholder="e.g. 9:00–18:00"
-                value={workingHours}
-                onChange={(e) => setWorkingHours(e.target.value)}
-                autoComplete="off"
-                className={inputClass}
-              />
-            </div>
-
-            {/* Requires booking */}
-            <div className="flex flex-col gap-1">
-              <Label
-                htmlFor="add-location-requires-booking"
-                className={labelClass}
-              >
-                Booking {optionalMark}
-              </Label>
-              <select
-                id="add-location-requires-booking"
-                className={selectClass}
-                value={requiresBooking}
-                onChange={(e) => setRequiresBooking(e.target.value)}
-              >
-                {REQUIRES_BOOKING_OPTIONS.map((opt) => (
-                  <option key={opt.value || "_"} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Note — full width */}
-            <div className="col-span-2 flex flex-col gap-1">
-              <Label htmlFor="add-location-note" className={labelClass}>
-                Note {optionalMark}
-              </Label>
-              <input
-                id="add-location-note"
-                placeholder="e.g. Visit at sunset"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                autoComplete="off"
-                className={inputClass}
-              />
-            </div>
-
-            {/* Schedule to day — full width */}
-            {availableDays && availableDays.length > 0 && (
-              <div className="col-span-2 flex flex-col gap-1">
-                <Label className={labelClass}>
-                  Schedule to day {optionalMark}
-                </Label>
-                {scheduleDayId ? (
-                  <div className="flex items-center gap-1.5">
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-muted px-2.5 py-1 text-xs font-medium text-brand-strong">
-                      <CalendarPlus size={12} />
-                      {availableDays.find((d) => d.id === scheduleDayId)?.label}
-                    </span>
-                    <button
-                      type="button"
-                      className="rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-border hover:text-foreground"
-                      onClick={() => setScheduleDayId("")}
-                      aria-label="Clear day selection"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                ) : (
-                  <Popover modal>
-                    <PopoverTrigger asChild>
-                      <button
-                        type="button"
-                        className="flex h-8 w-full items-center justify-between rounded-lg border border-dashed border-border bg-card px-2.5 text-sm text-muted-foreground transition-colors hover:border-brand/40 hover:bg-brand-muted/30"
-                        aria-label="Schedule to day"
-                      >
-                        <span className="text-xs">Don&apos;t schedule yet</span>
-                        <ChevronDown size={14} />
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent
-                      className="w-48 p-1"
-                      align="start"
-                      sideOffset={4}
-                    >
-                      <div className="flex max-h-44 flex-col overflow-y-auto">
-                        {availableDays.map((day) => (
-                          <button
-                            key={day.id}
-                            type="button"
-                            className="flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm font-medium text-foreground transition-colors hover:bg-brand-muted"
-                            onClick={() => setScheduleDayId(day.id)}
-                          >
-                            <CalendarPlus
-                              size={13}
-                              className="shrink-0 text-brand"
-                            />
-                            {day.label}
-                          </button>
-                        ))}
+              {showFieldsReady && (
+                <motion.div
+                  key="fields"
+                  initial={hasInitialLink ? { opacity: 0, y: 8 } : false}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="space-y-3 px-6 pt-3"
+                >
+                  {/* Row: Location Name + City/Region */}
+                  <div className="grid grid-cols-5 gap-3">
+                    <div className="col-span-3 min-w-0 space-y-1">
+                      <Label htmlFor="add-location-name" className={fieldLabel}>
+                        Location name
+                      </Label>
+                      <div className="relative">
+                        <MapPin
+                          size={14}
+                          className={`absolute left-3 top-1/2 -translate-y-1/2 ${iconClass}`}
+                        />
+                        <input
+                          id="add-location-name"
+                          placeholder="e.g. Fushimi Inari-taisha"
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                          required
+                          autoComplete="off"
+                          className={`${fieldInput} pl-9`}
+                        />
                       </div>
-                    </PopoverContent>
-                  </Popover>
+                    </div>
+                    <div className="col-span-2 min-w-0 space-y-1">
+                      <Label htmlFor="add-location-city" className={fieldLabel}>
+                        City / Region
+                      </Label>
+                      <div className="relative">
+                        <Building2
+                          size={14}
+                          className={`absolute left-3 top-1/2 -translate-y-1/2 ${iconClass}`}
+                        />
+                        <input
+                          id="add-location-city"
+                          placeholder="e.g. Kyoto"
+                          value={city}
+                          onChange={(e) => setCity(e.target.value)}
+                          autoComplete="off"
+                          className={`${fieldInput} pl-9`}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Full Address */}
+                  <div className="space-y-1">
+                    <Label
+                      htmlFor="add-location-address"
+                      className={fieldLabel}
+                    >
+                      Full address
+                    </Label>
+                    <div className="relative">
+                      <MapPin
+                        size={14}
+                        className={`absolute left-3.5 top-1/2 -translate-y-1/2 ${iconClass}`}
+                      />
+                      <input
+                        id="add-location-address"
+                        placeholder="e.g. 68 Fukakusa Yabunouchicho, Fushimi Ward..."
+                        value={address}
+                        onChange={(e) => setAddress(e.target.value)}
+                        autoComplete="off"
+                        className={`${fieldInput} pl-9`}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Row: Category + Booking */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="min-w-0 space-y-1">
+                      <Label
+                        htmlFor="add-location-category"
+                        className={fieldLabel}
+                      >
+                        Category
+                      </Label>
+                      <div className="relative">
+                        <Tag
+                          size={14}
+                          className={`absolute left-3 top-1/2 -translate-y-1/2 ${iconClass}`}
+                        />
+                        <select
+                          id="add-location-category"
+                          className={fieldSelect}
+                          value={category}
+                          onChange={(e) => setCategory(e.target.value)}
+                        >
+                          {CATEGORY_OPTIONS.map((opt) => (
+                            <option key={opt} value={opt}>
+                              {opt}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown
+                          size={14}
+                          className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/50"
+                        />
+                      </div>
+                    </div>
+                    <div className="min-w-0 space-y-1">
+                      <Label
+                        htmlFor="add-location-requires-booking"
+                        className={fieldLabel}
+                      >
+                        Booking
+                      </Label>
+                      <div className="relative">
+                        <Ticket
+                          size={14}
+                          className={`absolute left-3 top-1/2 -translate-y-1/2 ${iconClass}`}
+                        />
+                        <select
+                          id="add-location-requires-booking"
+                          className={fieldSelect}
+                          value={requiresBooking}
+                          onChange={(e) => setRequiresBooking(e.target.value)}
+                        >
+                          {REQUIRES_BOOKING_OPTIONS.map((opt) => (
+                            <option key={opt.value || "_"} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown
+                          size={14}
+                          className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/50"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Google Maps URL (manual entry only) */}
+                  {!hasInitialLink && !linkEntryMode && (
+                    <div className="space-y-1">
+                      <Label
+                        htmlFor="add-location-google-link"
+                        className={fieldLabel}
+                      >
+                        Google Maps URL
+                      </Label>
+                      <div className="relative">
+                        <Link2
+                          size={14}
+                          className={`absolute left-3 top-1/2 -translate-y-1/2 ${iconClass}`}
+                        />
+                        <input
+                          id="add-location-google-link"
+                          type="url"
+                          placeholder="Paste link here"
+                          value={googleLink}
+                          onChange={(e) => {
+                            setGoogleLink(e.target.value);
+                            setPreviewed(false);
+                            setDuplicateName(null);
+                          }}
+                          onBlur={() => void handleGoogleLinkBlur()}
+                          autoComplete="off"
+                          className={`${fieldInput} pl-9`}
+                        />
+                      </div>
+                      {previewLoading && (
+                        <p className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                          <Loader2 size={10} className="animate-spin" />
+                          Fetching details…
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Opening Hours */}
+                  <div className="space-y-1">
+                    <Label
+                      htmlFor="add-location-working-hours"
+                      className={fieldLabel}
+                    >
+                      Opening hours
+                    </Label>
+                    <div className="relative">
+                      <Clock
+                        size={14}
+                        className={`absolute left-3 top-1/2 -translate-y-1/2 ${iconClass}`}
+                      />
+                      <input
+                        id="add-location-working-hours"
+                        placeholder="e.g. 9:00 AM - 6:00 PM"
+                        value={workingHours}
+                        onChange={(e) => setWorkingHours(e.target.value)}
+                        autoComplete="off"
+                        className={`${fieldInput} pl-9`}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Personal Notes */}
+                  <div className="space-y-1">
+                    <Label htmlFor="add-location-note" className={fieldLabel}>
+                      Personal notes
+                    </Label>
+                    <textarea
+                      id="add-location-note"
+                      rows={3}
+                      placeholder="Mention specific things to see, photo spots, or food recommendations..."
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      className={fieldTextarea}
+                    />
+                  </div>
+
+                  {/* Schedule to day */}
+                  {availableDays && availableDays.length > 0 && (
+                    <div className="space-y-1">
+                      <Label className={fieldLabel}>Schedule to day</Label>
+                      {scheduleDayId ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-muted px-2.5 py-1 text-xs font-medium text-brand-strong">
+                            <CalendarPlus size={12} />
+                            {
+                              availableDays.find((d) => d.id === scheduleDayId)
+                                ?.label
+                            }
+                          </span>
+                          <button
+                            type="button"
+                            className="rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-border hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                            onClick={() => setScheduleDayId("")}
+                            aria-label="Clear day selection"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ) : (
+                        <Popover modal>
+                          <PopoverTrigger asChild>
+                            <button
+                              type="button"
+                              className="flex h-9 w-full items-center justify-between rounded-full border border-dashed border-border bg-card px-3.5 text-sm text-muted-foreground transition-colors hover:border-brand/30 hover:bg-brand-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                              aria-label="Schedule to day"
+                            >
+                              <span className="text-xs">
+                                Don&apos;t schedule yet
+                              </span>
+                              <ChevronDown size={14} />
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent
+                            className="w-48 p-1"
+                            align="start"
+                            sideOffset={4}
+                          >
+                            <div className="flex max-h-44 flex-col overflow-y-auto">
+                              {availableDays.map((day) => (
+                                <button
+                                  key={day.id}
+                                  type="button"
+                                  className="flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm font-medium text-foreground transition-colors hover:bg-brand-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                                  onClick={() => setScheduleDayId(day.id)}
+                                >
+                                  <CalendarPlus
+                                    size={13}
+                                    className="shrink-0 text-brand"
+                                  />
+                                  {day.label}
+                                </button>
+                              ))}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      )}
+                    </div>
+                  )}
+                </motion.div>
+              )}
+
+              {/* Footer — sticky so buttons stay visible when dialog scrolls */}
+              <div className="sticky bottom-0 z-10 mt-3 flex items-center justify-center gap-4 border-t border-border/60 bg-card px-6 py-3">
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  className="rounded-full px-5 py-2.5 text-sm font-medium text-foreground/70 outline-none transition-colors duration-150 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                >
+                  Cancel
+                </button>
+                {showFieldsReady && (
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="rounded-full bg-primary px-7 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-primary-strong hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {saving ? "Saving…" : "Save Location"}
+                  </button>
                 )}
               </div>
-            )}
-          </div>
-
-          {/* Footer */}
-          <div className="mt-4 flex items-center justify-end gap-2 border-t border-border px-5 py-3">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={onCancel}
-              className="rounded-full px-4 text-muted-foreground"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={saving}
-              size="sm"
-              className="rounded-full bg-primary px-5 font-semibold text-white hover:bg-primary-strong"
-            >
-              {saving ? "Adding…" : "Add Location"}
-            </Button>
-          </div>
-        </form>
+            </form>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );

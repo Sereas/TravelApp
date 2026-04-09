@@ -100,6 +100,9 @@ def test_city_extraction_strips_postcode():
     assert _extract_city("27 Rue Félix Faure, 06400 Cannes, France") == "Cannes"
     assert _extract_city("5 Av. Anatole France, 75007 Paris, France") == "Paris"
     assert _extract_city("Champ de Mars, Paris, France") == "Paris"
+    # 2-part addresses (city-states): take last part, strip postcode
+    assert _extract_city("Pl. du Casino, 98000 Monaco") == "Monaco"
+    assert _extract_city("Victoria Peak, Hong Kong") == "Hong Kong"
     assert _extract_city(None) is None
 
 

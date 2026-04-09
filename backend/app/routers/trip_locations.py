@@ -64,14 +64,39 @@ _LOCATIONS_SELECT = (
 _LOCATIONS_SELECT_WITH_RAW = _LOCATIONS_SELECT + ", google_raw"
 
 
+def _extract_first_place(raw: dict | None) -> dict:
+    """Return the first place object from a Google Places API response.
+
+    Handles both response shapes:
+    - searchText/searchNearby: ``{"places": [{...}]}``
+    - get_place_by_id:        ``{"id": "...", "photos": [...], ...}``
+    """
+    if not isinstance(raw, dict):
+        return {}
+    places = raw.get("places")
+    if isinstance(places, list) and places:
+        return places[0]
+    # Direct place object (has "id" at top level, no "places" wrapper)
+    if raw.get("id"):
+        return raw
+    return {}
+
+
+def _extract_photos_from_raw(raw: dict | None) -> list:
+    """Extract the photos array from a Google Places API response."""
+    return _extract_first_place(raw).get("photos") or []
+
+
 def _extract_lat_lng_from_google_raw(raw: dict | None) -> tuple[float | None, float | None]:
     """Best-effort extraction of latitude/longitude from stored Google raw JSON."""
     if not isinstance(raw, dict):
         return None, None
-    places = raw.get("places")
-    if isinstance(places, list) and places:
-        location = places[0].get("location") or {}
-        return location.get("latitude"), location.get("longitude")
+    place = _extract_first_place(raw)
+    if place:
+        location = place.get("location") or {}
+        lat, lng = location.get("latitude"), location.get("longitude")
+        if lat is not None and lng is not None:
+            return lat, lng
     result = raw.get("result")
     if isinstance(result, dict):
         geom = result.get("geometry") or {}
@@ -192,7 +217,7 @@ async def add_location(
     gp_id = loc.get("google_place_id")
     if gp_id and places_client:
         raw = loc.get("google_raw") or body.google_raw or {}
-        photos = (raw.get("places") or [{}])[0].get("photos") or [] if raw else []
+        photos = _extract_photos_from_raw(raw)
         if photos:
             url = ensure_place_photo(supabase, places_client, gp_id, photos)
             if url:
@@ -350,7 +375,7 @@ async def batch_add_locations(
     place_id_to_photos: dict[str, list] = {}
     for item in body:
         if item.google_place_id and item.google_raw:
-            photos = (item.google_raw.get("places") or [{}])[0].get("photos") or []
+            photos = _extract_photos_from_raw(item.google_raw)
             if photos:
                 place_id_to_photos.setdefault(item.google_place_id, photos)
     if place_id_to_photos:
@@ -466,15 +491,22 @@ async def import_google_list(
                 )
                 used_nearby = True
         except Exception:
-            if has_coords and search_name:
-                try:
+            # Text search with location bias failed — retry without bias
+            # (helps with landmarks like "Mont Blanc" where getlist coords
+            # may differ from the precise pin location in a single link).
+            if search_name and has_coords:
+                with contextlib.suppress(Exception):
+                    resolved = places_client._search_place_by_text(search_name)
+            # Still nothing — fall back to nearby search using coords only.
+            # Guard with `search_name` so we don't re-call nearby if the
+            # initial try block already attempted nearby (coord-only path).
+            if resolved is None and has_coords and search_name:
+                with contextlib.suppress(Exception):
                     resolved = places_client._search_place_nearby(
                         place.latitude,
                         place.longitude,
                     )
                     used_nearby = True
-                except Exception:
-                    pass
 
         if resolved is None:
             failed.append(
@@ -700,6 +732,14 @@ async def import_google_list_stream(
 
                 resolved = None
                 used_nearby = False
+                logger.debug(
+                    "list_import_resolving",
+                    scraped_name=place.name,
+                    lat=place.latitude,
+                    lng=place.longitude,
+                    search_name=search_name,
+                    has_coords=has_coords,
+                )
                 try:
                     if search_name:
                         resolved = await asyncio.to_thread(
@@ -709,6 +749,13 @@ async def import_google_list_stream(
                             longitude=place.longitude if has_coords else None,
                             radius_m=500.0 if has_coords else None,
                         )
+                        logger.debug(
+                            "list_import_resolved",
+                            scraped_name=search_name,
+                            resolved_name=resolved.name,
+                            resolved_place_id=resolved.place_id,
+                            method="text_with_bias",
+                        )
                     elif has_coords:
                         resolved = await asyncio.to_thread(
                             places_client._search_place_nearby,
@@ -717,8 +764,37 @@ async def import_google_list_stream(
                         )
                         used_nearby = True
                 except Exception:
-                    # Text search failed — try nearby fallback if we have coords
-                    if has_coords and search_name:
+                    logger.debug(
+                        "list_import_text_failed",
+                        scraped_name=search_name,
+                        method="text_with_bias",
+                    )
+                    # Text search with location bias failed — retry without bias
+                    # (helps with landmarks like "Mont Blanc" where getlist coords
+                    # may differ from the precise pin location in a single link).
+                    if search_name and has_coords:
+                        try:
+                            resolved = await asyncio.to_thread(
+                                places_client._search_place_by_text,
+                                search_name,
+                            )
+                            logger.debug(
+                                "list_import_resolved",
+                                scraped_name=search_name,
+                                resolved_name=resolved.name,
+                                resolved_place_id=resolved.place_id,
+                                method="text_no_bias",
+                            )
+                        except Exception:
+                            logger.debug(
+                                "list_import_text_failed",
+                                scraped_name=search_name,
+                                method="text_no_bias",
+                            )
+                    # Still nothing — fall back to nearby search using coords only.
+                    # Guard with `search_name` so we don't re-call nearby if the
+                    # initial try block already attempted nearby (coord-only path).
+                    if resolved is None and has_coords and search_name:
                         try:
                             resolved = await asyncio.to_thread(
                                 places_client._search_place_nearby,
@@ -726,6 +802,13 @@ async def import_google_list_stream(
                                 place.longitude,
                             )
                             used_nearby = True
+                            logger.debug(
+                                "list_import_resolved",
+                                scraped_name=display_name,
+                                resolved_name=resolved.name,
+                                resolved_place_id=resolved.place_id,
+                                method="nearby_fallback",
+                            )
                         except Exception:
                             pass
 
@@ -973,7 +1056,7 @@ async def update_location(
         elif (gp_id_changed or raw_changed) and places_client:
             # New google_place_id or updated raw with photos — warm the cache
             raw = body.google_raw or {}
-            photos = (raw.get("places") or [{}])[0].get("photos") or [] if raw else []
+            photos = _extract_photos_from_raw(raw)
             if photos:
                 url = ensure_place_photo(supabase, places_client, gp_id, photos)
                 if url:

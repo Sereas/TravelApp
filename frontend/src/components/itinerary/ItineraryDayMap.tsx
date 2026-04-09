@@ -24,7 +24,7 @@ function getCategoryColors(category: string | null | undefined): {
   return { bg: meta.hexBg, text: meta.hexText };
 }
 
-interface ItineraryDayMapLocation {
+export interface ItineraryDayMapLocation {
   id: string;
   name: string;
   latitude: number;

@@ -11,6 +11,7 @@ import asyncio
 import html as html_mod
 import re
 from dataclasses import dataclass
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import structlog
 
@@ -158,6 +159,22 @@ class GoogleListScraper:
                         raise GoogleListParseError(
                             "Google returned a CAPTCHA or rate-limit response. "
                             "Try again later or open the list in your browser first."
+                        )
+
+                    # Force English locale so DOM names are in Latin script
+                    # regardless of the user's Google account locale.
+                    # Must be done AFTER redirects settle (short URLs drop query params).
+                    final_url = page.url
+                    parsed_url = urlparse(final_url)
+                    qs = parse_qs(parsed_url.query, keep_blank_values=True)
+                    if qs.get("hl") != ["en"]:
+                        qs["hl"] = ["en"]
+                        new_query = urlencode(qs, doseq=True)
+                        en_url = urlunparse(parsed_url._replace(query=new_query))
+                        await page.goto(
+                            en_url,
+                            wait_until="domcontentloaded",
+                            timeout=15000,
                         )
 
                     # Wait for list items to render

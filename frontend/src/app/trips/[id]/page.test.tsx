@@ -189,7 +189,7 @@ describe("TripDetailPage", () => {
     mockListLocations.mockResolvedValue([]);
     render(<TripDetailPage />);
 
-    expect(await screen.findByText(/no locations added/i)).toBeInTheDocument();
+    expect(await screen.findByText(/ready to build your/i)).toBeInTheDocument();
   });
 
   it("shows error banner on API failure with retry", async () => {
@@ -298,24 +298,107 @@ describe("TripDetailPage", () => {
     expect(mockUpdateTrip).not.toHaveBeenCalled();
   });
 
-  // --- Slice 11: Add location ---
+  // --- Slice 11: Add location (SmartLocationInput) ---
 
-  it("opens add-location form from empty state CTA", async () => {
+  it("renders SmartLocationInput always-visible input bar above filter toolbar", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue(sampleLocations);
+    render(<TripDetailPage />);
+
+    await screen.findByText("Eiffel Tower");
+    expect(
+      screen.getByPlaceholderText(
+        /add a location.*paste a google maps link or type a name/i
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("hides SmartLocationInput when there are no locations", async () => {
     mockGetTrip.mockResolvedValue(sampleTrip);
     mockListLocations.mockResolvedValue([]);
     render(<TripDetailPage />);
 
-    await screen.findByText(/no locations added/i);
-    await userEvent.click(
-      screen.getByRole("button", { name: /add a location/i })
-    );
-
-    expect(screen.getByLabelText(/location name/i)).toBeInTheDocument();
+    await screen.findByText(/ready to build your/i);
+    expect(
+      screen.queryByPlaceholderText(
+        /add a location.*paste a google maps link or type a name/i
+      )
+    ).not.toBeInTheDocument();
   });
 
-  it("adds a new location and shows it in the list", async () => {
+  it("does NOT render the old 'Add Location' dropdown button", async () => {
     mockGetTrip.mockResolvedValue(sampleTrip);
-    mockListLocations.mockResolvedValue([]);
+    mockListLocations.mockResolvedValue(sampleLocations);
+    render(<TripDetailPage />);
+
+    await screen.findByText("Eiffel Tower");
+    // The old dropdown had a chevron-down icon next to "Add Location"
+    // It should no longer be present — SmartLocationInput replaces it
+    expect(
+      screen.queryByRole("button", { name: /^add location$/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it("typing a plain name in SmartLocationInput and pressing Enter opens AddLocationForm with name pre-filled", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue(sampleLocations);
+    render(<TripDetailPage />);
+
+    await screen.findByText("Paris Summer");
+    const smartInput = screen.getByPlaceholderText(
+      /add a location.*paste a google maps link or type a name/i
+    );
+    await userEvent.type(smartInput, "Arc de Triomphe{Enter}");
+
+    // AddLocationForm dialog should now be visible with pre-filled name
+    const nameInput = screen.getByDisplayValue("Arc de Triomphe");
+    expect(nameInput).toBeInTheDocument();
+  });
+
+  it("pasting a Google Maps URL and pressing Enter opens AddLocationForm with google link pre-filled", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue(sampleLocations);
+    render(<TripDetailPage />);
+
+    await screen.findByText("Paris Summer");
+    const smartInput = screen.getByPlaceholderText(
+      /add a location.*paste a google maps link or type a name/i
+    );
+    await userEvent.type(
+      smartInput,
+      "https://maps.app.goo.gl/HFaERRSAPvPePT1D6{Enter}"
+    );
+
+    // AddLocationForm should be visible with the link shown as read-only text
+    expect(
+      screen.getByText("https://maps.app.goo.gl/HFaERRSAPvPePT1D6")
+    ).toBeInTheDocument();
+  });
+
+  it("SmartLocationInput reappears empty after cancelling AddLocationForm", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue(sampleLocations);
+    render(<TripDetailPage />);
+
+    await screen.findByText("Paris Summer");
+    const smartInput = screen.getByPlaceholderText(
+      /add a location.*paste a google maps link or type a name/i
+    );
+    await userEvent.type(smartInput, "Louvre{Enter}");
+
+    // Form is open, cancel it
+    await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
+
+    // Smart input reappears empty
+    const freshInput = screen.getByPlaceholderText(
+      /add a location.*paste a google maps link or type a name/i
+    ) as HTMLInputElement;
+    expect(freshInput.value).toBe("");
+  });
+
+  it("adds a new location via SmartLocationInput name flow and shows it in list", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue(sampleLocations);
     mockAddLocation.mockResolvedValue({
       id: "loc-new",
       name: "Arc de Triomphe",
@@ -325,18 +408,19 @@ describe("TripDetailPage", () => {
     });
     render(<TripDetailPage />);
 
-    await screen.findByText(/no locations added/i);
-    await userEvent.click(
-      screen.getByRole("button", { name: /add a location/i })
+    await screen.findByText("Paris Summer");
+    const smartInput = screen.getByPlaceholderText(
+      /add a location.*paste a google maps link or type a name/i
     );
+    await userEvent.type(smartInput, "Arc de Triomphe{Enter}");
 
+    // Fill in note in the now-open form
     await userEvent.type(
-      screen.getByLabelText(/location name/i),
-      "Arc de Triomphe"
+      screen.getByLabelText(/personal notes/i),
+      "Great views"
     );
-    await userEvent.type(screen.getByLabelText(/note/i), "Great views");
     await userEvent.click(
-      screen.getByRole("button", { name: /add location/i })
+      screen.getByRole("button", { name: /^save location$/i })
     );
 
     expect(await screen.findByText("Arc de Triomphe")).toBeInTheDocument();
@@ -347,14 +431,20 @@ describe("TripDetailPage", () => {
     );
   });
 
-  it("shows 'Add Location' button when locations exist", async () => {
+  it("shows action cards in empty state", async () => {
     mockGetTrip.mockResolvedValue(sampleTrip);
-    mockListLocations.mockResolvedValue(sampleLocations);
+    mockListLocations.mockResolvedValue([]);
     render(<TripDetailPage />);
 
-    await screen.findByText("Eiffel Tower");
+    await screen.findByText(/ready to build your/i);
     expect(
-      screen.getByRole("button", { name: /add location/i })
+      screen.getByRole("button", { name: "Paste Link" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Import List" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Add Manually" })
     ).toBeInTheDocument();
   });
 
@@ -437,47 +527,50 @@ describe("TripDetailPage", () => {
     expect(locationsTab).toHaveTextContent("2");
   });
 
-  it("shows category filter chips when 2+ categories exist", async () => {
+  it("shows category filter dropdown when 2+ categories exist", async () => {
     mockGetTrip.mockResolvedValue(sampleTrip);
     mockListLocations.mockResolvedValue(sampleLocations);
     render(<TripDetailPage />);
 
     await screen.findByText("Eiffel Tower");
-    expect(screen.getByText("All Locations")).toBeInTheDocument();
-    // Category pills no longer show counts — just category names
-    const toolbar = screen.getByRole("toolbar", {
-      name: /filter locations by category/i,
-    });
-    expect(within(toolbar).getByText("Museum")).toBeInTheDocument();
-    expect(within(toolbar).getByText("Viewpoint")).toBeInTheDocument();
+    const categoryBtn = screen.getByRole("button", { name: /category/i });
+    expect(categoryBtn).toBeInTheDocument();
+
+    // Open the category dropdown and check options appear
+    await userEvent.click(categoryBtn);
+    expect(screen.getByText("All categories")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /museum/i })).toBeInTheDocument();
   });
 
-  it("filters locations by category when chip is clicked", async () => {
+  it("filters locations by category when dropdown option is clicked", async () => {
     mockGetTrip.mockResolvedValue(sampleTrip);
     mockListLocations.mockResolvedValue(sampleLocations);
     render(<TripDetailPage />);
 
     await screen.findByText("Eiffel Tower");
-    const toolbar = screen.getByRole("toolbar", {
-      name: /filter locations by category/i,
-    });
-    await userEvent.click(within(toolbar).getByText("Museum"));
+    // Open category dropdown and select Museum
+    await userEvent.click(screen.getByRole("button", { name: /category/i }));
+    await userEvent.click(screen.getByRole("button", { name: /museum/i }));
 
     expect(screen.getByText("Louvre Museum")).toBeInTheDocument();
     expect(screen.queryByText("Eiffel Tower")).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByText("All Locations"));
+    // Clear filter via dropdown — trigger button now shows "Museum"
+    await userEvent.click(screen.getByRole("button", { name: /museum/i }));
+    await userEvent.click(screen.getByText("All categories"));
     expect(screen.getByText("Eiffel Tower")).toBeInTheDocument();
     expect(screen.getByText("Louvre Museum")).toBeInTheDocument();
   });
 
-  it("does not show filter chips with only 1 category", async () => {
+  it("does not show category filter with only 1 category", async () => {
     mockGetTrip.mockResolvedValue(sampleTrip);
     mockListLocations.mockResolvedValue([sampleLocations[0]]);
     render(<TripDetailPage />);
 
     await screen.findByText("Eiffel Tower");
-    expect(screen.queryByText("All Locations")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /category/i })
+    ).not.toBeInTheDocument();
   });
 
   it("does not show group-by-city when all locations share a city", async () => {
@@ -717,7 +810,7 @@ describe("TripDetailPage", () => {
 
   // --- Slice 13: Itinerary tab (read-only) ---
 
-  it("shows Locations and Itinerary tabs", async () => {
+  it("shows all four tabs", async () => {
     mockGetTrip.mockResolvedValue(sampleTrip);
     mockListLocations.mockResolvedValue([]);
     render(<TripDetailPage />);
@@ -725,6 +818,48 @@ describe("TripDetailPage", () => {
     await screen.findByText("Paris Summer");
     expect(screen.getByRole("tab", { name: /places/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /itinerary/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /budget/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /documents/i })).toBeInTheDocument();
+  });
+
+  it("shows Budget tab as disabled", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue([]);
+    render(<TripDetailPage />);
+
+    await screen.findByText("Paris Summer");
+    const budgetTab = screen.getByRole("tab", { name: /budget/i });
+    expect(budgetTab).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("shows Documents tab as disabled", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue([]);
+    render(<TripDetailPage />);
+
+    await screen.findByText("Paris Summer");
+    const documentsTab = screen.getByRole("tab", { name: /documents/i });
+    expect(documentsTab).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("shows Trip Summary card when locations exist", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue(sampleLocations);
+    render(<TripDetailPage />);
+
+    await screen.findByText("Paris Summer");
+    expect(screen.getByText("Trip Summary")).toBeInTheDocument();
+  });
+
+  it("shows View Map button when locations exist", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue(sampleLocations);
+    render(<TripDetailPage />);
+
+    await screen.findByText("Paris Summer");
+    expect(
+      screen.getByRole("button", { name: /view map/i })
+    ).toBeInTheDocument();
   });
 
   it("fetches itinerary when Itinerary tab is selected", async () => {

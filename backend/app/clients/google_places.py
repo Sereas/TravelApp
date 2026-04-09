@@ -11,12 +11,16 @@ import re
 import time
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 import httpx
 import structlog
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger("google_places")
+
+# Google place IDs are alphanumeric strings (may contain underscores/hyphens).
+# Validating this prevents path traversal when interpolating into API URLs.
+_PLACE_ID_RE = re.compile(r"^[A-Za-z0-9_\-]+$")
 
 
 class GooglePlacesDisabledError(RuntimeError):
@@ -87,10 +91,75 @@ class GooglePlacesClient:
         img_resp.raise_for_status()
         return img_resp.content
 
+    def get_place_by_id(self, place_id: str) -> PlaceResolution:
+        """Look up a place directly by its Google place_id."""
+        if not _PLACE_ID_RE.match(place_id):
+            raise ValueError(f"Invalid place_id format: {place_id!r}")
+        field_mask = (
+            "id,"
+            "displayName,"
+            "formattedAddress,"
+            "location,"
+            "types,"
+            "websiteUri,"
+            "nationalPhoneNumber,"
+            "regularOpeningHours.weekdayDescriptions,"
+            "photos"
+        )
+        headers = {
+            "X-Goog-Api-Key": self._api_key,
+            "X-Goog-FieldMask": field_mask,
+        }
+        url = f"https://places.googleapis.com/v1/places/{place_id}"
+        start = time.perf_counter()
+        resp = self._http.get(url, headers=headers)
+        resp.raise_for_status()
+        duration_ms = round((time.perf_counter() - start) * 1000, 1)
+        data = resp.json()
+        logger.debug("places_get_by_id", duration_ms=duration_ms, place_id=place_id)
+        return self._place_to_resolution(data, raw=data)
+
+    @staticmethod
+    def _extract_place_id_from_url(url: str) -> str | None:
+        """Extract a place_id from URLs like …/maps/place/?q=place_id:ChIJ..."""
+        parsed = urlparse(url)
+        qs = parse_qs(parsed.query)
+        for val in qs.get("q", []):
+            if val.startswith("place_id:"):
+                pid = val[len("place_id:"):]
+                if pid and _PLACE_ID_RE.match(pid):
+                    return pid
+        return None
+
+    def _try_place_id_lookup(self, place_id: str, start: float) -> PlaceResolution:
+        """Attempt a direct place_id lookup; log and re-raise on failure."""
+        try:
+            result = self.get_place_by_id(place_id)
+            duration_ms = round((time.perf_counter() - start) * 1000, 1)
+            logger.info(
+                "places_resolve_ok",
+                duration_ms=duration_ms,
+                place_id=result.place_id,
+                resolved_name=result.name,
+                method="place_id_lookup",
+            )
+            return result
+        except Exception:
+            duration_ms = round((time.perf_counter() - start) * 1000, 1)
+            logger.warning(
+                "places_resolve_failed",
+                duration_ms=duration_ms,
+                error_category="external_api",
+                method="place_id_lookup",
+                exc_info=True,
+            )
+            raise
+
     def resolve_from_link(self, google_link: str) -> PlaceResolution:
         """Resolve a Google Maps URL using name + location bias via Places API (new).
 
         Flow:
+        0. If the URL contains a place_id, look it up directly (no search needed).
         1. Follow short maps.app.goo.gl redirects to get the long Maps URL.
         2. Parse a human-readable name and precise lat/lng from the URL.
         3. Call places:searchText with that name and a circular locationBias.
@@ -100,7 +169,19 @@ class GooglePlacesClient:
         6. Fallback: call places:searchText with a truncated URL as textQuery.
         """
         start = time.perf_counter()
+
+        # Fast path: URL contains an explicit place_id
+        pid = self._extract_place_id_from_url(google_link)
+        if pid:
+            return self._try_place_id_lookup(pid, start)
+
         long_url = self._follow_redirects_if_needed(google_link)
+
+        # Check again after redirect expansion
+        pid = self._extract_place_id_from_url(long_url)
+        if pid:
+            return self._try_place_id_lookup(pid, start)
+
         name, lat, lng = self._extract_name_and_location_from_url(long_url)
         if name and self._is_coordinate_style_place_slug(name):
             name = None

@@ -69,7 +69,9 @@ def _extract_city(address: str | None) -> str | None:
     if len(parts) >= 3:
         city_part = parts[-2]
     elif len(parts) == 2:
-        city_part = parts[0]
+        # 2-part addresses (e.g. city-states like Monaco: "Pl. du Casino, 98000 Monaco")
+        # Take the last part and strip postcode — it's more likely the city/country.
+        city_part = parts[-1]
     else:
         return None
     return _re.sub(r"^\d[\d\s-]*\s*", "", city_part).strip() or None

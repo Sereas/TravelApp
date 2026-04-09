@@ -14,10 +14,10 @@
     --popover: 0 0% 100%;
     --popover-foreground: 20 12% 14%;
 
-    /* CTA / accent — warm clay terracotta (#BC6C5B) */
-    --primary: 12 40% 55%;
+    /* CTA / accent — rich warm brown */
+    --primary: 12 33% 38%;
     --primary-foreground: 0 0% 100%;
-    --primary-strong: 12 38% 42%;
+    --primary-strong: 12 30% 30%;
 
     --secondary: 24 20% 93%;
     --secondary-foreground: 20 18% 22%;
@@ -83,9 +83,9 @@
     --popover: 20 20% 10%;
     --popover-foreground: 30 20% 95%;
 
-    --primary: 12 42% 60%;
+    --primary: 12 35% 52%;
     --primary-foreground: 0 0% 100%;
-    --primary-strong: 12 38% 50%;
+    --primary-strong: 12 32% 44%;
 
     --secondary: 20 15% 16%;
     --secondary-foreground: 24 20% 95%;

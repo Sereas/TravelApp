@@ -6,11 +6,12 @@ import { motion } from "motion/react";
 import { api, type Trip, type Location } from "@/lib/api";
 import { LocationCard } from "@/components/locations/LocationCard";
 import { AddLocationForm } from "@/components/locations/AddLocationForm";
+import { SmartLocationInput } from "@/components/locations/SmartLocationInput";
 import { EditLocationRow } from "@/components/locations/EditLocationRow";
-import {
-  EditTripForm,
-  type TripUpdatePayload,
-} from "@/components/trips/EditTripForm";
+import { ImportGoogleListDialog } from "@/components/locations/ImportGoogleListDialog";
+import { LocationsMapDialog } from "@/components/locations/LocationsMapDialog";
+import { TripSummaryCard } from "@/components/trips/TripSummaryCard";
+import { type TripUpdatePayload } from "@/components/trips/EditTripForm";
 import {
   DateChangeDialog,
   type DateChangeResult,
@@ -19,8 +20,6 @@ import { TripDateRangePicker } from "@/components/trips/TripDateRangePicker";
 import { ItineraryTab } from "@/components/itinerary/ItineraryTab";
 import { ShareTripDialog } from "@/components/trips/ShareTripDialog";
 import { TripGradient } from "@/components/trips/TripGradient";
-import { ImportGoogleListDialog } from "@/components/locations/ImportGoogleListDialog";
-import { EmptyState } from "@/components/feedback/EmptyState";
 import { LoadingSpinner } from "@/components/feedback/LoadingSpinner";
 import { ErrorBanner } from "@/components/feedback/ErrorBanner";
 import { format } from "date-fns";
@@ -29,16 +28,18 @@ import {
   ChevronDown,
   ChevronLeft,
   Compass,
-  List,
+  DollarSign,
+  FileText,
+  FileUp,
+  Link2,
+  Map,
   MapPin,
-  Pencil,
-  Plus,
+  PenLine,
   Search,
-  Share2,
+  Tag,
   Trash2,
   User,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Popover,
@@ -59,7 +60,6 @@ export default function TripDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [editingTrip, setEditingTrip] = useState(false);
   const [dateChangeDialog, setDateChangeDialog] = useState<{
     payload: TripUpdatePayload;
     oldStart: string;
@@ -67,24 +67,34 @@ export default function TripDetailPage() {
     resolve: (trip: Trip) => void;
     reject: (err: Error) => void;
   } | null>(null);
-  const [addingLocation, setAddingLocation] = useState(false);
+  const [addingLocation, setAddingLocation] = useState<
+    | null
+    | { mode: "manual" }
+    | { mode: "link-entry" }
+    | { mode: "prefilled"; googleLink?: string; name?: string }
+  >(null);
   const [editingLocationId, setEditingLocationId] = useState<string | null>(
     null
   );
   const [deletingTrip, setDeletingTrip] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [cityFilter, setCityFilter] = useState<string | null>(null);
+  const [personFilter, setPersonFilter] = useState<string | null>(null);
   const [cityPopoverOpen, setCityPopoverOpen] = useState(false);
-  const [groupByCity, setGroupByCity] = useState(false);
-  const [groupByPerson, setGroupByPerson] = useState(false);
+  const [categoryPopoverOpen, setCategoryPopoverOpen] = useState(false);
+  const [personPopoverOpen, setPersonPopoverOpen] = useState(false);
+  const [groupBy, setGroupBy] = useState<
+    "city" | "category" | "person" | null
+  >(null);
   const [locationNameSearch, setLocationNameSearch] = useState("");
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const nameCancelledRef = useRef(false);
 
-  const [activeTab, setActiveTab] = useState<"locations" | "itinerary">(
-    "locations"
-  );
+  const [activeTab, setActiveTab] = useState<
+    "locations" | "itinerary" | "budget" | "documents"
+  >("locations");
+  const [mapDialogOpen, setMapDialogOpen] = useState(false);
   const itineraryState = useItineraryState({
     tripId,
     enabled: true,
@@ -131,16 +141,22 @@ export default function TripDetailPage() {
   }, [tripId]);
 
   const categoryOptions = useMemo(() => {
-    const base = cityFilter
-      ? locations.filter((loc) => (loc.city || "No city") === cityFilter)
-      : locations;
+    let base = locations;
+    if (cityFilter) {
+      base = base.filter((loc) => (loc.city || "No city") === cityFilter);
+    }
+    if (personFilter) {
+      base = base.filter(
+        (loc) => (loc.added_by_email || "Unknown") === personFilter
+      );
+    }
     const counts: Record<string, number> = {};
     for (const loc of base) {
       const cat = loc.category ?? "Uncategorized";
       counts[cat] = (counts[cat] || 0) + 1;
     }
     return Object.entries(counts).sort(([a], [b]) => a.localeCompare(b));
-  }, [locations, cityFilter]);
+  }, [locations, cityFilter, personFilter]);
 
   const cities = useMemo(() => {
     const set = new Set<string>();
@@ -168,24 +184,32 @@ export default function TripDetailPage() {
     if (cityFilter) {
       list = list.filter((loc) => (loc.city || "No city") === cityFilter);
     }
+    if (personFilter) {
+      list = list.filter(
+        (loc) => (loc.added_by_email || "Unknown") === personFilter
+      );
+    }
     if (locationNameSearch.trim()) {
       const q = locationNameSearch.trim().toLowerCase();
       list = list.filter((loc) => (loc.name ?? "").toLowerCase().includes(q));
     }
     return list;
-  }, [locations, categoryFilter, cityFilter, locationNameSearch]);
+  }, [locations, categoryFilter, cityFilter, personFilter, locationNameSearch]);
 
   const groupedLocations = useMemo(() => {
-    if (!groupByCity && !groupByPerson) return null;
+    if (!groupBy) return null;
     const groups: Record<string, Location[]> = {};
     for (const loc of filteredLocations) {
-      const key = groupByCity
-        ? loc.city || "No city"
-        : loc.added_by_email || "Unknown";
+      const key =
+        groupBy === "city"
+          ? loc.city || "No city"
+          : groupBy === "category"
+            ? (loc.category ?? "Uncategorized")
+            : loc.added_by_email || "Unknown";
       (groups[key] ??= []).push(loc);
     }
     return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
-  }, [filteredLocations, groupByCity, groupByPerson]);
+  }, [filteredLocations, groupBy]);
 
   if (loading) {
     return (
@@ -213,18 +237,15 @@ export default function TripDetailPage() {
 
   if (!trip) return null;
 
-  function handleTripUpdated(updated: Trip) {
-    setTrip(updated);
-    setEditingTrip(false);
-    fetchItinerary();
-  }
-
   async function handleInlineNameSave(name: string) {
+    if (!trip) return;
+    const prev = { ...trip };
+    setTrip({ ...trip, name });
     try {
       const updated = await api.trips.update(tripId, { name });
       setTrip(updated);
     } catch {
-      // Silently revert — the UI already shows the old value
+      setTrip(prev);
     }
   }
 
@@ -357,12 +378,20 @@ export default function TripDetailPage() {
     syncLocationSummary(locationId, () => ({ user_image_url: null }));
   }
 
+  function handleSmartInputSubmit(value: string, isUrl: boolean) {
+    setAddingLocation(
+      isUrl
+        ? { mode: "prefilled", googleLink: value }
+        : { mode: "prefilled", name: value }
+    );
+  }
+
   function handleLocationAdded(
     location: Location,
     scheduleDayId?: string | null
   ) {
     setLocations((prev) => [...prev, location]);
-    setAddingLocation(false);
+    setAddingLocation(null);
     if (scheduleDayId) {
       handleScheduleLocationToDay(location.id, scheduleDayId);
     }
@@ -463,282 +492,176 @@ export default function TripDetailPage() {
         {/* Generative gradient banner */}
         <TripGradient
           name={trip.name}
-          className="absolute inset-x-0 top-0 h-28 opacity-30"
+          className="pointer-events-none absolute inset-x-0 top-0 h-28 opacity-30"
         />
-        <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-transparent to-background" />
-        <div className="relative flex items-center justify-between">
-          <button
-            type="button"
-            className="-ml-1 inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-            onClick={() => router.push("/trips")}
-          >
-            <ChevronLeft size={14} className="shrink-0" />
-            Trips
-          </button>
-          <div className="flex items-center gap-0.5">
-            {/* Travelers */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  className="flex items-center gap-1 rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                  aria-label="Travelers"
-                >
-                  <div className="flex -space-x-1.5">
-                    {Array.from(addedByEmails)
-                      .slice(0, 3)
-                      .map((email) => (
-                        <div
-                          key={email}
-                          className="flex h-6 w-6 items-center justify-center rounded-full bg-brand/15 text-[9px] font-bold uppercase text-brand ring-2 ring-background"
-                          title={email}
-                        >
-                          {email[0]}
-                        </div>
-                      ))}
-                    {addedByEmails.size === 0 && (
-                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-brand/15 ring-2 ring-background">
-                        <User size={10} className="text-brand" />
-                      </div>
-                    )}
-                    {addedByEmails.size > 3 && (
-                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-[9px] font-bold text-muted-foreground ring-2 ring-background">
-                        +{addedByEmails.size - 3}
-                      </div>
-                    )}
-                  </div>
-                </button>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="w-64 p-0">
-                <div className="border-b px-3 py-2.5">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                    Travelers
-                  </h4>
-                </div>
-                <div className="max-h-48 overflow-y-auto py-1">
-                  {addedByEmails.size === 0 && (
-                    <div className="px-3 py-2 text-xs text-muted-foreground">
-                      No travelers yet
-                    </div>
-                  )}
-                  {Array.from(addedByEmails).map((email) => (
-                    <div
-                      key={email}
-                      className="flex items-center gap-2.5 px-3 py-1.5"
-                    >
-                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand/15 text-[10px] font-bold uppercase text-brand">
-                        {email[0]}
-                      </div>
-                      <span className="min-w-0 truncate text-sm text-foreground">
-                        {email}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                <div className="border-t px-3 py-2">
-                  <button
-                    type="button"
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-brand transition-colors hover:bg-brand/10"
-                    onClick={() => {
-                      /* TODO: invite flow */
-                    }}
-                  >
-                    <Plus size={14} />
-                    Invite traveler
-                  </button>
-                </div>
-              </PopoverContent>
-            </Popover>
-            <button
-              type="button"
-              className="rounded-full border border-border/50 bg-card p-2 text-muted-foreground shadow-sm transition-all hover:border-primary/30 hover:text-primary hover:shadow"
-              aria-label="Share trip"
-              onClick={() => setShareDialogOpen(true)}
-            >
-              <Share2 size={15} />
-            </button>
-            <button
-              type="button"
-              className="rounded-full border border-border/50 bg-card p-2 text-muted-foreground shadow-sm transition-all hover:border-primary/30 hover:text-primary hover:shadow"
-              onClick={() => {
-                setEditingName(false);
-                setEditingTrip(true);
-              }}
-              aria-label="Edit trip"
-            >
-              <Pencil size={15} />
-            </button>
-          </div>
-        </div>
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-transparent to-background" />
+        {/* Back link */}
+        <button
+          type="button"
+          className="-ml-1 inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-primary/70 transition-colors hover:text-primary"
+          onClick={() => router.push("/trips")}
+        >
+          <ChevronLeft size={14} className="shrink-0" />
+          Back to Trips
+        </button>
 
-        {editingTrip && (
-          <EditTripForm
-            trip={trip}
-            onUpdated={handleTripUpdated}
-            onCancel={() => setEditingTrip(false)}
-            onDelete={handleDeleteTrip}
-            onBeforeSave={handleBeforeTripSave}
-          />
-        )}
-        {!editingTrip && (
-          <motion.div
-            className="relative pb-4 pt-2"
+        <motion.div
+            className="relative pb-3 pt-3"
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
           >
-            {editingName ? (
-              <input
-                type="text"
-                aria-label="Trip name"
-                autoFocus
-                defaultValue={trip.name}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.currentTarget.blur();
-                  } else if (e.key === "Escape") {
-                    nameCancelledRef.current = true;
-                    e.currentTarget.blur();
-                  }
-                }}
-                onBlur={(e) => {
-                  if (nameCancelledRef.current) {
-                    nameCancelledRef.current = false;
+            {/* Status line: PLANNING badge + dates (left) ... progress + share (right) */}
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <span className="rounded-full bg-brand-muted px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-brand-strong">
+                  Planning
+                </span>
+                <TripDateRangePicker
+                  startDate={trip.start_date}
+                  endDate={trip.end_date}
+                  onDateRangeChange={handleDateRangeSave}
+                />
+              </div>
+              <div className="flex items-center gap-4">
+                {itinerary &&
+                  itinerary.days.length > 0 &&
+                  (() => {
+                    const totalDays = itinerary.days.length;
+                    const plannedDays = itinerary.days.filter((day) =>
+                      day.options.some((opt) => opt.locations.length > 0)
+                    ).length;
+                    return (
+                      <div className="hidden items-center gap-2.5 sm:flex">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          Progress
+                        </span>
+                        <Progress
+                          value={Math.round(
+                            (plannedDays / totalDays) * 100
+                          )}
+                          className="h-1.5 w-24"
+                        />
+                        <span className="text-xs font-semibold tabular-nums text-primary">
+                          {plannedDays}/{totalDays} days
+                        </span>
+                      </div>
+                    );
+                  })()}
+                <button
+                  type="button"
+                  className="rounded-full bg-primary px-5 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-primary-strong hover:shadow-md"
+                  onClick={() => setShareDialogOpen(true)}
+                >
+                  Share
+                </button>
+              </div>
+            </div>
+
+            {/* Trip name */}
+            <div className="mt-1">
+              {editingName ? (
+                <input
+                  type="text"
+                  aria-label="Trip name"
+                  autoFocus
+                  defaultValue={trip.name}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.currentTarget.blur();
+                    } else if (e.key === "Escape") {
+                      nameCancelledRef.current = true;
+                      e.currentTarget.blur();
+                    }
+                  }}
+                  onBlur={(e) => {
+                    if (nameCancelledRef.current) {
+                      nameCancelledRef.current = false;
+                      setEditingName(false);
+                      return;
+                    }
+                    const val = e.target.value.trim();
                     setEditingName(false);
-                    return;
-                  }
-                  const val = e.target.value.trim();
-                  setEditingName(false);
-                  if (val && val !== trip.name) {
-                    handleInlineNameSave(val);
-                  }
-                }}
-                className="w-full bg-transparent text-3xl font-bold tracking-tight text-foreground outline-none ring-1 ring-primary/30 rounded-lg px-1 sm:text-4xl"
-              />
-            ) : (
-              <button
-                type="button"
-                aria-label={trip.name}
-                onClick={() => setEditingName(true)}
-                className="cursor-text text-left text-3xl font-bold tracking-tight text-foreground rounded-lg px-1 -mx-1 transition-colors hover:bg-muted/50 sm:text-4xl"
-              >
-                {trip.name}
-              </button>
-            )}
-
-            {/* Meta line */}
-            <motion.p
-              className="mt-2 text-sm tracking-wide text-muted-foreground"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.15, duration: 0.4 }}
-            >
-              <TripDateRangePicker
-                startDate={trip.start_date}
-                endDate={trip.end_date}
-                onDateRangeChange={handleDateRangeSave}
-              />
-              {(trip.start_date || trip.end_date) && <>&ensp;/&ensp;</>}
-              {locations.length} places
-              {itinerary && itinerary.days.length > 0 && (
-                <> &ensp;/&ensp; {itinerary.days.length} days</>
+                    if (val && val !== trip.name) {
+                      handleInlineNameSave(val);
+                    }
+                  }}
+                  className="w-full bg-transparent text-3xl font-bold tracking-tight text-foreground outline-none ring-1 ring-primary/30 rounded-lg px-1 sm:text-4xl"
+                />
+              ) : (
+                <button
+                  type="button"
+                  aria-label={trip.name}
+                  onClick={() => setEditingName(true)}
+                  className="cursor-text text-left text-3xl font-bold tracking-tight text-foreground rounded-lg px-1 -mx-1 transition-colors hover:bg-muted/50 sm:text-4xl"
+                >
+                  {trip.name}
+                </button>
               )}
-              {itinerary &&
-                (() => {
-                  const cities = new Set<string>();
-                  itinerary.days.forEach((day) =>
-                    day.options.forEach((opt) => {
-                      if (opt.starting_city) cities.add(opt.starting_city);
-                      if (opt.ending_city) cities.add(opt.ending_city);
-                    })
-                  );
-                  return cities.size > 0 ? (
-                    <>
-                      {" "}
-                      &ensp;/&ensp; {cities.size}{" "}
-                      {cities.size === 1 ? "city" : "cities"}
-                    </>
-                  ) : null;
-                })()}
-            </motion.p>
-
-            {/* Progress */}
-            {itinerary &&
-              itinerary.days.length > 0 &&
-              (() => {
-                const totalDays = itinerary.days.length;
-                const plannedDays = itinerary.days.filter((day) =>
-                  day.options.some((opt) => opt.locations.length > 0)
-                ).length;
-                const pct = Math.round((plannedDays / totalDays) * 100);
-                return pct < 100 ? (
-                  <motion.div
-                    className="mt-3 flex items-center gap-3"
-                    initial={{ opacity: 0, scaleX: 0.8 }}
-                    animate={{ opacity: 1, scaleX: 1 }}
-                    transition={{ delay: 0.3, duration: 0.5, ease: "easeOut" }}
-                    style={{ transformOrigin: "left" }}
-                  >
-                    <Progress value={pct} className="h-1 flex-1" />
-                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                      {pct}%
-                    </span>
-                  </motion.div>
-                ) : null;
-              })()}
+            </div>
           </motion.div>
-        )}
       </div>
 
-      {/* Tabs — bold primary navigation */}
-      <div className="sticky top-14 z-30 -mx-4 bg-background/95 px-4 pb-2 pt-3 backdrop-blur-sm sm:-mx-6 sm:px-6 md:-mx-8 md:px-8">
-        <nav className="flex gap-2" role="tablist" aria-label="Trip sections">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === "locations"}
-            aria-controls="tab-panel-locations"
-            id="tab-locations"
-            className={cn(
-              "inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-all",
-              activeTab === "locations"
-                ? "bg-primary text-primary-foreground shadow-sm"
-                : "border border-border/60 bg-card text-muted-foreground shadow-sm hover:border-primary/30 hover:text-foreground"
-            )}
-            onClick={() => setActiveTab("locations")}
-          >
-            <MapPin size={15} />
-            Places
-            {locations.length > 0 && (
-              <span
-                className={cn(
-                  "inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold",
-                  activeTab === "locations"
-                    ? "bg-primary-foreground/20 text-primary-foreground"
-                    : "bg-muted text-muted-foreground"
-                )}
-              >
-                {locations.length}
-              </span>
-            )}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === "itinerary"}
-            aria-controls="tab-panel-itinerary"
-            id="tab-itinerary"
-            className={cn(
-              "inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-all",
-              activeTab === "itinerary"
-                ? "bg-primary text-primary-foreground shadow-sm"
-                : "border border-border/60 bg-card text-muted-foreground shadow-sm hover:border-primary/30 hover:text-foreground"
-            )}
-            onClick={() => setActiveTab("itinerary")}
-          >
-            <Compass size={15} />
-            Itinerary
-          </button>
+      {/* Tabs — underline navigation */}
+      <div className="sticky top-14 z-30 -mx-4 bg-background/95 px-4 pt-3 backdrop-blur-sm sm:-mx-6 sm:px-6 md:-mx-8 md:px-8">
+        <nav
+          className="flex gap-6 border-b border-border"
+          role="tablist"
+          aria-label="Trip sections"
+        >
+          {(
+            [
+              { key: "locations", label: "Places", icon: MapPin },
+              { key: "itinerary", label: "Itinerary", icon: Compass },
+              {
+                key: "budget",
+                label: "Budget",
+                icon: DollarSign,
+                disabled: true,
+              },
+              {
+                key: "documents",
+                label: "Documents",
+                icon: FileText,
+                disabled: true,
+              },
+            ] as const
+          ).map(({ key, label, icon: Icon, ...rest }) => {
+            const disabled = "disabled" in rest && rest.disabled;
+            return (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === key}
+              aria-disabled={disabled || undefined}
+              aria-controls={`tab-panel-${key}`}
+              id={`tab-${key}`}
+              className={cn(
+                "-mb-px inline-flex items-center gap-1.5 border-b-2 pb-2.5 text-sm font-medium transition-colors",
+                disabled
+                  ? "cursor-not-allowed border-transparent text-muted-foreground/40"
+                  : activeTab === key
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+              )}
+              onClick={() => !disabled && setActiveTab(key)}
+            >
+              <Icon size={15} />
+              {label}
+              {disabled && (
+                <span className="text-[10px] font-normal text-muted-foreground/40">
+                  Soon
+                </span>
+              )}
+              {key === "locations" && locations.length > 0 && (
+                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1.5 text-[10px] font-bold text-muted-foreground">
+                  {locations.length}
+                </span>
+              )}
+            </button>
+            );
+          })}
         </nav>
       </div>
 
@@ -749,314 +672,598 @@ export default function TripDetailPage() {
           aria-labelledby="tab-locations"
           className="mt-6"
         >
-          {/* Toolbar row */}
-          {locations.length > 0 && (
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-              <div className="relative flex-1 sm:max-w-xs">
-                <Search
-                  size={14}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+          <div
+            className={
+              locations.length > 0
+                ? "grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]"
+                : ""
+            }
+          >
+            {/* Left column */}
+            <div>
+              {/* Smart location input — visible only when locations exist */}
+              {!addingLocation && locations.length > 0 && (
+
+                <SmartLocationInput
+                  tripId={tripId}
+                  onSubmit={handleSmartInputSubmit}
+                  onImported={fetchData}
                 />
-                <input
-                  type="search"
-                  autoComplete="off"
-                  placeholder="Search locations…"
-                  value={locationNameSearch}
-                  onChange={(e) => setLocationNameSearch(e.target.value)}
-                  className="h-9 w-full rounded-full border border-border bg-card pl-9 pr-4 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand"
-                  aria-label="Search by location name"
-                />
-              </div>
-              {cities.size >= 2 && (
-                <Popover
-                  open={cityPopoverOpen}
-                  onOpenChange={setCityPopoverOpen}
-                >
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm font-medium transition-colors",
-                        groupByCity || cityFilter
-                          ? "bg-brand-muted text-brand-strong"
-                          : "text-foreground hover:bg-brand-muted"
-                      )}
-                    >
-                      <Building2 size={14} />
-                      {cityFilter
-                        ? cityFilter
-                        : groupByCity
-                          ? "Grouped by city"
-                          : "City"}
-                      <ChevronDown size={12} className="opacity-50" />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent
-                    className="w-48 p-1.5"
-                    align="start"
-                    sideOffset={6}
+              )}
+
+              {/* Heading row with View Map */}
+              {locations.length > 0 && (
+                <div className="mb-3 flex items-center justify-between">
+                  <h2 className="text-lg font-semibold text-foreground">
+                    {filteredLocations.length}{" "}
+                    {filteredLocations.length === 1 ? "Place" : "Places"}
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => setMapDialogOpen(true)}
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
                   >
-                    <button
-                      type="button"
-                      className={cn(
-                        "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors",
-                        !cityFilter && !groupByCity
-                          ? "bg-brand-muted font-medium text-brand-strong"
-                          : "text-foreground hover:bg-muted"
-                      )}
-                      onClick={() => {
-                        setCityFilter(null);
-                        setCategoryFilter(null);
-                        setGroupByCity(false);
-                        setCityPopoverOpen(false);
-                      }}
+                    View Map
+                    <Map size={15} aria-hidden="true" />
+                  </button>
+                </div>
+              )}
+
+              {/* Toolbar row */}
+              {locations.length > 0 && (
+                <div className="mb-4 flex flex-wrap items-center gap-2">
+                  <div className="relative flex-1 sm:max-w-xs">
+                    <Search
+                      size={14}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                    />
+                    <input
+                      type="search"
+                      autoComplete="off"
+                      placeholder="Search locations…"
+                      value={locationNameSearch}
+                      onChange={(e) => setLocationNameSearch(e.target.value)}
+                      className="h-9 w-full rounded-full border border-border bg-card pl-9 pr-4 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand"
+                      aria-label="Search by location name"
+                    />
+                  </div>
+
+                  {/* City filter */}
+                  {cities.size >= 2 && (
+                    <Popover
+                      open={cityPopoverOpen}
+                      onOpenChange={setCityPopoverOpen}
                     >
-                      All cities
-                    </button>
-                    <button
-                      type="button"
-                      className={cn(
-                        "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors",
-                        groupByCity && !cityFilter
-                          ? "bg-brand-muted font-medium text-brand-strong"
-                          : "text-foreground hover:bg-muted"
-                      )}
-                      onClick={() => {
-                        setGroupByCity(true);
-                        setCityFilter(null);
-                        setCategoryFilter(null);
-                        setGroupByPerson(false);
-                        setCityPopoverOpen(false);
-                      }}
-                    >
-                      Group by city
-                    </button>
-                    <div className="my-1 border-t border-border" />
-                    {Array.from(cities)
-                      .sort((a, b) => a.localeCompare(b))
-                      .map((city) => (
+                      <PopoverTrigger asChild>
                         <button
-                          key={city}
+                          type="button"
+                          className={cn(
+                            "inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm font-medium transition-colors",
+                            groupBy === "city" || cityFilter
+                              ? "bg-brand-muted text-brand-strong"
+                              : "text-foreground hover:bg-brand-muted"
+                          )}
+                        >
+                          <Building2 size={14} />
+                          {cityFilter
+                            ? cityFilter
+                            : groupBy === "city"
+                              ? "Grouped by city"
+                              : "City"}
+                          <ChevronDown size={12} className="opacity-50" />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        className="w-48 p-1.5"
+                        align="start"
+                        sideOffset={6}
+                      >
+                        <button
                           type="button"
                           className={cn(
                             "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors",
-                            cityFilter === city
+                            !cityFilter && groupBy !== "city"
                               ? "bg-brand-muted font-medium text-brand-strong"
                               : "text-foreground hover:bg-muted"
                           )}
                           onClick={() => {
-                            const next = cityFilter === city ? null : city;
-                            setCityFilter(next);
-                            setCategoryFilter(null);
-                            setGroupByCity(false);
+                            setCityFilter(null);
+                            setGroupBy(null);
                             setCityPopoverOpen(false);
                           }}
                         >
-                          <MapPin
-                            size={12}
-                            className="shrink-0 text-muted-foreground"
-                          />
-                          {city}
+                          All cities
                         </button>
-                      ))}
-                  </PopoverContent>
-                </Popover>
-              )}
-              {addedByEmails.size >= 2 && (
-                <button
-                  type="button"
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm font-medium transition-colors",
-                    groupByPerson
-                      ? "bg-brand-muted text-brand-strong"
-                      : "text-foreground hover:bg-brand-muted"
+                        <button
+                          type="button"
+                          className={cn(
+                            "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors",
+                            groupBy === "city" && !cityFilter
+                              ? "bg-brand-muted font-medium text-brand-strong"
+                              : "text-foreground hover:bg-muted"
+                          )}
+                          onClick={() => {
+                            setGroupBy("city");
+                            setCityFilter(null);
+                            setCategoryFilter(null);
+                            setPersonFilter(null);
+                            setCityPopoverOpen(false);
+                          }}
+                        >
+                          Group by city
+                        </button>
+                        <div className="my-1 border-t border-border" />
+                        {Array.from(cities)
+                          .sort((a, b) => a.localeCompare(b))
+                          .map((city) => (
+                            <button
+                              key={city}
+                              type="button"
+                              className={cn(
+                                "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors",
+                                cityFilter === city
+                                  ? "bg-brand-muted font-medium text-brand-strong"
+                                  : "text-foreground hover:bg-muted"
+                              )}
+                              onClick={() => {
+                                const next = cityFilter === city ? null : city;
+                                setCityFilter(next);
+                                setCategoryFilter(null);
+                                setGroupBy(null);
+                                setCityPopoverOpen(false);
+                              }}
+                            >
+                              <MapPin
+                                size={12}
+                                className="shrink-0 text-muted-foreground"
+                              />
+                              {city}
+                            </button>
+                          ))}
+                      </PopoverContent>
+                    </Popover>
                   )}
-                  onClick={() => {
-                    setGroupByPerson((v) => !v);
-                    if (!groupByPerson) setGroupByCity(false);
-                  }}
-                >
-                  <User size={14} />
-                  {groupByPerson ? "Ungrouped" : "Group by Person"}
-                </button>
-              )}
-              {/* Add Location dropdown — pushed to far right */}
-              {!addingLocation && (
-                <>
-                  <div className="flex-1" />
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-strong"
-                      >
-                        <Plus size={16} strokeWidth={2.5} />
-                        Add Location
-                        <ChevronDown size={14} />
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent
-                      className="w-52 p-1.5"
-                      align="end"
-                      sideOffset={6}
+
+                  {/* Category filter */}
+                  {categoryOptions.length >= 2 && (
+                    <Popover
+                      open={categoryPopoverOpen}
+                      onOpenChange={setCategoryPopoverOpen}
                     >
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          className={cn(
+                            "inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm font-medium transition-colors",
+                            categoryFilter || groupBy === "category"
+                              ? "bg-brand-muted text-brand-strong"
+                              : "text-foreground hover:bg-brand-muted"
+                          )}
+                        >
+                          <Tag size={14} />
+                          {categoryFilter
+                            ? categoryFilter
+                            : groupBy === "category"
+                              ? "Grouped by category"
+                              : "Category"}
+                          <ChevronDown size={12} className="opacity-50" />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        className="max-h-72 w-52 overflow-y-auto p-1.5"
+                        align="start"
+                        sideOffset={6}
+                      >
+                        <button
+                          type="button"
+                          className={cn(
+                            "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors",
+                            !categoryFilter && groupBy !== "category"
+                              ? "bg-brand-muted font-medium text-brand-strong"
+                              : "text-foreground hover:bg-muted"
+                          )}
+                          onClick={() => {
+                            setCategoryFilter(null);
+                            setGroupBy(null);
+                            setCategoryPopoverOpen(false);
+                          }}
+                        >
+                          All categories
+                        </button>
+                        <button
+                          type="button"
+                          className={cn(
+                            "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors",
+                            groupBy === "category" && !categoryFilter
+                              ? "bg-brand-muted font-medium text-brand-strong"
+                              : "text-foreground hover:bg-muted"
+                          )}
+                          onClick={() => {
+                            setGroupBy("category");
+                            setCategoryFilter(null);
+                            setPersonFilter(null);
+                            setCategoryPopoverOpen(false);
+                          }}
+                        >
+                          Group by category
+                        </button>
+                        <div className="my-1 border-t border-border" />
+                        {categoryOptions.map(([cat, count]) => (
+                          <button
+                            key={cat}
+                            type="button"
+                            className={cn(
+                              "flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-sm transition-colors",
+                              categoryFilter === cat
+                                ? "bg-brand-muted font-medium text-brand-strong"
+                                : "text-foreground hover:bg-muted"
+                            )}
+                            onClick={() => {
+                              setCategoryFilter(
+                                categoryFilter === cat ? null : cat
+                              );
+                              setGroupBy(null);
+                              setCategoryPopoverOpen(false);
+                            }}
+                          >
+                            {cat}
+                            <span className="text-xs text-muted-foreground">
+                              {count}
+                            </span>
+                          </button>
+                        ))}
+                      </PopoverContent>
+                    </Popover>
+                  )}
+
+                  {/* Added by filter */}
+                  {addedByEmails.size >= 2 && (
+                    <Popover
+                      open={personPopoverOpen}
+                      onOpenChange={setPersonPopoverOpen}
+                    >
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          className={cn(
+                            "inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm font-medium transition-colors",
+                            personFilter || groupBy === "person"
+                              ? "bg-brand-muted text-brand-strong"
+                              : "text-foreground hover:bg-brand-muted"
+                          )}
+                        >
+                          <User size={14} />
+                          {personFilter
+                            ? personFilter.split("@")[0]
+                            : groupBy === "person"
+                              ? "Grouped by person"
+                              : "Added by"}
+                          <ChevronDown size={12} className="opacity-50" />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        className="w-56 p-1.5"
+                        align="start"
+                        sideOffset={6}
+                      >
+                        <button
+                          type="button"
+                          className={cn(
+                            "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors",
+                            !personFilter && groupBy !== "person"
+                              ? "bg-brand-muted font-medium text-brand-strong"
+                              : "text-foreground hover:bg-muted"
+                          )}
+                          onClick={() => {
+                            setPersonFilter(null);
+                            setGroupBy(null);
+                            setPersonPopoverOpen(false);
+                          }}
+                        >
+                          Everyone
+                        </button>
+                        <button
+                          type="button"
+                          className={cn(
+                            "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors",
+                            groupBy === "person" && !personFilter
+                              ? "bg-brand-muted font-medium text-brand-strong"
+                              : "text-foreground hover:bg-muted"
+                          )}
+                          onClick={() => {
+                            setGroupBy("person");
+                            setPersonFilter(null);
+                            setCityFilter(null);
+                            setCategoryFilter(null);
+                            setPersonPopoverOpen(false);
+                          }}
+                        >
+                          Group by person
+                        </button>
+                        <div className="my-1 border-t border-border" />
+                        {Array.from(addedByEmails)
+                          .sort((a, b) => a.localeCompare(b))
+                          .map((email) => (
+                            <button
+                              key={email}
+                              type="button"
+                              title={email}
+                              className={cn(
+                                "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors",
+                                personFilter === email
+                                  ? "bg-brand-muted font-medium text-brand-strong"
+                                  : "text-foreground hover:bg-muted"
+                              )}
+                              onClick={() => {
+                                const next =
+                                  personFilter === email ? null : email;
+                                setPersonFilter(next);
+                                setGroupBy(null);
+                                setPersonPopoverOpen(false);
+                              }}
+                            >
+                              <User
+                                size={12}
+                                className="shrink-0 text-muted-foreground"
+                              />
+                              {email.split("@")[0]}
+                            </button>
+                          ))}
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                </div>
+              )}
+
+              {addingLocation && (
+                <AddLocationForm
+                  tripId={tripId}
+                  existingLocations={locations}
+                  availableDays={availableDays}
+                  initialGoogleLink={
+                    addingLocation.mode === "prefilled"
+                      ? addingLocation.googleLink
+                      : undefined
+                  }
+                  initialName={
+                    addingLocation.mode === "prefilled"
+                      ? addingLocation.name
+                      : undefined
+                  }
+                  linkEntryMode={addingLocation.mode === "link-entry"}
+                  onAdded={handleLocationAdded}
+                  onCancel={() => setAddingLocation(null)}
+                />
+              )}
+
+              {editingLocation && (
+                <EditLocationRow
+                  tripId={tripId}
+                  location={editingLocation}
+                  onUpdated={handleLocationUpdated}
+                  onCancel={() => setEditingLocationId(null)}
+                />
+              )}
+
+              {locations.length === 0 && !addingLocation ? (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4 }}
+                  className="flex flex-col items-center py-12 text-center"
+                >
+                  <h2 className="text-3xl font-bold tracking-tight text-foreground">
+                    Ready to build your{" "}
+                    <span className="italic text-primary">pool?</span>
+                  </h2>
+                  <p className="mx-auto mt-3 max-w-md text-sm text-muted-foreground">
+                    Choose how you want to add your first spots. Your pool is a
+                    curated collection of inspirations for your next journey.
+                  </p>
+
+                  <div className="mt-8 grid w-full max-w-2xl grid-cols-1 gap-4 sm:grid-cols-3">
+                    {/* Paste a Link — recommended */}
+                    <div className="relative flex flex-col items-center rounded-2xl border border-border bg-card px-5 pb-5 pt-8 shadow-sm">
+                      <span className="absolute -top-3 rounded-full bg-primary px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+                        Recommended
+                      </span>
+                      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+                        <Link2 size={22} className="text-primary" />
+                      </div>
+                      <h3 className="text-sm font-bold text-foreground">
+                        Paste a Link
+                      </h3>
+                      <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                        Found a spot on Google Maps? Paste the link and
+                        we&#39;ll fill in the details automatically.
+                      </p>
                       <button
                         type="button"
-                        className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-brand-muted"
-                        onClick={() => setAddingLocation(true)}
+                        onClick={() =>
+                          setAddingLocation({ mode: "link-entry" })
+                        }
+                        className="mt-4 w-full rounded-full bg-primary px-5 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-primary-strong hover:shadow-md"
                       >
-                        <MapPin size={16} className="text-primary" />
                         Paste Link
                       </button>
+                    </div>
+
+                    {/* Import a List */}
+                    <div className="flex flex-col items-center rounded-2xl border border-border bg-card px-5 pb-5 pt-8 shadow-sm">
+                      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-brand/10">
+                        <FileUp size={22} className="text-brand" />
+                      </div>
+                      <h3 className="text-sm font-bold text-foreground">
+                        Import a List
+                      </h3>
+                      <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                        Have a saved Google Maps list? Import all your
+                        bookmarked places at once.
+                      </p>
                       <ImportGoogleListDialog
                         tripId={tripId}
                         trigger={
                           <button
                             type="button"
-                            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-brand-muted"
+                            className="mt-4 w-full rounded-full border border-border bg-secondary/80 px-5 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-secondary"
                           >
-                            <List size={16} className="text-brand" />
-                            Import Google List
+                            Import List
                           </button>
                         }
                         onImported={fetchData}
                       />
-                    </PopoverContent>
-                  </Popover>
-                </>
+                    </div>
+
+                    {/* Add Manually */}
+                    <div className="flex flex-col items-center rounded-2xl border border-border bg-card px-5 pb-5 pt-8 shadow-sm">
+                      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-accent/20">
+                        <PenLine
+                          size={22}
+                          className="text-accent-foreground/60"
+                        />
+                      </div>
+                      <h3 className="text-sm font-bold text-foreground">
+                        Add Manually
+                      </h3>
+                      <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                        Know a hidden gem? Type in the name and details yourself
+                        — no link needed.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setAddingLocation({ mode: "manual" })
+                        }
+                        className="mt-4 w-full rounded-full border border-border bg-secondary/80 px-5 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-secondary"
+                      >
+                        Add Manually
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              ) : filteredLocations.length === 0 &&
+                (locationNameSearch.trim() ||
+                  categoryFilter ||
+                  cityFilter ||
+                  personFilter) ? (
+                <p className="py-4 text-sm text-muted-foreground">
+                  No locations match the current filters.
+                </p>
+              ) : groupedLocations ? (
+                <div className="space-y-8">
+                  {groupedLocations.map(([groupName, locs]) => (
+                    <div key={groupName}>
+                      <div className="mb-4 flex items-center gap-3">
+                        {groupBy === "city" && (
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand/10">
+                            <MapPin size={14} className="text-brand" />
+                          </div>
+                        )}
+                        {groupBy === "category" && (
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand/10">
+                            <Tag size={14} className="text-brand" />
+                          </div>
+                        )}
+                        {groupBy === "person" && (
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                            <User size={14} className="text-primary" />
+                          </div>
+                        )}
+                        <div>
+                          <h3 className="text-base font-bold text-foreground">
+                            {groupName}
+                          </h3>
+                          <p className="text-xs text-muted-foreground">
+                            {locs.length}{" "}
+                            {locs.length === 1 ? "location" : "locations"}
+                          </p>
+                        </div>
+                        <div className="h-px flex-1 bg-border" />
+                      </div>
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        {locs.map(renderLocationCard)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {filteredLocations.map(renderLocationCard)}
+                </div>
               )}
             </div>
-          )}
 
-          {/* Category filter pills */}
-          {categoryOptions.length >= 2 && (
-            <div
-              className="mb-4 flex flex-wrap gap-1.5"
-              role="toolbar"
-              aria-label="Filter locations by category"
-            >
-              <button
-                className={cn(
-                  "rounded-full px-3 py-1 text-xs font-medium transition-colors",
-                  categoryFilter === null
-                    ? "bg-brand text-white"
-                    : "border border-border bg-card text-muted-foreground hover:bg-brand-muted"
-                )}
-                onClick={() => setCategoryFilter(null)}
-              >
-                All Locations
-              </button>
-              {categoryOptions.map(([cat]) => (
-                <button
-                  key={cat}
-                  className={cn(
-                    "rounded-full px-3 py-1 text-xs font-medium transition-colors",
-                    categoryFilter === cat
-                      ? "bg-brand text-white"
-                      : "border border-border bg-card text-muted-foreground hover:bg-brand-muted"
-                  )}
-                  onClick={() =>
-                    setCategoryFilter(categoryFilter === cat ? null : cat)
-                  }
-                >
-                  {cat}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {addingLocation && (
-            <AddLocationForm
-              tripId={tripId}
-              existingLocations={locations}
-              availableDays={availableDays}
-              onAdded={handleLocationAdded}
-              onCancel={() => setAddingLocation(false)}
-            />
-          )}
-
-          {editingLocation && (
-            <EditLocationRow
-              tripId={tripId}
-              location={editingLocation}
-              onUpdated={handleLocationUpdated}
-              onCancel={() => setEditingLocationId(null)}
-            />
-          )}
-
-          {locations.length === 0 && !addingLocation ? (
-            <EmptyState message="No locations added to this trip yet.">
-              <div className="flex flex-wrap items-center justify-center gap-3">
-                <Button onClick={() => setAddingLocation(true)}>
-                  <MapPin size={16} className="mr-1.5" />
-                  Add a location
-                </Button>
-                <ImportGoogleListDialog
-                  tripId={tripId}
-                  trigger={
-                    <Button variant="outline">
-                      <List size={16} className="mr-1.5" />
-                      Import Google List
-                    </Button>
-                  }
-                  onImported={fetchData}
+            {/* Right column — Trip Summary sidebar */}
+            {locations.length > 0 && (
+              <div className="hidden xl:block xl:sticky xl:top-[6.75rem] xl:self-start">
+                <TripSummaryCard
+                  locations={locations}
+                  addedByEmails={addedByEmails}
                 />
               </div>
-            </EmptyState>
-          ) : filteredLocations.length === 0 && locationNameSearch.trim() ? (
-            <p className="py-4 text-sm text-muted-foreground">
-              No locations match &quot;{locationNameSearch.trim()}&quot;. Try a
-              different search or clear the search box.
-            </p>
-          ) : groupedLocations ? (
-            <div className="space-y-8">
-              {groupedLocations.map(([groupName, locs]) => (
-                <div key={groupName}>
-                  <div className="mb-4 flex items-center gap-3">
-                    {groupByCity && (
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand/10">
-                        <MapPin size={14} className="text-brand" />
-                      </div>
-                    )}
-                    {groupByPerson && (
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                        <User size={14} className="text-primary" />
-                      </div>
-                    )}
-                    <div>
-                      <h3 className="text-base font-bold text-foreground">
-                        {groupName}
-                      </h3>
-                      <p className="text-xs text-muted-foreground">
-                        {locs.length}{" "}
-                        {locs.length === 1 ? "location" : "locations"}
-                      </p>
-                    </div>
-                    <div className="h-px flex-1 bg-border" />
-                  </div>
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {locs.map(renderLocationCard)}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {filteredLocations.map(renderLocationCard)}
-            </div>
-          )}
+            )}
+          </div>
+
+          <LocationsMapDialog
+            locations={locations}
+            open={mapDialogOpen}
+            onOpenChange={setMapDialogOpen}
+          />
         </section>
       )}
 
       {activeTab === "itinerary" && (
-        <div className="mt-6">
+        <section
+          id="tab-panel-itinerary"
+          role="tabpanel"
+          aria-labelledby="tab-itinerary"
+          className="mt-6"
+        >
           <ItineraryTab
             trip={trip}
             tripId={tripId}
             locations={locations}
             itineraryState={itineraryState}
           />
-        </div>
+        </section>
+      )}
+
+      {activeTab === "budget" && (
+        <section
+          id="tab-panel-budget"
+          role="tabpanel"
+          aria-labelledby="tab-budget"
+          className="mt-6"
+        >
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card/50 py-16">
+            <DollarSign size={32} className="text-muted-foreground/30" />
+            <h3 className="mt-3 text-lg font-semibold text-foreground">
+              Budget tracking coming soon
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Track expenses and split costs with your travel companions.
+            </p>
+          </div>
+        </section>
+      )}
+
+      {activeTab === "documents" && (
+        <section
+          id="tab-panel-documents"
+          role="tabpanel"
+          aria-labelledby="tab-documents"
+          className="mt-6"
+        >
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card/50 py-16">
+            <FileText size={32} className="text-muted-foreground/30" />
+            <h3 className="mt-3 text-lg font-semibold text-foreground">
+              Documents coming soon
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Store boarding passes, hotel confirmations, and travel documents.
+            </p>
+          </div>
+        </section>
       )}
 
       <ShareTripDialog

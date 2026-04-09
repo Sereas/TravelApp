@@ -46,9 +46,9 @@ export function EditLocationRow({
     location.working_hours ?? ""
   );
   const [requiresBooking, setRequiresBooking] = useState(
-    location.requires_booking ?? ""
+    location.requires_booking || "no"
   );
-  const [category, setCategory] = useState(location.category ?? "");
+  const [category, setCategory] = useState(location.category || "Other");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -146,7 +146,6 @@ export function EditLocationRow({
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
               >
-                <option value="">—</option>
                 {CATEGORY_OPTIONS.map((opt) => (
                   <option key={opt} value={opt}>
                     {opt}

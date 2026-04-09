@@ -1,8 +1,7 @@
 export const REQUIRES_BOOKING_OPTIONS = [
-  { value: "", label: "—" },
   { value: "no", label: "No" },
   { value: "yes", label: "Yes" },
-  { value: "yes_done", label: "Yes (done)" },
+  { value: "yes_done", label: "Yes (booked)" },
 ] as const;
 
 export const CATEGORY_OPTIONS = [

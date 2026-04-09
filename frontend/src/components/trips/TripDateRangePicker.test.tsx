@@ -210,6 +210,46 @@ describe("TripDateRangePicker — range selection", () => {
 });
 
 // ---------------------------------------------------------------------------
+// 3b. Bug regression: no dates → first click should NOT close popover
+// ---------------------------------------------------------------------------
+
+describe("TripDateRangePicker — no existing dates", () => {
+  it("keeps popover open after first click when no dates are set", async () => {
+    const { onDateRangeChange } = setup({
+      startDate: null,
+      endDate: null,
+    });
+    await userEvent.click(screen.getByRole("button", { name: /date range/i }));
+    expectCalendarOpen();
+
+    // Click a day — should stay open, not save
+    await userEvent.click(getDayButton("April", 15, 2026));
+
+    expectCalendarOpen();
+    expect(onDateRangeChange).not.toHaveBeenCalled();
+  });
+
+  it("saves and closes after two clicks when no dates are set", async () => {
+    const { onDateRangeChange } = setup({
+      startDate: null,
+      endDate: null,
+    });
+    await userEvent.click(screen.getByRole("button", { name: /date range/i }));
+
+    await userEvent.click(getDayButton("April", 10, 2026));
+    await userEvent.click(getDayButton("April", 20, 2026));
+
+    await waitFor(() => {
+      expect(onDateRangeChange).toHaveBeenCalledWith(
+        "2026-04-10",
+        "2026-04-20"
+      );
+    });
+    await waitFor(() => expectCalendarClosed());
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 4. Pre-selected range shown in calendar
 // rdp v9: aria-selected is on <td> gridcell, button label appends ", selected"
 // ---------------------------------------------------------------------------

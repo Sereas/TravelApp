@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { Calendar } from "lucide-react";
+import { Calendar, Trash2 } from "lucide-react";
 import { TripGradient } from "@/components/trips/TripGradient";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 export interface TripCardProps {
   id: string;
@@ -12,6 +13,7 @@ export interface TripCardProps {
   imageUrl?: string | null;
   href?: string;
   onClick?: (id: string) => void;
+  onDelete?: (id: string) => void;
 }
 
 function formatDate(dateStr: string): string {
@@ -38,6 +40,7 @@ export function TripCard({
   imageUrl,
   href,
   onClick,
+  onDelete,
 }: TripCardProps) {
   const dateDisplay = formatDateDisplay(startDate, endDate);
   const hasDates = startDate || endDate;
@@ -58,6 +61,32 @@ export function TripCard({
             name={name}
             className="h-full w-full transition-transform duration-300 group-hover:scale-105"
           />
+        )}
+        {onDelete && (
+          <div
+            className="absolute right-2 top-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
+            <ConfirmDialog
+              trigger={
+                <button
+                  type="button"
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-destructive text-white shadow-md transition-transform hover:scale-110"
+                  aria-label={`Delete ${name}`}
+                >
+                  <Trash2 size={15} />
+                </button>
+              }
+              title="Delete trip?"
+              description={`This will permanently delete "${name}" and all its locations. This action cannot be undone.`}
+              confirmLabel="Delete trip"
+              variant="destructive"
+              onConfirm={() => onDelete(id)}
+            />
+          </div>
         )}
       </div>
 

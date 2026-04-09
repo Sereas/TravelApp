@@ -6,7 +6,7 @@ export default function HomePage() {
     <div className="flex flex-col items-center">
       {/* Hero section */}
       <section className="flex w-full flex-col items-center px-4 pb-12 pt-10 sm:pb-16 sm:pt-14">
-        <h1 className="max-w-2xl text-center font-serif text-5xl font-bold leading-tight tracking-tight text-foreground sm:text-6xl md:text-7xl">
+        <h1 className="max-w-2xl text-center text-5xl font-bold leading-tight tracking-tight text-foreground sm:text-6xl md:text-7xl">
           Plan your next <span className="text-brand">adventure</span>
         </h1>
         <p className="mt-6 max-w-lg text-center text-lg text-muted-foreground">

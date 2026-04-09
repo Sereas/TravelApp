@@ -35,13 +35,13 @@ describe("AddLocationForm", () => {
       />
     );
     expect(screen.getByLabelText(/location name/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/address/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/full address/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/city/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/google maps link/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/hours/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/google maps url/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/opening hours/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/booking/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/category/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/note/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/personal notes/i)).toBeInTheDocument();
   });
 
   it("requires location name", () => {
@@ -83,15 +83,24 @@ describe("AddLocationForm", () => {
     );
 
     await userEvent.type(screen.getByLabelText(/location name/i), "Louvre");
-    await userEvent.type(screen.getByLabelText(/address/i), "Rue de Rivoli");
+    await userEvent.type(
+      screen.getByLabelText(/full address/i),
+      "Rue de Rivoli"
+    );
     await userEvent.type(screen.getByLabelText(/city/i), "Paris");
-    await userEvent.type(screen.getByLabelText(/^hours/i), "9-18");
-    await userEvent.selectOptions(screen.getByLabelText(/^booking/i), "yes");
+    await userEvent.type(screen.getByLabelText(/opening hours/i), "9-18");
+    await userEvent.selectOptions(
+      screen.getByLabelText(/booking/i),
+      "yes"
+    );
     await userEvent.selectOptions(screen.getByLabelText(/category/i), "Museum");
-    await userEvent.type(screen.getByLabelText(/note/i), "Book ahead");
+    await userEvent.type(
+      screen.getByLabelText(/personal notes/i),
+      "Book ahead"
+    );
 
     await userEvent.click(
-      screen.getByRole("button", { name: /^add location$/i })
+      screen.getByRole("button", { name: /^save location$/i })
     );
 
     await waitFor(() => {
@@ -112,7 +121,7 @@ describe("AddLocationForm", () => {
     expect(onAdded).toHaveBeenCalledWith(newLocation, null);
   });
 
-  it("sends null for empty optional fields", async () => {
+  it("sends defaults for booking and category when not changed", async () => {
     mockAdd.mockResolvedValue({
       id: "loc-new",
       name: "Place",
@@ -121,8 +130,8 @@ describe("AddLocationForm", () => {
       note: null,
       city: null,
       working_hours: null,
-      requires_booking: null,
-      category: null,
+      requires_booking: "no",
+      category: "Other",
       added_by_user_id: null,
       added_by_email: null,
     });
@@ -137,7 +146,7 @@ describe("AddLocationForm", () => {
     );
     await userEvent.type(screen.getByLabelText(/location name/i), "Place");
     await userEvent.click(
-      screen.getByRole("button", { name: /^add location$/i })
+      screen.getByRole("button", { name: /^save location$/i })
     );
 
     await waitFor(() => {
@@ -151,8 +160,8 @@ describe("AddLocationForm", () => {
         note: null,
         city: null,
         working_hours: null,
-        requires_booking: null,
-        category: null,
+        requires_booking: "no",
+        category: "Other",
       });
     });
   });
@@ -170,7 +179,7 @@ describe("AddLocationForm", () => {
     );
     await userEvent.type(screen.getByLabelText(/location name/i), "Place");
     await userEvent.click(
-      screen.getByRole("button", { name: /^add location$/i })
+      screen.getByRole("button", { name: /^save location$/i })
     );
 
     expect(await screen.findByText("Server error")).toBeInTheDocument();
@@ -203,10 +212,10 @@ describe("AddLocationForm", () => {
     );
     await userEvent.type(screen.getByLabelText(/location name/i), "Place");
     await userEvent.click(
-      screen.getByRole("button", { name: /^add location$/i })
+      screen.getByRole("button", { name: /^save location$/i })
     );
 
-    expect(screen.getByRole("button", { name: /adding/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /saving/i })).toBeInTheDocument();
   });
 
   it("shows duplicate warning when google_place_id matches existing location", async () => {
@@ -255,7 +264,7 @@ describe("AddLocationForm", () => {
       />
     );
 
-    const linkInput = screen.getByLabelText(/google maps link/i);
+    const linkInput = screen.getByLabelText(/google maps url/i);
     await userEvent.type(linkInput, "https://maps.app.goo.gl/abc123");
     await userEvent.tab();
 
@@ -317,13 +326,12 @@ describe("AddLocationForm", () => {
     );
 
     await userEvent.type(screen.getByLabelText(/location name/i), "Place");
-    // Open the day picker popover and select "May 16"
     await userEvent.click(
       screen.getByRole("button", { name: /schedule to day/i })
     );
     await userEvent.click(screen.getByText("May 16"));
     await userEvent.click(
-      screen.getByRole("button", { name: /^add location$/i })
+      screen.getByRole("button", { name: /^save location$/i })
     );
 
     await waitFor(() => {
@@ -345,7 +353,7 @@ describe("AddLocationForm", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows map hint message", () => {
+  it("shows subtitle description", () => {
     render(
       <AddLocationForm
         tripId={tripId}
@@ -355,8 +363,244 @@ describe("AddLocationForm", () => {
       />
     );
     expect(
-      screen.getByText(/auto-fills details.*enables map pin/i)
+      screen.getByText(/add a new destination to your curated journey/i)
     ).toBeInTheDocument();
+  });
+
+  // --- initialGoogleLink prop ---
+
+  it("shows the google link as read-only text when initialGoogleLink is provided", () => {
+    mockPreview.mockReturnValue(new Promise(() => {}));
+    render(
+      <AddLocationForm
+        tripId={tripId}
+        existingLocations={[]}
+        initialGoogleLink="https://maps.app.goo.gl/HFaERRSAPvPePT1D6"
+        onAdded={onAdded}
+        onCancel={onCancel}
+      />
+    );
+    expect(
+      screen.getByText("https://maps.app.goo.gl/HFaERRSAPvPePT1D6")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("textbox", { name: /google maps url/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows loading state before fields when initialGoogleLink is provided", () => {
+    mockPreview.mockReturnValue(new Promise(() => {}));
+    render(
+      <AddLocationForm
+        tripId={tripId}
+        existingLocations={[]}
+        initialGoogleLink="https://maps.app.goo.gl/HFaERRSAPvPePT1D6"
+        onAdded={onAdded}
+        onCancel={onCancel}
+      />
+    );
+    expect(
+      screen.getByText(/looking up location details/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText(/location name/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^save location$/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not auto-focus the link field when initialGoogleLink is provided", () => {
+    mockPreview.mockReturnValue(new Promise(() => {}));
+    render(
+      <AddLocationForm
+        tripId={tripId}
+        existingLocations={[]}
+        initialGoogleLink="https://maps.app.goo.gl/HFaERRSAPvPePT1D6"
+        onAdded={onAdded}
+        onCancel={onCancel}
+      />
+    );
+    expect(document.activeElement?.tagName).not.toBe("INPUT");
+  });
+
+  it("auto-triggers preview on mount when initialGoogleLink is provided", async () => {
+    mockPreview.mockResolvedValue({
+      name: "Louvre Museum",
+      address: "Rue de Rivoli, 75001 Paris, France",
+      city: "Paris",
+      latitude: 48.8606111,
+      longitude: 2.337644,
+      google_place_id: "ChIJCzYy5IS16lQRQrfeQ5K5Oxw",
+      suggested_category: "Museum",
+      working_hours: ["Tuesday: 9-18"],
+      website: null,
+      phone: null,
+      google_raw: { status: "OK" },
+    });
+
+    render(
+      <AddLocationForm
+        tripId={tripId}
+        existingLocations={[]}
+        initialGoogleLink="https://maps.app.goo.gl/HFaERRSAPvPePT1D6"
+        onAdded={onAdded}
+        onCancel={onCancel}
+      />
+    );
+
+    await waitFor(() => {
+      expect(mockPreview).toHaveBeenCalledWith({
+        google_link: "https://maps.app.goo.gl/HFaERRSAPvPePT1D6",
+      });
+    });
+
+    expect(
+      (screen.getByLabelText(/location name/i) as HTMLInputElement).value
+    ).toBe("Louvre Museum");
+  });
+
+  it("reveals fields after preview completes for initialGoogleLink", async () => {
+    mockPreview.mockResolvedValue({
+      name: "Casino de Monte-Carlo",
+      address: "Pl. du Casino, 98000 Monaco",
+      city: "Monte Carlo",
+      latitude: 43.74,
+      longitude: 7.43,
+      google_place_id: "ChIJABC",
+      suggested_category: "Viewpoint",
+      working_hours: ["Mon: 2:00 PM-4:00 AM"],
+      website: null,
+      phone: null,
+      google_raw: {},
+    });
+
+    render(
+      <AddLocationForm
+        tripId={tripId}
+        existingLocations={[]}
+        initialGoogleLink="https://maps.app.goo.gl/test123"
+        onAdded={onAdded}
+        onCancel={onCancel}
+      />
+    );
+
+    expect(screen.queryByLabelText(/location name/i)).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/location name/i)).toBeInTheDocument();
+    });
+    expect(
+      (screen.getByLabelText(/location name/i) as HTMLInputElement).value
+    ).toBe("Casino de Monte-Carlo");
+    expect((screen.getByLabelText(/city/i) as HTMLInputElement).value).toBe(
+      "Monte Carlo"
+    );
+    expect(
+      (screen.getByLabelText(/full address/i) as HTMLInputElement).value
+    ).toBe("Pl. du Casino, 98000 Monaco");
+    expect(
+      screen.getByRole("button", { name: /^save location$/i })
+    ).toBeInTheDocument();
+  });
+
+  it("shows fields on error when initialGoogleLink preview fails", async () => {
+    mockPreview.mockRejectedValue(new Error("Google API error"));
+
+    render(
+      <AddLocationForm
+        tripId={tripId}
+        existingLocations={[]}
+        initialGoogleLink="https://maps.app.goo.gl/broken"
+        onAdded={onAdded}
+        onCancel={onCancel}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Google API error")).toBeInTheDocument();
+    });
+    expect(screen.getByLabelText(/location name/i)).toBeInTheDocument();
+  });
+
+  it("does not auto-trigger preview when initialGoogleLink is absent", () => {
+    render(
+      <AddLocationForm
+        tripId={tripId}
+        existingLocations={[]}
+        onAdded={onAdded}
+        onCancel={onCancel}
+      />
+    );
+    expect(mockPreview).not.toHaveBeenCalled();
+  });
+
+  // --- initialName prop ---
+
+  it("seeds the name field when initialName is provided", () => {
+    render(
+      <AddLocationForm
+        tripId={tripId}
+        existingLocations={[]}
+        initialName="Arc de Triomphe"
+        onAdded={onAdded}
+        onCancel={onCancel}
+      />
+    );
+    expect(
+      (screen.getByLabelText(/location name/i) as HTMLInputElement).value
+    ).toBe("Arc de Triomphe");
+  });
+
+  it("allows the user to continue editing the seeded name", async () => {
+    render(
+      <AddLocationForm
+        tripId={tripId}
+        existingLocations={[]}
+        initialName="Arc"
+        onAdded={onAdded}
+        onCancel={onCancel}
+      />
+    );
+    const nameInput = screen.getByLabelText(/location name/i);
+    await userEvent.type(nameInput, " de Triomphe");
+    expect((nameInput as HTMLInputElement).value).toBe("Arc de Triomphe");
+  });
+
+  it("seeds both name and google link when both initial props are provided", async () => {
+    mockPreview.mockResolvedValue({
+      name: "Eiffel Tower",
+      address: null,
+      city: null,
+      latitude: 48.86,
+      longitude: 2.29,
+      google_place_id: "ChIJXYZ",
+      suggested_category: null,
+      working_hours: [],
+      website: null,
+      phone: null,
+      google_raw: {},
+    });
+
+    render(
+      <AddLocationForm
+        tripId={tripId}
+        existingLocations={[]}
+        initialName="Eiffel Tower"
+        initialGoogleLink="https://maps.app.goo.gl/abc123"
+        onAdded={onAdded}
+        onCancel={onCancel}
+      />
+    );
+
+    expect(
+      screen.getByText("https://maps.app.goo.gl/abc123")
+    ).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/location name/i)).toBeInTheDocument();
+    });
+    expect(
+      (screen.getByLabelText(/location name/i) as HTMLInputElement).value
+    ).toBe("Eiffel Tower");
   });
 
   it("calls Google preview on blur and prefills fields", async () => {
@@ -382,12 +626,12 @@ describe("AddLocationForm", () => {
       />
     );
 
-    const linkInput = screen.getByLabelText(/google maps link/i);
+    const linkInput = screen.getByLabelText(/google maps url/i);
     await userEvent.type(
       linkInput,
       "https://maps.app.goo.gl/HFaERRSAPvPePT1D6"
     );
-    await userEvent.tab(); // trigger blur
+    await userEvent.tab();
 
     await waitFor(() => {
       expect(mockPreview).toHaveBeenCalledWith({
@@ -395,12 +639,11 @@ describe("AddLocationForm", () => {
       });
     });
 
-    // Name and address should be prefilled from preview
     expect(
       (screen.getByLabelText(/location name/i) as HTMLInputElement).value
     ).toBe("Louvre Museum");
     expect(
-      (screen.getByLabelText(/address/i) as HTMLInputElement).value
+      (screen.getByLabelText(/full address/i) as HTMLInputElement).value
     ).toContain("Rue de Rivoli");
   });
 });

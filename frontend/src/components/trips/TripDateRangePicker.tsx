@@ -83,6 +83,13 @@ export function TripDateRangePicker({
       return;
     }
 
+    // rdp may return same date for both from/to on first click —
+    // treat as incomplete (only start selected), keep popover open
+    if (gotComplete && newRange!.from!.getTime() === newRange!.to!.getTime()) {
+      setRange({ from: newRange!.from, to: undefined });
+      return;
+    }
+
     setRange(newRange);
 
     if (!hadComplete && gotComplete) {
