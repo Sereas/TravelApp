@@ -20,7 +20,7 @@
  * this file.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import {
   api,
@@ -201,6 +201,11 @@ export default function SharedTripPage() {
   );
 }
 
+// Sidebar pin click → scroll-to-card + highlight-pulse timing. Matches the
+// owner route's timings so both views feel identical.
+const HIGHLIGHT_START_DELAY_MS = 350;
+const HIGHLIGHT_ANIMATION_MS = 2000;
+
 function SharedTripContent({ data }: { data: SharedTripData }) {
   const trip = useMemo(() => toTrip(data.trip), [data.trip]);
   const locations = useMemo(
@@ -208,6 +213,61 @@ function SharedTripContent({ data }: { data: SharedTripData }) {
     [data.locations]
   );
   const itineraryState = useSharedItineraryReadState(data.itinerary);
+
+  // Map ↔ card interactions are pure UI (no data mutations), so they run in
+  // shared mode too. Card click → focus the sidebar map on that location.
+  // Pin click → scroll the card into view and briefly highlight it.
+  const [focusedLocation, setFocusedLocation] = useState<{
+    id: string;
+    seq: number;
+  } | null>(null);
+  const focusSeqRef = useRef(0);
+  const [highlightedLocationId, setHighlightedLocationId] = useState<
+    string | null
+  >(null);
+  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+
+  const handleCardClick = useCallback((locationId: string) => {
+    focusSeqRef.current += 1;
+    setFocusedLocation({ id: locationId, seq: focusSeqRef.current });
+  }, []);
+
+  const handlePinClick = useCallback((locationId: string) => {
+    if (highlightTimeoutRef.current != null) {
+      clearTimeout(highlightTimeoutRef.current);
+      highlightTimeoutRef.current = null;
+    }
+    setHighlightedLocationId(null);
+
+    requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLElement>(
+        `[data-location-id="${CSS.escape(locationId)}"]`
+      );
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    });
+
+    highlightTimeoutRef.current = setTimeout(() => {
+      setHighlightedLocationId(locationId);
+      highlightTimeoutRef.current = setTimeout(() => {
+        setHighlightedLocationId((prev) => (prev === locationId ? null : prev));
+        highlightTimeoutRef.current = null;
+      }, HIGHLIGHT_ANIMATION_MS);
+    }, HIGHLIGHT_START_DELAY_MS);
+  }, []);
+
+  // Cancel any pending highlight timeout on unmount.
+  useEffect(() => {
+    return () => {
+      if (highlightTimeoutRef.current != null) {
+        clearTimeout(highlightTimeoutRef.current);
+        highlightTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   return (
     <TripView
@@ -217,6 +277,10 @@ function SharedTripContent({ data }: { data: SharedTripData }) {
       itineraryState={itineraryState}
       readOnly={true}
       canShare={false}
+      focusedLocation={focusedLocation}
+      highlightedLocationId={highlightedLocationId}
+      onCardClick={handleCardClick}
+      onMapPinClick={handlePinClick}
     />
   );
 }

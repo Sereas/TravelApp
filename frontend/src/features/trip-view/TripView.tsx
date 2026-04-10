@@ -315,9 +315,7 @@ export function TripView({
             ? undefined
             : () => onStartEditingLocation(loc.id)
         }
-        onCardClick={
-          isReadOnly || !onCardClick ? undefined : () => onCardClick(loc.id)
-        }
+        onCardClick={onCardClick ? () => onCardClick(loc.id) : undefined}
         deleteTrigger={
           isReadOnly || !renderLocationDeleteTrigger
             ? undefined
@@ -1093,7 +1091,7 @@ export function TripView({
                     locations={filteredLocations}
                     focusLocationId={focusedLocation?.id ?? null}
                     focusSeq={focusedLocation?.seq ?? 0}
-                    onPinClick={isReadOnly ? undefined : onMapPinClick}
+                    onPinClick={onMapPinClick}
                     onLocationNoteSave={isReadOnly ? undefined : onMapNoteSave}
                     onLocationDelete={isReadOnly ? undefined : onMapDelete}
                     readOnly={isReadOnly}
