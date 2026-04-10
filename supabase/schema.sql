@@ -327,6 +327,7 @@ BEGIN
       o.starting_city  AS option_starting_city,
       o.ending_city    AS option_ending_city,
       o.created_at     AS option_created_at,
+      ol.id            AS ol_id,
       ol.location_id,
       ol.sort_order    AS ol_sort_order,
       ol.time_period,
