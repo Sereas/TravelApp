@@ -78,7 +78,11 @@ interface ItineraryDayHeaderProps {
     optionId: string | undefined
   ) => void;
   onSelectOption: (dayId: string, optionId: string) => void;
-  onCreateAlternative: (
+  /**
+   * Optional — when omitted, the "Create alternative" affordance in the plan
+   * switcher is hidden. Used by shared read-only views.
+   */
+  onCreateAlternative?: (
     dayId: string,
     name?: string
   ) => Promise<string | null> | void;
@@ -245,7 +249,7 @@ export function ItineraryDayHeader({
         )}
       </div>
 
-      {!readOnly && (
+      {!readOnly && onCreateAlternative && (
         <ItineraryPlanSwitcher
           day={day}
           currentOption={currentOption}

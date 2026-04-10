@@ -108,18 +108,23 @@ export interface ItineraryDayCardProps {
   createOptionLoading: boolean;
   tripStartDate: string | null;
   tripEndDate: string | null;
-  onUpdateDayDate: (
+  onSelectOption: (dayId: string, optionId: string) => void;
+  /**
+   * Mutation callbacks — all optional. When undefined (shared trip view),
+   * the corresponding affordance is either hidden by `useReadOnly()` in the
+   * descendant component or no-ops safely. Never called in read-only mode.
+   */
+  onUpdateDayDate?: (
     dayId: string,
     date: string | null,
     optionId: string | undefined
   ) => void;
-  onSelectOption: (dayId: string, optionId: string) => void;
-  onCreateAlternative: (
+  onCreateAlternative?: (
     dayId: string,
     name?: string
   ) => Promise<string | null> | void;
-  onDeleteOption: (dayId: string, optionId: string) => void;
-  onSaveOptionDetails: (
+  onDeleteOption?: (dayId: string, optionId: string) => void;
+  onSaveOptionDetails?: (
     dayId: string,
     optionId: string,
     updates: {
@@ -128,34 +133,34 @@ export interface ItineraryDayCardProps {
       created_by?: string | null;
     }
   ) => void;
-  onAddLocations: (
+  onAddLocations?: (
     dayId: string,
     optionId: string,
     locationIds: string[]
   ) => Promise<void>;
-  onRemoveLocation: (
+  onRemoveLocation?: (
     dayId: string,
     optionId: string,
     locationId: string
   ) => void;
-  onUpdateTimePeriod: (
+  onUpdateTimePeriod?: (
     dayId: string,
     optionId: string,
     locationId: string,
     timePeriod: string
   ) => void;
-  onReorderLocations: (
+  onReorderLocations?: (
     dayId: string,
     optionId: string,
     locationIds: string[]
   ) => void;
   onRoutesChanged: () => void;
-  onRouteCreated: (
+  onRouteCreated?: (
     dayId: string,
     optionId: string,
     routeResponse: import("@/lib/api").RouteResponse
   ) => Promise<void>;
-  onRetryRouteMetrics: (
+  onRetryRouteMetrics?: (
     dayId: string,
     optionId: string,
     routeId: string
@@ -164,6 +169,13 @@ export interface ItineraryDayCardProps {
   routeMetricsError: Record<string, string>;
   onInspectLocation: (dayId: string, locationId: string) => void;
 }
+
+// Shared no-op fallbacks used when mutation callbacks are omitted (shared
+// trip view). Affordances that would actually call these are already gated
+// by `useReadOnly()` in the descendant components, so these are safety nets,
+// never executed at runtime. Hoisted so identities are stable across renders.
+const noopAsync = async () => {};
+const noopVoid = () => {};
 
 export function ItineraryDayCard({
   day,
@@ -190,6 +202,21 @@ export function ItineraryDayCard({
   onInspectLocation,
 }: ItineraryDayCardProps) {
   const readOnly = useReadOnly();
+
+  // Stable no-op fallbacks for missing mutation handlers. Descendant
+  // components (`ItineraryDayHeader`, `ItineraryDayTimeline`,
+  // `ItineraryRouteManager`) still declare required handler props, but the
+  // code paths that trigger them are all wrapped in `{!readOnly && ...}`.
+  // `onCreateAlternative` is NOT wrapped — it's passed raw to the header,
+  // which gates the whole plan switcher on it.
+  const safeUpdateDayDate = onUpdateDayDate ?? noopVoid;
+  const safeDeleteOption = onDeleteOption ?? noopVoid;
+  const safeSaveOptionDetails = onSaveOptionDetails ?? noopVoid;
+  const safeRemoveLocation = onRemoveLocation ?? noopVoid;
+  const safeUpdateTimePeriod = onUpdateTimePeriod ?? noopVoid;
+  const safeReorderLocations = onReorderLocations ?? noopVoid;
+  const safeRouteCreated = onRouteCreated ?? noopAsync;
+  const safeRetryRouteMetrics = onRetryRouteMetrics ?? noopAsync;
   const alreadyAdded = useMemo(
     () => new Set(currentOption?.locations.map((l) => l.location_id) ?? []),
     [currentOption]
@@ -299,7 +326,11 @@ export function ItineraryDayCard({
   function onDrop(targetId: string, e: React.DragEvent) {
     e.preventDefault();
     setDropId(null);
-    if (!dragId || !currentOption || dragId === targetId) {
+    // Defense in depth: read-only viewers shouldn't have draggable items in
+    // the first place (`ItineraryDayTimeline` gates `draggable` on context),
+    // but guard here too so a future regression can't silently fire a
+    // reorder request.
+    if (readOnly || !dragId || !currentOption || dragId === targetId) {
       setDragId(null);
       return;
     }
@@ -313,7 +344,7 @@ export function ItineraryDayCard({
     const [rm] = arr.splice(fi, 1);
     arr.splice(ti > fi ? ti - 1 : ti, 0, rm);
     setDragId(null);
-    onReorderLocations(
+    safeReorderLocations(
       day.id,
       currentOption.id,
       arr.map((l) => l.id)
@@ -323,7 +354,7 @@ export function ItineraryDayCard({
   function onDropAtEnd(e: React.DragEvent) {
     e.preventDefault();
     setDropId(null);
-    if (!dragId || !currentOption) {
+    if (readOnly || !dragId || !currentOption) {
       setDragId(null);
       return;
     }
@@ -336,7 +367,7 @@ export function ItineraryDayCard({
     const [rm] = arr.splice(fi, 1);
     arr.push(rm);
     setDragId(null);
-    onReorderLocations(
+    safeReorderLocations(
       day.id,
       currentOption.id,
       arr.map((l) => l.id)
@@ -360,7 +391,7 @@ export function ItineraryDayCard({
           option_location_ids: locationIds,
         }
       );
-      await onRouteCreated(day.id, currentOption.id, routeResponse);
+      await safeRouteCreated(day.id, currentOption.id, routeResponse);
     } else {
       const routeResponse = await api.itinerary.createRoute(
         tripId,
@@ -372,7 +403,7 @@ export function ItineraryDayCard({
           option_location_ids: locationIds,
         }
       );
-      await onRouteCreated(day.id, currentOption.id, routeResponse);
+      await safeRouteCreated(day.id, currentOption.id, routeResponse);
     }
   }
 
@@ -432,7 +463,12 @@ export function ItineraryDayCard({
                       )}
                       onClick={() => {
                         setTpOpen(null);
-                        onUpdateTimePeriod(day.id, currentOption.id, ol.id, k);
+                        safeUpdateTimePeriod(
+                          day.id,
+                          currentOption.id,
+                          ol.id,
+                          k
+                        );
                       }}
                     >
                       <span
@@ -466,18 +502,18 @@ export function ItineraryDayCard({
             createOptionLoading={createOptionLoading}
             tripStartDate={tripStartDate}
             tripEndDate={tripEndDate}
-            onUpdateDayDate={onUpdateDayDate}
+            onUpdateDayDate={safeUpdateDayDate}
             onSelectOption={onSelectOption}
             onCreateAlternative={onCreateAlternative}
-            onDeleteOption={onDeleteOption}
-            onSaveOptionDetails={onSaveOptionDetails}
+            onDeleteOption={safeDeleteOption}
+            onSaveOptionDetails={safeSaveOptionDetails}
           />
         </CardHeader>
 
         <CardContent className="pt-0">
           {currentOption && (
             <div key={currentOption.id} className="animate-page-flip">
-              {!readOnly && (
+              {!readOnly && onAddLocations && (
                 <div className="mb-5 mt-1">
                   <AddLocationsToOptionDialog
                     trigger={
@@ -532,7 +568,7 @@ export function ItineraryDayCard({
                     current === locationId ? null : locationId
                   )
                 }
-                onRemoveLocation={onRemoveLocation}
+                onRemoveLocation={safeRemoveLocation}
                 onDropAtEnd={(e) => {
                   e.preventDefault();
                   e.dataTransfer.dropEffect = "move";
@@ -548,7 +584,7 @@ export function ItineraryDayCard({
                 routes={routes}
                 calculatingRouteId={calculatingRouteId}
                 routeMetricsError={routeMetricsError}
-                onRetryRouteMetrics={onRetryRouteMetrics}
+                onRetryRouteMetrics={safeRetryRouteMetrics}
                 onSaveRoute={handleSaveRoute}
                 onDeleteRoute={handleDeleteRoute}
               />

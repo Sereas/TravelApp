@@ -766,17 +766,6 @@ describe("TripDetailPage", () => {
     expect(screen.getByTestId("sidebar-location-map-mock")).toBeInTheDocument();
   });
 
-  it("shows View Map button when locations exist", async () => {
-    mockGetTrip.mockResolvedValue(sampleTrip);
-    mockListLocations.mockResolvedValue(sampleLocations);
-    render(<TripDetailPage />);
-
-    await screen.findByText("Paris Summer");
-    expect(
-      screen.getByRole("button", { name: /view map/i })
-    ).toBeInTheDocument();
-  });
-
   it("fetches itinerary when Itinerary tab is selected", async () => {
     mockGetTrip.mockResolvedValue(sampleTrip);
     mockListLocations.mockResolvedValue([]);

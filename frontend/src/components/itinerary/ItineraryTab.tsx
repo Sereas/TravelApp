@@ -17,12 +17,13 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import type { ItineraryDay, ItineraryOption, Location, Trip } from "@/lib/api";
 import { ROUTE_COLORS } from "@/components/itinerary/ItineraryDayCard";
-import type { useItineraryState } from "@/features/itinerary/useItineraryState";
+import type {
+  ItineraryMutations,
+  ReadOnlyItineraryState,
+} from "@/features/itinerary/itinerary-state-types";
 import { cn } from "@/lib/utils";
 import { useReadOnly } from "@/lib/read-only-context";
 import { Car, Expand, Footprints, MapPin, TrainFront } from "lucide-react";
-
-type ItineraryState = ReturnType<typeof useItineraryState>;
 
 // ---------------------------------------------------------------------------
 // Helpers (hoisted to module scope to avoid recreation per render)
@@ -322,7 +323,14 @@ interface ItineraryTabProps {
   trip: Trip;
   tripId: string;
   locations: Location[];
-  itineraryState: ItineraryState;
+  itineraryState: ReadOnlyItineraryState;
+  /**
+   * Mutation handlers. Omit in read-only mode (shared trip view). When
+   * undefined, all mutation affordances are suppressed. `useReadOnly()`
+   * must also return `true` for full read-only correctness — this is
+   * wired by the `<ReadOnlyProvider>` in the shared route.
+   */
+  itineraryMutations?: ItineraryMutations;
 }
 
 export function ItineraryTab({
@@ -330,6 +338,7 @@ export function ItineraryTab({
   tripId,
   locations,
   itineraryState,
+  itineraryMutations,
 }: ItineraryTabProps) {
   const {
     itinerary,
@@ -347,19 +356,6 @@ export function ItineraryTab({
     clearItineraryActionError,
     selectOption,
     getSelectedOption,
-    handleAddDay,
-    handleGenerateDays,
-    handleUpdateDayDate,
-    handleCreateAlternative,
-    handleDeleteOption,
-    handleSaveOptionDetails,
-    handleAddLocationsToOption,
-    handleRemoveLocationFromOption,
-    handleUpdateLocationTimePeriod,
-    handleReorderOptionLocations,
-    handleRouteCreated,
-    handleRetryRouteMetrics,
-    handleScheduleLocationToDay,
   } = itineraryState;
 
   const readOnly = useReadOnly();
@@ -413,6 +409,7 @@ export function ItineraryTab({
       id="tab-panel-itinerary"
       role="tabpanel"
       aria-labelledby="tab-itinerary"
+      aria-label="Itinerary"
     >
       {itineraryLoading && (
         <div className="flex justify-center py-12">
@@ -438,11 +435,11 @@ export function ItineraryTab({
                 : "No days yet. Add a day to get started."
           }
         >
-          {!readOnly && (
+          {!readOnly && itineraryMutations && (
             <div className="mt-3 flex flex-wrap gap-2">
               {trip.start_date && trip.end_date ? (
                 <Button
-                  onClick={handleGenerateDays}
+                  onClick={itineraryMutations.handleGenerateDays}
                   disabled={addDayLoading || generateDaysLoading}
                 >
                   {generateDaysLoading
@@ -451,7 +448,7 @@ export function ItineraryTab({
                 </Button>
               ) : (
                 <Button
-                  onClick={handleAddDay}
+                  onClick={itineraryMutations.handleAddDay}
                   disabled={addDayLoading || generateDaysLoading}
                 >
                   {addDayLoading ? "Adding..." : "Add day"}
@@ -468,6 +465,7 @@ export function ItineraryTab({
           <div className="space-y-4">
             <div className="flex items-center justify-end">
               {!readOnly &&
+                itineraryMutations &&
                 (trip.start_date && trip.end_date ? (
                   (() => {
                     const coveredDates = new Set(
@@ -491,7 +489,7 @@ export function ItineraryTab({
                     return hasMissing ? (
                       <Button
                         size="sm"
-                        onClick={handleGenerateDays}
+                        onClick={itineraryMutations.handleGenerateDays}
                         disabled={addDayLoading || generateDaysLoading}
                       >
                         {generateDaysLoading
@@ -503,7 +501,7 @@ export function ItineraryTab({
                 ) : (
                   <Button
                     size="sm"
-                    onClick={handleAddDay}
+                    onClick={itineraryMutations.handleAddDay}
                     disabled={addDayLoading || generateDaysLoading}
                   >
                     {addDayLoading ? "Adding..." : "Add day"}
@@ -543,17 +541,33 @@ export function ItineraryTab({
                         calculatingRouteId={calculatingRouteId}
                         routeMetricsError={routeMetricsError}
                         onSelectOption={selectOption}
-                        onUpdateDayDate={handleUpdateDayDate}
-                        onCreateAlternative={handleCreateAlternative}
-                        onDeleteOption={handleDeleteOption}
-                        onSaveOptionDetails={handleSaveOptionDetails}
-                        onAddLocations={handleAddLocationsToOption}
-                        onRemoveLocation={handleRemoveLocationFromOption}
-                        onUpdateTimePeriod={handleUpdateLocationTimePeriod}
-                        onReorderLocations={handleReorderOptionLocations}
+                        onUpdateDayDate={
+                          itineraryMutations?.handleUpdateDayDate
+                        }
+                        onCreateAlternative={
+                          itineraryMutations?.handleCreateAlternative
+                        }
+                        onDeleteOption={itineraryMutations?.handleDeleteOption}
+                        onSaveOptionDetails={
+                          itineraryMutations?.handleSaveOptionDetails
+                        }
+                        onAddLocations={
+                          itineraryMutations?.handleAddLocationsToOption
+                        }
+                        onRemoveLocation={
+                          itineraryMutations?.handleRemoveLocationFromOption
+                        }
+                        onUpdateTimePeriod={
+                          itineraryMutations?.handleUpdateLocationTimePeriod
+                        }
+                        onReorderLocations={
+                          itineraryMutations?.handleReorderOptionLocations
+                        }
                         onRoutesChanged={fetchItinerary}
-                        onRouteCreated={handleRouteCreated}
-                        onRetryRouteMetrics={handleRetryRouteMetrics}
+                        onRouteCreated={itineraryMutations?.handleRouteCreated}
+                        onRetryRouteMetrics={
+                          itineraryMutations?.handleRetryRouteMetrics
+                        }
                         onInspectLocation={(dayId) => {
                           setSelectedDayId(dayId);
                         }}
@@ -575,7 +589,7 @@ export function ItineraryTab({
                     selectedDay ? getSelectedOption(selectedDay) : undefined
                   }
                 />
-                {!readOnly && (
+                {!readOnly && itineraryMutations && (
                   <UnscheduledLocationsPanel
                     locations={locations}
                     itineraryLocationMap={itineraryLocationMap}
@@ -583,7 +597,9 @@ export function ItineraryTab({
                       selectedDayId ?? itinerary.days[0]?.id ?? null
                     }
                     currentDayCities={currentDayCities}
-                    onScheduleToDay={handleScheduleLocationToDay}
+                    onScheduleToDay={
+                      itineraryMutations.handleScheduleLocationToDay
+                    }
                   />
                 )}
               </div>

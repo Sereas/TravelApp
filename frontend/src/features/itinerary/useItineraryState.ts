@@ -10,6 +10,7 @@ import {
   type RouteResponse,
   type RouteWithSegmentsResponse,
 } from "@/lib/api";
+import type { FullItineraryState } from "@/features/itinerary/itinerary-state-types";
 
 interface UseItineraryStateParams {
   tripId: string;
@@ -61,7 +62,7 @@ export function useItineraryState({
   tripId,
   enabled,
   locations,
-}: UseItineraryStateParams) {
+}: UseItineraryStateParams): FullItineraryState {
   const [itinerary, setItinerary] = useState<ItineraryResponse | null>(null);
   const [itineraryLoading, setItineraryLoading] = useState(false);
   const [itineraryError, setItineraryError] = useState<string | null>(null);

@@ -511,7 +511,13 @@ export function LocationCard({
               </a>
             )}
           </div>
-          {added_by_email && (
+          {/* PII defense-in-depth: `added_by_email` is not in the public
+           *  `SharedLocationSummary` shape and is null-filled in the shared
+           *  adapter, so this would already be hidden in read-only mode.
+           *  The explicit `!readOnly` gate is a second layer so this
+           *  component is self-defending against any future caller that
+           *  passes a full `Location` in a public context. */}
+          {!readOnly && added_by_email && (
             <p className="text-[11px] text-muted-foreground/50">
               Added by {added_by_email}
             </p>
