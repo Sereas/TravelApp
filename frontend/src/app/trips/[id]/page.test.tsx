@@ -1,7 +1,50 @@
 /// <reference types="vitest/globals" />
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import TripDetailPage from "./page";
+
+// Mock SidebarLocationMap so we can drive the new onPinClick flow without
+// pulling in the real MapLibre pipeline. The mock renders one test button
+// per location only when `onPinClick` is provided — that corresponds to the
+// compact (sidebar) variant; the real fullscreen dialog variant never
+// receives the prop, and the mock mirrors that by rendering nothing. Other
+// existing tests don't query for these nodes, so behaviour is unchanged.
+vi.mock("@/components/locations/SidebarLocationMap", () => ({
+  SidebarLocationMap: ({
+    locations,
+    onPinClick,
+  }: {
+    locations: Array<{ id: string; name: string }>;
+    focusLocationId?: string | null;
+    focusSeq?: number;
+    onPinClick?: (id: string) => void;
+  }) => {
+    if (!onPinClick) return null;
+    // Use aria-hidden + generic testid-only buttons with no accessible
+    // name so other tests' getByRole queries don't accidentally match.
+    return (
+      <div data-testid="sidebar-location-map-mock" aria-hidden="true">
+        {locations.map((loc) => (
+          <button
+            key={loc.id}
+            type="button"
+            aria-hidden="true"
+            tabIndex={-1}
+            data-testid={`mock-sidebar-pin-${loc.id}`}
+            onClick={() => onPinClick(loc.id)}
+          />
+        ))}
+      </div>
+    );
+  },
+}));
 
 const mockPush = vi.fn();
 const mockParams = { id: "trip-1" };
@@ -705,13 +748,22 @@ describe("TripDetailPage", () => {
     expect(documentsTab).toHaveAttribute("aria-disabled", "true");
   });
 
-  it("shows Trip Summary card when locations exist", async () => {
+  it("does NOT show Trip Summary card on the Locations tab", async () => {
     mockGetTrip.mockResolvedValue(sampleTrip);
     mockListLocations.mockResolvedValue(sampleLocations);
     render(<TripDetailPage />);
 
     await screen.findByText("Paris Summer");
-    expect(screen.getByText("Trip Summary")).toBeInTheDocument();
+    expect(screen.queryByText("Trip Summary")).not.toBeInTheDocument();
+  });
+
+  it("still renders SidebarLocationMap when locations exist", async () => {
+    mockGetTrip.mockResolvedValue(sampleTrip);
+    mockListLocations.mockResolvedValue(sampleLocations);
+    render(<TripDetailPage />);
+
+    await screen.findByText("Paris Summer");
+    expect(screen.getByTestId("sidebar-location-map-mock")).toBeInTheDocument();
   });
 
   it("shows View Map button when locations exist", async () => {
@@ -1737,6 +1789,194 @@ describe("TripDetailPage", () => {
           })
         );
       });
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // Sidebar pin click → scroll to card + highlight flash
+  // ---------------------------------------------------------------------
+  describe("Sidebar pin click scroll-to-card + highlight", () => {
+    let scrollSpy: ReturnType<typeof vi.fn>;
+    let originalScrollIntoView: typeof Element.prototype.scrollIntoView;
+
+    beforeEach(() => {
+      // jsdom does not implement scrollIntoView, so assign a stub directly.
+      originalScrollIntoView = Element.prototype.scrollIntoView;
+      scrollSpy = vi.fn();
+      Element.prototype.scrollIntoView =
+        scrollSpy as unknown as typeof Element.prototype.scrollIntoView;
+      // requestAnimationFrame fires synchronously in this path so the
+      // scrollIntoView assertion doesn't need a flush.
+      vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+        cb(0);
+        return 0;
+      });
+    });
+
+    afterEach(() => {
+      Element.prototype.scrollIntoView = originalScrollIntoView;
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    });
+
+    it("clicking a sidebar pin calls scrollIntoView on the element with matching data-location-id", async () => {
+      mockGetTrip.mockResolvedValue(sampleTrip);
+      mockListLocations.mockResolvedValue(sampleLocations);
+      render(<TripDetailPage />);
+      await screen.findByText("Eiffel Tower");
+
+      // Card must have the data-location-id hook
+      const card = document.querySelector('[data-location-id="loc-1"]');
+      expect(card).not.toBeNull();
+
+      const pinBtn = await screen.findByTestId("mock-sidebar-pin-loc-1");
+      fireEvent.click(pinBtn);
+
+      expect(scrollSpy).toHaveBeenCalledTimes(1);
+      expect(scrollSpy).toHaveBeenCalledWith({
+        behavior: "smooth",
+        block: "center",
+      });
+      // The element the spy was invoked on is the target card
+      expect(scrollSpy.mock.instances[0]).toBe(card);
+    });
+
+    it("applies the highlight class after the scroll-settle delay (fake timers)", async () => {
+      vi.useFakeTimers();
+      mockGetTrip.mockResolvedValue(sampleTrip);
+      mockListLocations.mockResolvedValue(sampleLocations);
+      render(<TripDetailPage />);
+      await vi.waitFor(() => {
+        expect(screen.queryByText("Eiffel Tower")).not.toBeNull();
+      });
+
+      const pinBtn = screen.getByTestId("mock-sidebar-pin-loc-2");
+      act(() => {
+        fireEvent.click(pinBtn);
+      });
+
+      const card = document.querySelector(
+        '[data-location-id="loc-2"]'
+      ) as HTMLElement;
+      // Not yet — waiting for the scroll-settle delay.
+      expect(card.className).not.toContain("animate-location-highlight");
+
+      // Advance past the 350ms start delay.
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      expect(card.className).toContain("animate-location-highlight");
+
+      // Other card is never highlighted.
+      const otherCard = document.querySelector(
+        '[data-location-id="loc-1"]'
+      ) as HTMLElement;
+      expect(otherCard.className).not.toContain("animate-location-highlight");
+    });
+
+    it("removes the highlight class after the animation completes", async () => {
+      vi.useFakeTimers();
+      mockGetTrip.mockResolvedValue(sampleTrip);
+      mockListLocations.mockResolvedValue(sampleLocations);
+      render(<TripDetailPage />);
+      await vi.waitFor(() => {
+        expect(screen.queryByText("Eiffel Tower")).not.toBeNull();
+      });
+
+      const pinBtn = screen.getByTestId("mock-sidebar-pin-loc-1");
+      act(() => {
+        fireEvent.click(pinBtn);
+      });
+
+      const card = document.querySelector(
+        '[data-location-id="loc-1"]'
+      ) as HTMLElement;
+
+      // Advance past the start delay so the class lands.
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      expect(card.className).toContain("animate-location-highlight");
+
+      // Advance past the full animation duration and the class clears.
+      act(() => {
+        vi.advanceTimersByTime(2100);
+      });
+      expect(card.className).not.toContain("animate-location-highlight");
+    });
+
+    it("rapidly clicking a second pin cancels the first highlight and marks the second card", async () => {
+      vi.useFakeTimers();
+      mockGetTrip.mockResolvedValue(sampleTrip);
+      mockListLocations.mockResolvedValue(sampleLocations);
+      render(<TripDetailPage />);
+      await vi.waitFor(() => {
+        expect(screen.queryByText("Eiffel Tower")).not.toBeNull();
+      });
+
+      // Click pin 1 and let the highlight actually land.
+      act(() => {
+        fireEvent.click(screen.getByTestId("mock-sidebar-pin-loc-1"));
+      });
+      act(() => {
+        vi.advanceTimersByTime(400); // past start delay
+      });
+
+      const card1 = document.querySelector(
+        '[data-location-id="loc-1"]'
+      ) as HTMLElement;
+      const card2 = document.querySelector(
+        '[data-location-id="loc-2"]'
+      ) as HTMLElement;
+      expect(card1.className).toContain("animate-location-highlight");
+
+      // Click pin 2 while pin 1's highlight is still visible. loc-1 should
+      // clear instantly; loc-2 should land after its own start delay.
+      act(() => {
+        fireEvent.click(screen.getByTestId("mock-sidebar-pin-loc-2"));
+      });
+      expect(card1.className).not.toContain("animate-location-highlight");
+      // loc-2 not yet — still waiting on its scroll-settle delay.
+      expect(card2.className).not.toContain("animate-location-highlight");
+
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      expect(card2.className).toContain("animate-location-highlight");
+
+      // After the full animation duration, loc-2 clears.
+      act(() => {
+        vi.advanceTimersByTime(2100);
+      });
+      expect(card2.className).not.toContain("animate-location-highlight");
+    });
+
+    it("clicking a LocationCard body (card → map direction) does NOT call scrollIntoView (regression)", async () => {
+      mockGetTrip.mockResolvedValue(sampleTrip);
+      mockListLocations.mockResolvedValue(sampleLocations);
+      render(<TripDetailPage />);
+      await screen.findByText("Eiffel Tower");
+
+      const card = document.querySelector(
+        '[data-location-id="loc-1"]'
+      ) as HTMLElement;
+      fireEvent.click(card);
+
+      expect(scrollSpy).not.toHaveBeenCalled();
+    });
+
+    it("every rendered LocationCard exposes a data-location-id attribute", async () => {
+      mockGetTrip.mockResolvedValue(sampleTrip);
+      mockListLocations.mockResolvedValue(sampleLocations);
+      render(<TripDetailPage />);
+      await screen.findByText("Eiffel Tower");
+
+      expect(
+        document.querySelector('[data-location-id="loc-1"]')
+      ).not.toBeNull();
+      expect(
+        document.querySelector('[data-location-id="loc-2"]')
+      ).not.toBeNull();
     });
   });
 });

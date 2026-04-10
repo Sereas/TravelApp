@@ -176,6 +176,64 @@
     }
   }
 
+  /* LocationCard highlight flash — triggered when its sidebar map pin is
+     clicked. Bold ring + background tint + outward glow that hold at peak
+     briefly, then fade out. */
+  @keyframes location-highlight-pulse {
+    0% {
+      box-shadow:
+        0 0 0 0 hsl(var(--brand) / 0),
+        0 0 0 0 hsl(var(--brand) / 0);
+      background-color: hsl(var(--card));
+    }
+    10% {
+      box-shadow:
+        0 0 0 4px hsl(var(--brand) / 0.8),
+        0 0 24px 6px hsl(var(--brand) / 0.35);
+      background-color: hsl(var(--brand) / 0.18);
+    }
+    40% {
+      box-shadow:
+        0 0 0 3px hsl(var(--brand) / 0.6),
+        0 0 20px 4px hsl(var(--brand) / 0.22);
+      background-color: hsl(var(--brand) / 0.12);
+    }
+    100% {
+      box-shadow:
+        0 0 0 0 hsl(var(--brand) / 0),
+        0 0 0 0 hsl(var(--brand) / 0);
+      background-color: hsl(var(--card));
+    }
+  }
+  .animate-location-highlight {
+    animation: location-highlight-pulse 2s ease-out both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    /* Reduced-motion users still get a clearly visible cue — a static
+       strong ring + glow with a short fade-in transition rather than the
+       keyframed pulse. */
+    .animate-location-highlight {
+      animation: none;
+      box-shadow:
+        0 0 0 3px hsl(var(--brand) / 0.75),
+        0 0 20px 4px hsl(var(--brand) / 0.25);
+      transition: box-shadow 0.2s ease-out;
+    }
+  }
+
+  /* Focus ring for keyboard-accessible map pins (ItineraryDayMap markers
+     are plain divs by default; we make them role="button" + tabindex="0"
+     when they're clickable, and this rule gives them a visible outline so
+     keyboard users can tell which pin is focused). */
+  .map-pin-focusable:focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  .map-pin-focusable:focus:not(:focus-visible) {
+    outline: none;
+  }
+
   /* Topographic contour float animation */
   @keyframes topoFloat {
     0%,
@@ -285,6 +343,10 @@
 }
 
 /* MapLibre popup overrides — clean up default chrome */
+.maplibregl-popup {
+  z-index: 20 !important;
+}
+
 .maplibregl-popup-content {
   padding: 0 !important;
   border-radius: 12px !important;

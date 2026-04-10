@@ -31,12 +31,18 @@ vi.mock("maplibre-gl", () => {
     isOpen: vi.fn().mockReturnValue(false),
     on: vi.fn(),
   }));
-  const Marker = vi.fn().mockImplementation(() => ({
-    setLngLat: vi.fn().mockReturnThis(),
-    setPopup: vi.fn().mockReturnThis(),
-    addTo: vi.fn().mockReturnThis(),
-    remove: vi.fn(),
-  }));
+  const Marker = vi.fn().mockImplementation((opts?: { element?: unknown }) => {
+    const element = (opts?.element as HTMLElement | undefined) ?? {
+      style: {} as { zIndex?: string },
+    };
+    return {
+      setLngLat: vi.fn().mockReturnThis(),
+      setPopup: vi.fn().mockReturnThis(),
+      addTo: vi.fn().mockReturnThis(),
+      remove: vi.fn(),
+      getElement: vi.fn(() => element),
+    };
+  });
   const Map = vi.fn().mockImplementation(() => ({
     addControl: vi.fn(),
     addSource: vi.fn(),
@@ -46,6 +52,7 @@ vi.mock("maplibre-gl", () => {
     getZoom: vi.fn().mockReturnValue(12),
     once: vi.fn(),
     on: vi.fn(),
+    off: vi.fn(),
     project: vi.fn().mockReturnValue({ x: 0, y: 0 }),
     remove: vi.fn(),
     resize: vi.fn(),

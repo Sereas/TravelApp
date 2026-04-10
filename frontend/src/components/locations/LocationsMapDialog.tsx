@@ -18,12 +18,24 @@ interface LocationsMapDialogProps {
   locations: Location[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** When provided, the pin popup exposes an inline note editor. */
+  onLocationNoteSave?: (
+    locationId: string,
+    nextNote: string
+  ) => Promise<void> | void;
+  /** When provided, the pin popup exposes a delete action. */
+  onLocationDelete?: (locationId: string) => Promise<void> | void;
+  /** When true, hides the popup's edit and delete affordances. */
+  readOnly?: boolean;
 }
 
 export function LocationsMapDialog({
   locations,
   open,
   onOpenChange,
+  onLocationNoteSave,
+  onLocationDelete,
+  readOnly,
 }: LocationsMapDialogProps) {
   const mapLocations = useMemo<ItineraryDayMapLocation[]>(
     () =>
@@ -61,7 +73,12 @@ export function LocationsMapDialog({
         {mapLocations.length > 0 ? (
           <div className="min-h-0 flex-1 px-2 pb-2">
             <div className="h-full overflow-hidden rounded-xl">
-              <ItineraryDayMap locations={mapLocations} />
+              <ItineraryDayMap
+                locations={mapLocations}
+                onLocationNoteSave={onLocationNoteSave}
+                onLocationDelete={onLocationDelete}
+                readOnly={readOnly}
+              />
             </div>
           </div>
         ) : (

@@ -9,6 +9,110 @@ from backend.app.clients.google_places import GooglePlacesClient, PlaceResolutio
 from backend.app.db.supabase import get_supabase_client
 from backend.app.dependencies import get_current_user_id, get_google_places_client
 from backend.app.main import app
+from backend.app.routers.locations_google import _resolve_city
+
+
+def _make_resolution(
+    name: str,
+    address: str | None,
+    types: list[str],
+) -> PlaceResolution:
+    return PlaceResolution(
+        place_id="ChIJ_test",
+        name=name,
+        formatted_address=address,
+        latitude=None,
+        longitude=None,
+        types=types,
+        website=None,
+        formatted_phone_number=None,
+        opening_hours_text=[],
+        photos=[],
+        raw={},
+    )
+
+
+def test_resolve_city_uses_place_name_when_place_is_locality():
+    """A place that IS itself a town/locality should have its name as the city.
+
+    Regression: "https://maps.app.goo.gl/QkaGUPJVJdVxsSuc8" (Étretat) used to
+    return 'France' as the city because the 2-part fallback took parts[-1].
+    """
+    resolved = _make_resolution(
+        name="Étretat",
+        address="Étretat, France",
+        types=["locality", "political"],
+    )
+    assert _resolve_city(resolved) == "Étretat"
+
+
+def test_resolve_city_handles_sublocality_places():
+    """Sublocalities (neighborhoods) should also resolve to the place name."""
+    resolved = _make_resolution(
+        name="Le Marais",
+        address="Le Marais, 75004 Paris, France",
+        types=["sublocality", "political"],
+    )
+    assert _resolve_city(resolved) == "Le Marais"
+
+
+def test_resolve_city_falls_back_to_address_for_venues():
+    """Venues (not localities) should still parse the city from the address.
+
+    This pins the existing behavior for Victoria Peak (Hong Kong city-state)
+    so the locality fix does not regress the 2-part city-state case.
+    """
+    resolved = _make_resolution(
+        name="Victoria Peak",
+        address="Victoria Peak, Hong Kong",
+        types=["tourist_attraction", "point_of_interest"],
+    )
+    assert _resolve_city(resolved) == "Hong Kong"
+
+
+def test_resolve_city_3part_venue_address_still_uses_postcode_strip():
+    """A restaurant in a normal city should still extract the city correctly."""
+    resolved = _make_resolution(
+        name="Le Jules Verne",
+        address="Av. Gustave Eiffel, 75007 Paris, France",
+        types=["restaurant", "food"],
+    )
+    assert _resolve_city(resolved) == "Paris"
+
+
+def test_resolve_city_returns_none_when_nothing_to_infer():
+    """No address, no locality types → city is None."""
+    resolved = _make_resolution(name="Something", address=None, types=["point_of_interest"])
+    assert _resolve_city(resolved) is None
+
+
+def test_resolve_city_2part_with_postcode_in_first_segment():
+    """Venue in a small town: address = '<postcode> <town>, <country>'.
+
+    Regression: https://maps.app.goo.gl/PYTXY3GAzAT97cfQ8 (Château de
+    Chenonceau) returned ``formatted_address='37150 Chenonceaux, France'`` with
+    venue types. The old 2-part fallback took parts[-1] = 'France'. The
+    postcode-prefix in parts[0] is the signal that the first segment carries
+    the city name.
+    """
+    resolved = _make_resolution(
+        name="Château de Chenonceau",
+        address="37150 Chenonceaux, France",
+        types=["tourist_attraction", "landmark", "point_of_interest"],
+    )
+    assert _resolve_city(resolved) == "Chenonceaux"
+
+
+def test_extract_city_2part_postcode_prefix():
+    """Unit test for the 2-part postcode-prefix branch of _extract_city."""
+    from backend.app.routers.locations_google import _extract_city
+
+    assert _extract_city("37150 Chenonceaux, France") == "Chenonceaux"
+    assert _extract_city("76790 Étretat, France") == "Étretat"
+    # City-state case must still work (postcode in the LAST segment)
+    assert _extract_city("Pl. du Casino, 98000 Monaco") == "Monaco"
+    # No postcode anywhere: existing 2-part fallback uses parts[-1]
+    assert _extract_city("Victoria Peak, Hong Kong") == "Hong Kong"
 
 
 class _DummySupabase:
@@ -104,6 +208,42 @@ def test_follow_redirects_stops_at_google_maps_url():
     # Must stop at the Maps URL, never reaching /sorry/
     assert "google.com/maps" in result
     assert "sorry" not in result
+
+
+def test_preview_returns_place_name_as_city_when_place_is_a_town(client: TestClient, monkeypatch):
+    """End-to-end: resolving an Étretat-style link should return city='Étretat'."""
+    user_id = uuid4()
+    _override_auth_and_supabase(client, user_id)
+
+    class FakeClient:
+        def resolve_from_link(self, _link: str) -> PlaceResolution:
+            return PlaceResolution(
+                place_id="ChIJ_etretat",
+                name="Étretat",
+                formatted_address="Étretat, France",
+                latitude=49.7072,
+                longitude=0.2036,
+                types=["locality", "political"],
+                website=None,
+                formatted_phone_number=None,
+                opening_hours_text=[],
+                photos=[],
+                raw={"id": "places/ChIJ_etretat"},
+            )
+
+    app.dependency_overrides[get_google_places_client] = lambda: FakeClient()
+    try:
+        r = client.post(
+            "/api/v1/locations/google/preview",
+            json={"google_link": "https://maps.app.goo.gl/QkaGUPJVJdVxsSuc8"},
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["name"] == "Étretat"
+        # Before the fix, this was 'France' (the country). It must be the town.
+        assert data["city"] == "Étretat"
+    finally:
+        app.dependency_overrides.clear()
 
 
 def test_preview_location_missing_google_link_returns_422(client: TestClient, monkeypatch):

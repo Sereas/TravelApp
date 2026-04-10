@@ -38,7 +38,7 @@ export function SmartLocationInput({
   }
 
   return (
-    <div className="mb-4 flex items-center gap-2.5">
+    <div className="mb-6 flex items-center gap-2.5">
       <div className="flex flex-1 items-center gap-2 rounded-2xl border-2 border-primary/25 bg-primary/[0.04] px-3.5 transition-colors focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20">
         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-white">
           <MapPin size={14} strokeWidth={2.5} />

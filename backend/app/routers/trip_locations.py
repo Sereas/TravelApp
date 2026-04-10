@@ -32,7 +32,7 @@ from backend.app.models.schemas import (
 )
 from backend.app.routers.locations_google import (
     _clean_working_hours,
-    _extract_city,
+    _resolve_city,
     _suggest_category,
 )
 from backend.app.routers.trip_ownership import _ensure_resource_chain
@@ -531,7 +531,7 @@ async def import_google_list(
         seen_place_ids.add(resolved.place_id)
 
         suggested_category = _suggest_category(resolved.types)
-        city = _extract_city(resolved.formatted_address)
+        city = _resolve_city(resolved)
         clean_hours = _clean_working_hours(resolved.opening_hours_text)
 
         google_link = f"https://www.google.com/maps/place/?q=place_id:{resolved.place_id}"
@@ -855,7 +855,7 @@ async def import_google_list_stream(
 
                 seen_place_ids.add(resolved.place_id)
                 suggested_category = _suggest_category(resolved.types)
-                city = _extract_city(resolved.formatted_address)
+                city = _resolve_city(resolved)
                 clean_hours = _clean_working_hours(resolved.opening_hours_text)
                 google_link = f"https://www.google.com/maps/place/?q=place_id:{resolved.place_id}"
 

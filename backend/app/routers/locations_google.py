@@ -12,7 +12,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
-from backend.app.clients.google_places import GooglePlacesClient
+from backend.app.clients.google_places import GooglePlacesClient, PlaceResolution
 from backend.app.core.rate_limit import limiter
 from backend.app.dependencies import get_current_user_id, get_google_places_client
 from backend.app.models.schemas import LocationPreviewResponse
@@ -61,20 +61,74 @@ def _suggest_category(types: list[str]) -> str | None:
     return None
 
 
+# Google Places types that indicate the place IS itself a city/town/neighborhood,
+# so the place's display name is the city. Used by _resolve_city to avoid
+# mis-parsing 2-part addresses like "Étretat, France" as '<venue>, <country>'.
+_LOCALITY_TYPES: frozenset[str] = frozenset(
+    {
+        "locality",
+        "sublocality",
+        "sublocality_level_1",
+        "administrative_area_level_2",
+        "administrative_area_level_3",
+    }
+)
+
+
+# Leading-postcode pattern: 3+ digits followed by whitespace. Matches French
+# ("37150 Chenonceaux"), Monaco ("98000 Monaco"), German, US-ZIP, Russian, etc.
+# Excludes short street numbers like "10 Downing".
+_POSTCODE_PREFIX_RE = _re.compile(r"^\d{3,}\s")
+
+
 def _extract_city(address: str | None) -> str | None:
-    """Extract city name from a Google formatted address, stripping postcodes."""
+    """Extract city name from a Google formatted address, stripping postcodes.
+
+    Handles three shapes of 2-part addresses:
+
+    - ``"<postcode> <town>, <country>"`` — postcode in parts[0], e.g.
+      ``"37150 Chenonceaux, France"`` → "Chenonceaux". (Small towns where
+      Google elides the street segment.)
+    - ``"<street>, <postcode> <city>"`` — postcode in parts[-1], e.g.
+      ``"Pl. du Casino, 98000 Monaco"`` → "Monaco". (City-states with street.)
+    - ``"<venue>, <city-state>"`` — no postcode at all, e.g.
+      ``"Victoria Peak, Hong Kong"`` → "Hong Kong". (Fallback.)
+    """
     if not address:
         return None
     parts = [p.strip() for p in address.split(",")]
     if len(parts) >= 3:
         city_part = parts[-2]
     elif len(parts) == 2:
-        # 2-part addresses (e.g. city-states like Monaco: "Pl. du Casino, 98000 Monaco")
-        # Take the last part and strip postcode — it's more likely the city/country.
-        city_part = parts[-1]
+        # If parts[0] carries the postcode, the city is in the first segment
+        # ("37150 Chenonceaux, France"). Otherwise fall back to parts[-1]
+        # (postcode in the last segment for city-states with street, or no
+        # postcode at all for bare city-states like "Victoria Peak, Hong
+        # Kong"). The bare-town country case (e.g. "Étretat, France") is
+        # expected to be short-circuited earlier by ``_resolve_city`` via
+        # Google's locality types.
+        city_part = parts[0] if _POSTCODE_PREFIX_RE.match(parts[0]) else parts[-1]
     else:
         return None
     return _re.sub(r"^\d[\d\s-]*\s*", "", city_part).strip() or None
+
+
+def _resolve_city(resolved: PlaceResolution) -> str | None:
+    """Determine the city for a resolved Google Place.
+
+    Preference order:
+    1. If the place itself is a locality/town/neighborhood (per Google's
+       ``types``), the place's own name IS the city.
+       Example: pasting a link to Étretat returns ``types=["locality", ...]``
+       and ``name="Étretat"`` — the city is "Étretat", not "France".
+    2. Otherwise, fall back to parsing the formatted address with
+       :func:`_extract_city`, which handles typical venues in regular cities
+       ("10 Rue X, 75001 Paris, France" → "Paris") and 2-part city-state
+       addresses ("Victoria Peak, Hong Kong" → "Hong Kong").
+    """
+    if set(resolved.types) & _LOCALITY_TYPES:
+        return (resolved.name or "").strip() or None
+    return _extract_city(resolved.formatted_address)
 
 
 def _clean_working_hours(hours: list[str]) -> list[str]:
@@ -132,7 +186,7 @@ async def preview_location_from_google_link(
         ) from exc
 
     suggested_category = _suggest_category(resolved.types)
-    city = _extract_city(resolved.formatted_address)
+    city = _resolve_city(resolved)
     clean_hours = _clean_working_hours(resolved.opening_hours_text)
 
     logger.info(

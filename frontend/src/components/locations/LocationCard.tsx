@@ -62,6 +62,11 @@ export interface LocationCardProps {
   onDelete?: () => void;
   /** ConfirmDialog (with trigger) for Delete; when provided, Delete in menu opens this. */
   deleteTrigger?: React.ReactNode;
+  /** Called when the card body is clicked (e.g. to focus on map). */
+  onCardClick?: () => void;
+  /** When true, plays a one-shot ring-flash animation. Used to draw the
+   *  user's eye to the card after clicking its pin on the sidebar map. */
+  isHighlighted?: boolean;
   className?: string;
 }
 
@@ -71,13 +76,13 @@ function BookingBadge({ status }: { status: string }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+        "inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
         isBooked
           ? "bg-emerald-50/90 text-emerald-700 backdrop-blur-sm"
           : "bg-amber-50/90 text-amber-700 backdrop-blur-sm"
       )}
     >
-      <Ticket size={10} />
+      <Ticket size={10} className="shrink-0" />
       {isBooked ? "Booked \u2713" : "Booking needed"}
     </span>
   );
@@ -108,6 +113,7 @@ function notePreview(text: string): string {
 }
 
 export function LocationCard({
+  id,
   name,
   address,
   google_link,
@@ -131,6 +137,8 @@ export function LocationCard({
   onPhotoUpload,
   onPhotoReset,
   deleteTrigger,
+  onCardClick,
+  isHighlighted,
   className,
 }: LocationCardProps) {
   const readOnly = useReadOnly();
@@ -157,13 +165,32 @@ export function LocationCard({
 
   return (
     <div
+      data-location-id={id}
       className={cn(
         "group relative flex flex-col overflow-hidden rounded-xl border bg-card transition-all hover:shadow-md",
         inItinerary
           ? "border-brand/25 shadow-sm shadow-brand/5"
           : "border-border",
+        onCardClick && "cursor-pointer",
+        isHighlighted && "animate-location-highlight",
         className
       )}
+      onClick={(e) => {
+        if (!onCardClick) return;
+        // Ignore clicks that originated from nested interactive elements
+        // (buttons, links, popovers) — otherwise clicking the hours toggle,
+        // note expander, schedule menu, photo button, or Google Maps link
+        // also fires the card-level focus/flyTo side-effect.
+        const target = e.target as HTMLElement | null;
+        if (
+          target?.closest(
+            'button, a, [role="menu"], [role="menuitem"], [role="dialog"]'
+          )
+        ) {
+          return;
+        }
+        onCardClick();
+      }}
     >
       {/* Image area */}
       <div className="relative aspect-[16/10] w-full overflow-hidden rounded-t-xl">
@@ -212,10 +239,10 @@ export function LocationCard({
           </div>
         )}
 
-        {/* Overlaid badges */}
-        <div className="absolute bottom-3 left-3 flex items-center gap-1.5">
+        {/* Overlaid badges — wrap instead of overflowing at narrow card widths */}
+        <div className="absolute bottom-3 left-3 right-3 flex flex-wrap items-center gap-1.5">
           {category && (
-            <span className="rounded-full bg-white/90 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-foreground backdrop-blur-sm">
+            <span className="whitespace-nowrap rounded-full bg-white/90 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-foreground backdrop-blur-sm">
               {category}
             </span>
           )}
@@ -312,9 +339,9 @@ export function LocationCard({
         {/* Details: address, hours, notes */}
         <div className="mt-2 flex min-h-0 flex-1 flex-col gap-1.5">
           {address && (
-            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/70">
-              <MapPin size={11} className="shrink-0" />
-              <span className="truncate">{address}</span>
+            <div className="flex items-start gap-1.5 text-[11px] text-muted-foreground/70">
+              <MapPin size={11} className="mt-[2px] shrink-0" />
+              <span className="line-clamp-2 break-words">{address}</span>
             </div>
           )}
           {working_hours && (

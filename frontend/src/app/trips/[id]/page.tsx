@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { api, type Trip, type Location } from "@/lib/api";
@@ -10,7 +10,9 @@ import { SmartLocationInput } from "@/components/locations/SmartLocationInput";
 import { EditLocationRow } from "@/components/locations/EditLocationRow";
 import { ImportGoogleListDialog } from "@/components/locations/ImportGoogleListDialog";
 import { LocationsMapDialog } from "@/components/locations/LocationsMapDialog";
-import { TripSummaryCard } from "@/components/trips/TripSummaryCard";
+// Trip Summary temporarily disabled — kept for planned re-enable of TripSummaryCard sidebar
+// import { TripSummaryCard } from "@/components/trips/TripSummaryCard";
+import { SidebarLocationMap } from "@/components/locations/SidebarLocationMap";
 import { type TripUpdatePayload } from "@/components/trips/EditTripForm";
 import {
   DateChangeDialog,
@@ -37,6 +39,7 @@ import {
   PenLine,
   Search,
   Tag,
+  X,
   Trash2,
   User,
 } from "lucide-react";
@@ -49,6 +52,13 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { useItineraryState } from "@/features/itinerary/useItineraryState";
+
+// Sidebar pin click → scroll + highlight timing. The delay gives the
+// smooth-scroll time to settle so the keyframe peak plays after the card
+// is actually in view. Total on-screen time for the pulse is roughly
+// HIGHLIGHT_START_DELAY_MS + HIGHLIGHT_ANIMATION_MS once the scroll ends.
+const HIGHLIGHT_START_DELAY_MS = 350;
+const HIGHLIGHT_ANIMATION_MS = 2000;
 
 export default function TripDetailPage() {
   const params = useParams<{ id: string }>();
@@ -76,6 +86,21 @@ export default function TripDetailPage() {
   const [editingLocationId, setEditingLocationId] = useState<string | null>(
     null
   );
+  const [focusedLocation, setFocusedLocation] = useState<{
+    id: string;
+    seq: number;
+  } | null>(null);
+  const focusSeqRef = useRef(0);
+  // Transient highlight flash when a sidebar map pin is clicked. Only one
+  // card can be highlighted at a time; clicking a new pin cancels the
+  // previous highlight immediately. Tracked via a ref so we can clear the
+  // scheduled cleanup on re-click or unmount.
+  const [highlightedLocationId, setHighlightedLocationId] = useState<
+    string | null
+  >(null);
+  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
   const [deletingTrip, setDeletingTrip] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [cityFilter, setCityFilter] = useState<string | null>(null);
@@ -87,6 +112,8 @@ export default function TripDetailPage() {
     null
   );
   const [locationNameSearch, setLocationNameSearch] = useState("");
+  const [searchExpanded, setSearchExpanded] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const nameCancelledRef = useRef(false);
@@ -210,6 +237,64 @@ export default function TripDetailPage() {
     }
     return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
   }, [filteredLocations, groupBy]);
+
+  // When a sidebar map pin is clicked: (1) smoothly scroll the card into
+  // the vertical center of the viewport, (2) AFTER the scroll has had time
+  // to land, mark the card as highlighted so the CSS pulse plays out while
+  // the card is actually in view, (3) clear the highlight once the
+  // animation completes. Any in-flight highlight timeout is cancelled
+  // first so rapid clicks don't leak timers.
+  //
+  // Note: we deliberately do NOT bump `focusedLocation` here — that would
+  // trigger the map's focus effect (flyTo + zoom-in), which the user
+  // doesn't want for pin clicks. The pin's own "selected" visual is
+  // already handled locally by the marker's click listener inside
+  // ItineraryDayMap before this callback fires.
+  const handlePinClick = useCallback((locationId: string) => {
+    // Cancel any in-flight highlight (pre-scroll wait or post-apply clear)
+    // and drop any currently-visible highlight so a rapid re-click on a
+    // second pin gives the user an instant visual reset.
+    if (highlightTimeoutRef.current != null) {
+      clearTimeout(highlightTimeoutRef.current);
+      highlightTimeoutRef.current = null;
+    }
+    setHighlightedLocationId(null);
+
+    // Defer querySelector by a frame so any pending DOM commit lands first,
+    // then kick off the smooth scroll.
+    requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLElement>(
+        `[data-location-id="${CSS.escape(locationId)}"]`
+      );
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    });
+
+    // Delay applying the highlight class until the smooth scroll has had
+    // time to mostly complete. Otherwise the keyframe peak plays out while
+    // the card is still offscreen and the user never sees it. For an
+    // already-visible card the only downside is a brief beat before the
+    // flash — barely perceptible.
+    highlightTimeoutRef.current = setTimeout(() => {
+      setHighlightedLocationId(locationId);
+      highlightTimeoutRef.current = setTimeout(() => {
+        setHighlightedLocationId((prev) => (prev === locationId ? null : prev));
+        highlightTimeoutRef.current = null;
+      }, HIGHLIGHT_ANIMATION_MS);
+    }, HIGHLIGHT_START_DELAY_MS);
+  }, []);
+
+  // Cancel any pending highlight timeout on unmount so React's strict-mode
+  // double-invocation and route changes don't leave a dangling callback.
+  useEffect(() => {
+    return () => {
+      if (highlightTimeoutRef.current != null) {
+        clearTimeout(highlightTimeoutRef.current);
+        highlightTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   if (loading) {
     return (
@@ -429,6 +514,35 @@ export default function TripDetailPage() {
     }
   }
 
+  // Note-only save path used by the map pin popup. Mirrors
+  // `handleLocationUpdated`: persist to backend, update local state and the
+  // itinerary summary. We let `handleMapNoteSave` throw on failure so the
+  // popup can display an inline error and stay in edit mode.
+  async function handleMapNoteSave(locationId: string, nextNote: string) {
+    const updated = await api.locations.update(tripId, locationId, {
+      note: nextNote,
+    });
+    setLocations((prev) =>
+      prev.map((loc) => (loc.id === locationId ? updated : loc))
+    );
+    syncLocationSummary(locationId, () => ({ note: updated.note }));
+  }
+
+  // Delete path used by the map pin popup. Separate from `handleDeleteLocation`
+  // because the popup surfaces errors inline in its own confirm row —
+  // duplicating them to the page-level `ErrorBanner` via `setError(...)` would
+  // show two simultaneous error UIs for a single failure. We re-throw so the
+  // popup's inline `deleteError` state picks up the rejection.
+  async function handleMapDelete(locationId: string) {
+    await api.locations.delete(tripId, locationId);
+    setLocations((prev) => prev.filter((loc) => loc.id !== locationId));
+    // Fire-and-forget refresh: the delete already succeeded, so a failure
+    // in the itinerary refetch shouldn't surface as an unhandled rejection.
+    fetchItinerary().catch(() => {
+      /* stale itinerary tree is acceptable until the next interaction */
+    });
+  }
+
   const editingLocation = editingLocationId
     ? (locations.find((l) => l.id === editingLocationId) ?? null)
     : null;
@@ -462,7 +576,12 @@ export default function TripDetailPage() {
             ? (dayId) => handleScheduleLocationToDay(loc.id, dayId)
             : undefined
         }
+        isHighlighted={highlightedLocationId === loc.id}
         onEdit={() => setEditingLocationId(loc.id)}
+        onCardClick={() => {
+          focusSeqRef.current += 1;
+          setFocusedLocation({ id: loc.id, seq: focusSeqRef.current });
+        }}
         deleteTrigger={
           <ConfirmDialog
             trigger={
@@ -668,12 +787,12 @@ export default function TripDetailPage() {
           id="tab-panel-locations"
           role="tabpanel"
           aria-labelledby="tab-locations"
-          className="mt-6"
+          className="mt-8"
         >
           <div
             className={
               locations.length > 0
-                ? "grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]"
+                ? "grid gap-6 xl:grid-cols-[minmax(0,1fr)_480px]"
                 : ""
             }
           >
@@ -709,21 +828,58 @@ export default function TripDetailPage() {
               {/* Toolbar row */}
               {locations.length > 0 && (
                 <div className="mb-4 flex flex-wrap items-center gap-2">
-                  <div className="relative flex-1 sm:max-w-xs">
-                    <Search
-                      size={14}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                    />
-                    <input
-                      type="search"
-                      autoComplete="off"
-                      placeholder="Search locations…"
-                      value={locationNameSearch}
-                      onChange={(e) => setLocationNameSearch(e.target.value)}
-                      className="h-9 w-full rounded-full border border-border bg-card pl-9 pr-4 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand"
-                      aria-label="Search by location name"
-                    />
-                  </div>
+                  {/* Search filter pill */}
+                  {searchExpanded ? (
+                    <div className="relative flex items-center">
+                      <Search
+                        size={14}
+                        className="absolute left-2.5 text-muted-foreground"
+                      />
+                      <input
+                        ref={searchInputRef}
+                        type="search"
+                        autoComplete="off"
+                        autoFocus
+                        placeholder="Search…"
+                        value={locationNameSearch}
+                        onChange={(e) => setLocationNameSearch(e.target.value)}
+                        onBlur={() => {
+                          if (!locationNameSearch.trim()) {
+                            setSearchExpanded(false);
+                          }
+                        }}
+                        className="h-8 w-44 rounded-full border border-border bg-card pl-8 pr-8 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand"
+                        aria-label="Search by location name"
+                      />
+                      <button
+                        type="button"
+                        className="absolute right-2 text-muted-foreground hover:text-foreground"
+                        onClick={() => {
+                          setLocationNameSearch("");
+                          setSearchExpanded(false);
+                        }}
+                        aria-label="Clear search"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm font-medium transition-colors",
+                        locationNameSearch
+                          ? "bg-brand-muted text-brand-strong"
+                          : "text-foreground hover:bg-brand-muted"
+                      )}
+                      onClick={() => {
+                        setSearchExpanded(true);
+                      }}
+                    >
+                      <Search size={14} />
+                      Search
+                    </button>
+                  )}
 
                   {/* City filter */}
                   {cities.size >= 2 && (
@@ -751,14 +907,14 @@ export default function TripDetailPage() {
                         </button>
                       </PopoverTrigger>
                       <PopoverContent
-                        className="w-48 p-1.5"
+                        className="max-h-72 w-auto min-w-[12rem] max-w-[min(20rem,calc(100vw-2rem))] overflow-y-auto p-1.5"
                         align="start"
                         sideOffset={6}
                       >
                         <button
                           type="button"
                           className={cn(
-                            "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors",
+                            "flex w-full items-center gap-2 whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm transition-colors",
                             !cityFilter && groupBy !== "city"
                               ? "bg-brand-muted font-medium text-brand-strong"
                               : "text-foreground hover:bg-muted"
@@ -774,7 +930,7 @@ export default function TripDetailPage() {
                         <button
                           type="button"
                           className={cn(
-                            "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors",
+                            "flex w-full items-center gap-2 whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm transition-colors",
                             groupBy === "city" && !cityFilter
                               ? "bg-brand-muted font-medium text-brand-strong"
                               : "text-foreground hover:bg-muted"
@@ -797,7 +953,7 @@ export default function TripDetailPage() {
                               key={city}
                               type="button"
                               className={cn(
-                                "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors",
+                                "flex w-full items-center gap-2 whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm transition-colors",
                                 cityFilter === city
                                   ? "bg-brand-muted font-medium text-brand-strong"
                                   : "text-foreground hover:bg-muted"
@@ -814,7 +970,7 @@ export default function TripDetailPage() {
                                 size={12}
                                 className="shrink-0 text-muted-foreground"
                               />
-                              {city}
+                              <span className="truncate">{city}</span>
                             </button>
                           ))}
                       </PopoverContent>
@@ -939,7 +1095,7 @@ export default function TripDetailPage() {
                         </button>
                       </PopoverTrigger>
                       <PopoverContent
-                        className="w-56 p-1.5"
+                        className="max-h-72 w-56 overflow-y-auto p-1.5"
                         align="start"
                         sideOffset={6}
                       >
@@ -1188,13 +1344,27 @@ export default function TripDetailPage() {
               )}
             </div>
 
-            {/* Right column — Trip Summary sidebar */}
+            {/* Right column — Map sidebar (TripSummaryCard temporarily disabled; kept for future re-enable) */}
             {locations.length > 0 && (
-              <div className="hidden xl:block xl:sticky xl:top-[6.75rem] xl:self-start">
-                <TripSummaryCard
-                  locations={locations}
-                  addedByEmails={addedByEmails}
-                />
+              <div className="hidden xl:flex xl:sticky xl:top-[6.75rem] xl:max-h-[calc(100vh-8rem)] xl:flex-col xl:overflow-hidden xl:pb-2">
+                {/* Keep for future re-enable — do not delete:
+                <div className="mb-4 shrink-0">
+                  <TripSummaryCard
+                    locations={locations}
+                    addedByEmails={addedByEmails}
+                  />
+                </div>
+                */}
+                <div className="min-h-0 flex-1">
+                  <SidebarLocationMap
+                    locations={filteredLocations}
+                    focusLocationId={focusedLocation?.id ?? null}
+                    focusSeq={focusedLocation?.seq ?? 0}
+                    onPinClick={handlePinClick}
+                    onLocationNoteSave={handleMapNoteSave}
+                    onLocationDelete={handleMapDelete}
+                  />
+                </div>
               </div>
             )}
           </div>
@@ -1203,6 +1373,8 @@ export default function TripDetailPage() {
             locations={locations}
             open={mapDialogOpen}
             onOpenChange={setMapDialogOpen}
+            onLocationNoteSave={handleMapNoteSave}
+            onLocationDelete={handleMapDelete}
           />
         </section>
       )}

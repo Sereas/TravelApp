@@ -1,5 +1,5 @@
 /// <reference types="vitest/globals" />
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { LocationCard } from "./LocationCard";
 
@@ -30,6 +30,17 @@ describe("LocationCard", () => {
   it("renders address alone when no city", () => {
     render(<LocationCard id="1" name="Louvre" address="Rue de Rivoli" />);
     expect(screen.getByText("Rue de Rivoli")).toBeInTheDocument();
+  });
+
+  it("address allows up to two lines instead of truncating to one", () => {
+    const longAddress =
+      "123 Avenue de la Republique, 75011 Paris, Île-de-France, France";
+    render(<LocationCard id="1" name="Louvre" address={longAddress} />);
+    const el = screen.getByText(longAddress);
+    // Narrower card sidebar widths need the address to flow onto two lines
+    // instead of truncating with ellipsis after a few characters.
+    expect(el).toHaveClass("line-clamp-2");
+    expect(el).not.toHaveClass("truncate");
   });
 
   it("renders Details link when google_link provided", () => {
@@ -102,6 +113,20 @@ describe("LocationCard", () => {
   it("renders booking needed badge for requires_booking=yes", () => {
     render(<LocationCard id="1" name="Louvre" requires_booking="yes" />);
     expect(screen.getByText("Booking needed")).toBeInTheDocument();
+  });
+
+  it("booking needed badge stays on a single line at narrow widths", () => {
+    render(<LocationCard id="1" name="Louvre" requires_booking="yes" />);
+    // Prevent the pill from wrapping to 2 lines and obscuring the image
+    // attribution bar when the card is narrow (xl:grid-cols sidebar widened).
+    expect(screen.getByText("Booking needed")).toHaveClass("whitespace-nowrap");
+  });
+
+  it("category pill stays on a single line at narrow widths", () => {
+    render(<LocationCard id="1" name="Louvre" category="Cultural Heritage" />);
+    expect(screen.getByText("Cultural Heritage")).toHaveClass(
+      "whitespace-nowrap"
+    );
   });
 
   it("renders booked badge for requires_booking=yes_done", () => {
@@ -304,5 +329,102 @@ describe("LocationCard", () => {
     const card = container.firstChild as HTMLElement;
     expect(card.className).toContain("rounded-xl");
     expect(screen.getByTestId("image-placeholder")).toBeInTheDocument();
+  });
+
+  // --- data-location-id anchor (for scroll-to-card from sidebar map) ---
+
+  it("sets data-location-id on the root element matching the id prop", () => {
+    render(<LocationCard id="loc-abc-123" name="Eiffel Tower" />);
+    const card = document.querySelector('[data-location-id="loc-abc-123"]');
+    expect(card).not.toBeNull();
+    expect(card).toHaveTextContent("Eiffel Tower");
+  });
+
+  it("data-location-id matches a different id when id prop changes", () => {
+    render(<LocationCard id="other-id" name="Louvre" />);
+    expect(
+      document.querySelector('[data-location-id="other-id"]')
+    ).not.toBeNull();
+    expect(
+      document.querySelector('[data-location-id="loc-abc-123"]')
+    ).toBeNull();
+  });
+
+  // --- Highlight animation (triggered when sidebar pin is clicked) ---
+
+  it("does NOT apply highlight animation class when isHighlighted is false or omitted", () => {
+    const { container, rerender } = render(
+      <LocationCard id="1" name="Louvre" />
+    );
+    const root = container.firstChild as HTMLElement;
+    expect(root.className).not.toContain("animate-location-highlight");
+
+    rerender(<LocationCard id="1" name="Louvre" isHighlighted={false} />);
+    const rootAfter = container.firstChild as HTMLElement;
+    expect(rootAfter.className).not.toContain("animate-location-highlight");
+  });
+
+  it("applies highlight animation class when isHighlighted is true", () => {
+    const { container } = render(
+      <LocationCard id="1" name="Louvre" isHighlighted />
+    );
+    const root = container.firstChild as HTMLElement;
+    expect(root.className).toContain("animate-location-highlight");
+  });
+
+  it("toggles highlight class off on rerender from true to false", () => {
+    const { container, rerender } = render(
+      <LocationCard id="1" name="Louvre" isHighlighted />
+    );
+    expect((container.firstChild as HTMLElement).className).toContain(
+      "animate-location-highlight"
+    );
+
+    rerender(<LocationCard id="1" name="Louvre" isHighlighted={false} />);
+    expect((container.firstChild as HTMLElement).className).not.toContain(
+      "animate-location-highlight"
+    );
+  });
+
+  // --- onCardClick nested-interactive-element guard ---
+
+  it("fires onCardClick when the card body itself is clicked", () => {
+    const handle = vi.fn();
+    const { container } = render(
+      <LocationCard id="1" name="Louvre" onCardClick={handle} />
+    );
+    fireEvent.click(container.firstChild as HTMLElement);
+    expect(handle).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT fire onCardClick when a nested button is clicked", async () => {
+    const user = userEvent.setup();
+    const handle = vi.fn();
+    render(
+      <LocationCard
+        id="1"
+        name="Louvre"
+        working_hours="Mon: 9-5 | Tue: 9-5 | Wed: 9-5"
+        onCardClick={handle}
+      />
+    );
+    await user.click(
+      screen.getByRole("button", { name: /view opening hours/i })
+    );
+    expect(handle).not.toHaveBeenCalled();
+  });
+
+  it("does NOT fire onCardClick when the Google Maps link is clicked", () => {
+    const handle = vi.fn();
+    render(
+      <LocationCard
+        id="1"
+        name="Louvre"
+        google_link="https://maps.google.com/?q=louvre"
+        onCardClick={handle}
+      />
+    );
+    fireEvent.click(screen.getByRole("link", { name: /open in google maps/i }));
+    expect(handle).not.toHaveBeenCalled();
   });
 });
