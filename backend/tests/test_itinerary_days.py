@@ -1452,3 +1452,131 @@ def test_create_day_no_jwt_returns_401(client: TestClient):
     """Create day without JWT -> 401."""
     r = client.post(f"/api/v1/trips/{uuid4()}/days", json={})
     assert r.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 — new behavioural tests for the RPC-backed update_day endpoint.
+# ---------------------------------------------------------------------------
+
+
+def _setup_trip_day_with_option(mock_supabase_trips_and_days, mock_user_id):
+    """Seed a trip, a day, and one option; return (trip_id, day_id, option_id, mock_sb)."""
+    days_store, trips_store, MockSupabase = mock_supabase_trips_and_days
+    trip_id = str(uuid4())
+    day_id = str(uuid4())
+    option_id = str(uuid4())
+    mock_sb = MockSupabase({trip_id: str(mock_user_id)}, mock_user_id)
+    trips_store.append(
+        {
+            "trip_id": trip_id,
+            "user_id": str(mock_user_id),
+            "trip_name": "Phase5 Test",
+            "start_date": None,
+            "end_date": None,
+        }
+    )
+    days_store.append(
+        {
+            "day_id": day_id,
+            "trip_id": trip_id,
+            "date": "2025-07-01",
+            "sort_order": 0,
+            "created_at": "2025-01-01T12:00:00Z",
+            "active_option_id": None,
+        }
+    )
+    mock_sb._options_store.append(
+        {
+            "option_id": option_id,
+            "day_id": day_id,
+            "option_index": 1,
+            "starting_city": None,
+            "ending_city": None,
+            "created_by": None,
+            "created_at": "2025-01-01T12:00:00Z",
+        }
+    )
+    return trip_id, day_id, option_id, mock_sb
+
+
+def test_update_day_with_invalid_active_option_id_returns_422(
+    client: TestClient,
+    mock_user_id,
+    mock_supabase_trips_and_days,
+):
+    """
+    Phase 5: PATCH .../days/{day_id} with an active_option_id that does NOT belong
+    to this day must return 422 Unprocessable Entity.
+    """
+    days_store, trips_store, MockSupabase = mock_supabase_trips_and_days
+    trip_id = str(uuid4())
+    day_id = str(uuid4())
+    other_option_id = str(uuid4())  # option from a different day
+    mock_sb = MockSupabase({trip_id: str(mock_user_id)}, mock_user_id)
+    trips_store.append(
+        {
+            "trip_id": trip_id,
+            "user_id": str(mock_user_id),
+            "trip_name": "Phase5 Test",
+            "start_date": None,
+            "end_date": None,
+        }
+    )
+    days_store.append(
+        {
+            "day_id": day_id,
+            "trip_id": trip_id,
+            "date": "2025-07-01",
+            "sort_order": 0,
+            "created_at": "2025-01-01T12:00:00Z",
+            "active_option_id": None,
+        }
+    )
+    # other_option_id is NOT seeded into this day's options store
+
+    async def override_user():
+        return mock_user_id
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        r = client.patch(
+            f"/api/v1/trips/{trip_id}/days/{day_id}",
+            json={"active_option_id": other_option_id},
+        )
+        assert r.status_code == 422, f"Expected 422, got {r.status_code}: {r.text}"
+        body = r.json()
+        assert "active_option_id" in body.get("detail", "").lower() or "option" in body.get("detail", "").lower()
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_update_day_with_valid_active_option_id_persists(
+    client: TestClient,
+    mock_user_id,
+    mock_supabase_trips_and_days,
+):
+    """
+    Phase 5: PATCH .../days/{day_id} with a valid active_option_id (option that belongs
+    to this day) must return 200 and the day must have active_option_id set.
+    """
+    trip_id, day_id, option_id, mock_sb = _setup_trip_day_with_option(
+        mock_supabase_trips_and_days, mock_user_id
+    )
+
+    async def override_user():
+        return mock_user_id
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        r = client.patch(
+            f"/api/v1/trips/{trip_id}/days/{day_id}",
+            json={"active_option_id": option_id},
+        )
+        assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
+        body = r.json()
+        assert body["active_option_id"] == option_id
+        assert body["id"] == day_id
+    finally:
+        app.dependency_overrides.clear()

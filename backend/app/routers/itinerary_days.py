@@ -214,75 +214,48 @@ async def update_day(
 ):
     """
     Update an itinerary day. Trip must exist and be owned; day must belong to trip; else 404.
-    At least one field required in body.
+    At least one field required in body. Uses update_day_with_option_check RPC for atomicity:
+    2 round-trips total (ownership + RPC update).
     """
-    _ensure_resource_chain(supabase, trip_id, user_id)
-    result = (
-        supabase.table("trip_days")
-        .select(_TRIP_DAYS_SELECT)
-        .eq("day_id", str(day_id))
-        .eq("trip_id", str(trip_id))
-        .execute()
-    )
-    if not result.data or len(result.data) == 0:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Day not found")
     if not body.model_fields_set:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="At least one field must be provided for update",
         )
-    update_data: dict[str, object] = {}
-    if "date" in body.model_fields_set:
-        update_data["date"] = body.date.isoformat() if body.date else None
-    if "sort_order" in body.model_fields_set:
-        update_data["sort_order"] = body.sort_order
-    if "active_option_id" in body.model_fields_set:
-        # active_option_id is persisted per-day so the user's currently-chosen
-        # option survives logout/login and is what shared viewers see. We must
-        # ensure the referenced option actually belongs to *this* day before
-        # writing — otherwise a crafted request could point day A at an option
-        # from day B (or even another user's trip). `_ensure_resource_chain`
-        # above already verified the trip ownership + day-in-trip chain, so we
-        # only need to verify option.day_id == day_id here.
-        if body.active_option_id is None:
-            update_data["active_option_id"] = None
-        else:
-            option_check = (
-                supabase.table("day_options")
-                .select("option_id")
-                .eq("option_id", body.active_option_id)
-                .eq("day_id", str(day_id))
-                .limit(1)
-                .execute()
-            )
-            if not option_check.data:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail="active_option_id does not belong to this day",
-                )
-            update_data["active_option_id"] = body.active_option_id
-    if not update_data:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="At least one field must be provided for update",
-        )
-    supabase.table("trip_days").update(update_data).eq("day_id", str(day_id)).eq(
-        "trip_id", str(trip_id)
-    ).execute()
-    updated = (
-        supabase.table("trip_days")
-        .select(_TRIP_DAYS_SELECT)
-        .eq("day_id", str(day_id))
-        .eq("trip_id", str(trip_id))
-        .execute()
-    )
-    if not updated.data or len(updated.data) == 0:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Day was updated but could not be retrieved; please refresh",
-        )
+    _ensure_resource_chain(supabase, trip_id, user_id)  # RT 1
+    body_fields = body.model_fields_set
+    params: dict[str, object] = {
+        "p_day_id": str(day_id),
+        "p_trip_id": str(trip_id),
+        "p_date": body.date.isoformat() if ("date" in body_fields and body.date) else None,
+        "p_set_date": "date" in body_fields,
+        "p_sort_order": body.sort_order if "sort_order" in body_fields else None,
+        "p_set_sort_order": "sort_order" in body_fields,
+        "p_active_option_id": (
+            str(body.active_option_id)
+            if ("active_option_id" in body_fields and body.active_option_id)
+            else None
+        ),
+        "p_set_active_option": "active_option_id" in body_fields,
+    }
+    try:
+        result = supabase.rpc("update_day_with_option_check", params).execute()  # RT 2
+    except Exception as exc:
+        detail = str(exc)
+        if "DAY_NOT_FOUND" in detail:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Day not found"
+            ) from exc
+        if "INVALID_ACTIVE_OPTION_ID" in detail:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="active_option_id does not belong to this day",
+            ) from exc
+        raise
+    if not result.data or len(result.data) == 0:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Day not found")
     logger.info("day_updated", day_id=str(day_id), trip_id=str(trip_id))
-    return _day_row_to_response(updated.data[0])
+    return _day_row_to_response(result.data[0])
 
 
 @router.post("/{trip_id}/days/{day_id}/reassign-date", status_code=status.HTTP_204_NO_CONTENT)

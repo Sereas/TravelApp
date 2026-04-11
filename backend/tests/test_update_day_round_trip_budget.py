@@ -91,12 +91,12 @@ def test_update_day_round_trip_budget_no_active_option(
         assert resp.status_code == 200, f"Unexpected: {resp.status_code} {resp.text}"
 
         total = counter.total_calls
-        # Phase 0 baseline ceiling
-        assert total <= 6, (
-            f"update_day (no active_option_id) exceeded baseline ceiling: {total}\n"
+        # Phase 5 tightened budget: ownership RPC + update RPC = 2 RT
+        assert total <= 2, (
+            f"update_day (no active_option_id) exceeded Phase 5 budget of 2: {total}\n"
             f"Breakdown: {counter.calls}"
         )
-        print(f"\n[Phase 0 baseline] update_day (no active_option_id) total calls: {total}")
+        print(f"\n[Phase 5] update_day (no active_option_id) total calls: {total}")
         print(f"  Breakdown: {counter.calls}")
     finally:
         app.dependency_overrides.clear()
@@ -147,12 +147,12 @@ def test_update_day_round_trip_budget_with_active_option(
         assert resp.status_code == 200, f"Unexpected: {resp.status_code} {resp.text}"
 
         total = counter.total_calls
-        # Phase 0 baseline ceiling
-        assert total <= 6, (
-            f"update_day (with active_option_id) exceeded baseline ceiling: {total}\n"
+        # Phase 5 tightened budget: ownership RPC + update RPC = 2 RT
+        assert total <= 2, (
+            f"update_day (with active_option_id) exceeded Phase 5 budget of 2: {total}\n"
             f"Breakdown: {counter.calls}"
         )
-        print(f"\n[Phase 0 baseline] update_day (with active_option_id) total calls: {total}")
+        print(f"\n[Phase 5] update_day (with active_option_id) total calls: {total}")
         print(f"  Breakdown: {counter.calls}")
     finally:
         app.dependency_overrides.clear()

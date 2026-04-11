@@ -973,22 +973,18 @@ async def update_location(
     Update a location's user-facing fields for a trip. Requires valid JWT.
     Trip must exist and be owned by the authenticated user; location must belong
     to the trip; else 404 with descriptive message.
-    """
-    _ensure_resource_chain(supabase, trip_id, user_id)
 
-    # Ensure the location exists under this trip
-    loc_result = (
-        supabase.table("locations")
-        .select(_LOCATIONS_SELECT)
-        .eq("location_id", str(location_id))
-        .eq("trip_id", str(trip_id))
-        .execute()
-    )
-    if not loc_result.data or len(loc_result.data) == 0:
+    Round-trip budget: ≤ 3 RT.
+      RT 1 — ownership (verify_resource_chain)
+      RT 2 — UPDATE (returns updated row via Prefer: return=representation)
+      RT 3 — place_photos SELECT (only when google_place_id is present on the row)
+    """
+    if not body.model_fields_set:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Location not found",
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="At least one field must be provided for update",
         )
+    _ensure_resource_chain(supabase, trip_id, user_id)  # RT 1
 
     update_data: dict[str, object] = {}
     for field in (
@@ -1013,48 +1009,43 @@ async def update_location(
             detail="At least one field must be provided for update",
         )
 
-    supabase.table("locations").update(update_data).eq("location_id", str(location_id)).eq(
-        "trip_id", str(trip_id)
-    ).execute()
-
-    # Fetch updated row (without google_raw)
-    fetch = (
+    # RT 2: UPDATE returns the updated row via supabase-py's default
+    # `Prefer: return=representation` header — no separate re-fetch needed.
+    update_result = (
         supabase.table("locations")
-        .select(_LOCATIONS_SELECT)
+        .update(update_data)
         .eq("location_id", str(location_id))
         .eq("trip_id", str(trip_id))
         .execute()
     )
-    if not fetch.data or len(fetch.data) == 0:
-        logger.error(
-            "location_update_fetch_failed",
-            location_id=str(location_id),
-            trip_id=str(trip_id),
-            error_category="db",
-        )
+    if not update_result.data or len(update_result.data) == 0:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Location was updated but could not be retrieved; please refresh",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Location not found",
         )
-    loc = fetch.data[0]
-    # Enrich with photo URL (and warm cache if google_place_id changed)
+    loc = update_result.data[0]
+
+    # Enrich with photo URL (RT 3 — only when the row has a google_place_id).
+    # Warm the photo cache when google_place_id or google_raw was patched and
+    # no cached photo exists yet.  We don't need the OLD google_place_id:
+    # if the gp_id didn't actually change, the cache will already have a row
+    # (RT 3 returns data → we use it, no warming needed).
     gp_id = loc.get("google_place_id")
     if gp_id:
-        old_gp_id = loc_result.data[0].get("google_place_id")
-        gp_id_changed = "google_place_id" in body.model_fields_set and gp_id != old_gp_id
-        raw_changed = "google_raw" in body.model_fields_set
         photo_row = (
             supabase.table("place_photos")
             .select("google_place_id, photo_url, attribution_name, attribution_uri")
             .eq("google_place_id", gp_id)
             .execute()
-        )
+        )  # RT 3
         if photo_row.data:
             loc["image_url"] = photo_row.data[0]["photo_url"]
             loc["attribution_name"] = photo_row.data[0].get("attribution_name")
             loc["attribution_uri"] = photo_row.data[0].get("attribution_uri")
-        elif (gp_id_changed or raw_changed) and places_client:
-            # New google_place_id or updated raw with photos — warm the cache
+        elif (
+            "google_place_id" in body.model_fields_set or "google_raw" in body.model_fields_set
+        ) and places_client:
+            # google_place_id or raw was patched and no cached photo yet — warm the cache.
             raw = body.google_raw or {}
             photos = _extract_photos_from_raw(raw)
             if photos:

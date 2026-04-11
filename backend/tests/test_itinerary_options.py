@@ -438,3 +438,91 @@ def test_list_options_day_not_found_returns_404(
 def test_create_option_no_jwt_returns_401(client: TestClient):
     r = client.post(f"/api/v1/trips/{uuid4()}/days/{uuid4()}/options", json={})
     assert r.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 — new behavioural tests for the RPC-backed update_option endpoint.
+# ---------------------------------------------------------------------------
+
+
+def _setup_two_options_in_day(mock_supabase_trips_and_days, mock_user_id):
+    """Seed a trip, a day, and TWO options; return (trip_id, day_id, opt1_id, opt2_id, mock_sb)."""
+    days_store, trips_store, MockSupabase = mock_supabase_trips_and_days
+    trip_id = str(uuid4())
+    day_id = str(uuid4())
+    opt1_id = str(uuid4())
+    opt2_id = str(uuid4())
+    mock_sb = MockSupabase({trip_id: str(mock_user_id)}, mock_user_id)
+    trips_store.append(
+        {
+            "trip_id": trip_id,
+            "user_id": str(mock_user_id),
+            "trip_name": "Phase5 Options Test",
+            "start_date": None,
+            "end_date": None,
+        }
+    )
+    days_store.append(
+        {
+            "day_id": day_id,
+            "trip_id": trip_id,
+            "date": "2025-07-01",
+            "sort_order": 0,
+            "created_at": "2025-01-01T12:00:00Z",
+            "active_option_id": None,
+        }
+    )
+    mock_sb._options_store.extend(
+        [
+            {
+                "option_id": opt1_id,
+                "day_id": day_id,
+                "option_index": 1,
+                "starting_city": None,
+                "ending_city": None,
+                "created_by": None,
+                "created_at": "2025-01-01T12:00:00Z",
+            },
+            {
+                "option_id": opt2_id,
+                "day_id": day_id,
+                "option_index": 2,
+                "starting_city": None,
+                "ending_city": None,
+                "created_by": None,
+                "created_at": "2025-01-01T12:00:00Z",
+            },
+        ]
+    )
+    return trip_id, day_id, opt1_id, opt2_id, mock_sb
+
+
+def test_update_option_index_conflict_returns_409(
+    client: TestClient,
+    mock_user_id,
+    mock_supabase_trips_and_days,
+):
+    """
+    Phase 5: PATCH .../options/{option_id} setting option_index to a value already
+    occupied by another option in the same day must return 409 Conflict.
+
+    Setup: day has option_index=1 (opt1) and option_index=2 (opt2).
+    PATCH opt1 to option_index=2 -> 409.
+    """
+    trip_id, day_id, opt1_id, opt2_id, mock_sb = _setup_two_options_in_day(
+        mock_supabase_trips_and_days, mock_user_id
+    )
+
+    async def override_user():
+        return mock_user_id
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        r = client.patch(
+            f"/api/v1/trips/{trip_id}/days/{day_id}/options/{opt1_id}",
+            json={"option_index": 2},
+        )
+        assert r.status_code == 409, f"Expected 409 Conflict, got {r.status_code}: {r.text}"
+    finally:
+        app.dependency_overrides.clear()

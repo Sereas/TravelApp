@@ -312,20 +312,13 @@ async def update_option_location(
     Update an option-location link (sort_order and/or time_period).
     Trip/day/option must exist and be owned; link must exist; else 404.
     422 if no fields provided. Addressed by ol_id (surrogate key).
+
+    Round-trip budget: ≤ 4 RT.
+      RT 1 — ownership (verify_resource_chain)
+      RT 2 — UPDATE option_locations (returns updated row — no pre-fetch, no post-refetch)
+      RT 3 — SELECT locations (location summary)
+      RT 4 — SELECT place_photos (photo enrichment, only when google_place_id present)
     """
-    _ensure_resource_chain(supabase, trip_id, user_id, day_id=day_id, option_id=option_id)
-    existing = (
-        supabase.table("option_locations")
-        .select(_OPTION_LOCATIONS_SELECT)
-        .eq("id", str(ol_id))
-        .eq("option_id", str(option_id))
-        .execute()
-    )
-    if not existing.data or len(existing.data) == 0:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Option-location not found",
-        )
     if not body.model_fields_set:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -341,17 +334,19 @@ async def update_option_location(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="At least one field must be provided for update",
         )
-    supabase.table("option_locations").update(update_data).eq("id", str(ol_id)).execute()
+    _ensure_resource_chain(supabase, trip_id, user_id, day_id=day_id, option_id=option_id)  # RT 1
+    # RT 2: UPDATE returns the updated row — no pre-fetch or post-refetch needed.
     updated = (
         supabase.table("option_locations")
-        .select(_OPTION_LOCATIONS_SELECT)
+        .update(update_data)
         .eq("id", str(ol_id))
+        .eq("option_id", str(option_id))
         .execute()
     )
     if not updated.data or len(updated.data) == 0:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Option-location was updated but could not be retrieved; please refresh",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Option-location not found",
         )
     rec = updated.data[0]
     location_id = str(rec["location_id"])
@@ -361,10 +356,10 @@ async def update_option_location(
         .eq("trip_id", str(trip_id))
         .eq("location_id", location_id)
         .execute()
-    )
+    )  # RT 3
     loc_data = (loc_row.data or [None])[0] if loc_row.data else None
     if loc_data:
-        _enrich_locations_with_photos(supabase, {location_id: loc_data})
+        _enrich_locations_with_photos(supabase, {location_id: loc_data})  # RT 4 (if gp_id present)
     logger.info(
         "option_location_updated",
         trip_id=str(trip_id),

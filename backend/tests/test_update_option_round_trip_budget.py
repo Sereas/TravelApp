@@ -107,11 +107,12 @@ def test_update_option_round_trip_budget_no_index_change(
         assert resp.status_code == 200, f"Unexpected: {resp.status_code} {resp.text}"
 
         total = counter.total_calls
-        assert total <= 5, (
-            f"update_option (no index change) exceeded baseline ceiling: {total}\n"
+        # Phase 5 tightened budget: ownership RPC + update RPC = 2 RT
+        assert total <= 2, (
+            f"update_option (no index change) exceeded Phase 5 budget of 2: {total}\n"
             f"Breakdown: {counter.calls}"
         )
-        print(f"\n[Phase 0 baseline] update_option (no index change) total calls: {total}")
+        print(f"\n[Phase 5] update_option (no index change) total calls: {total}")
         print(f"  Breakdown: {counter.calls}")
     finally:
         app.dependency_overrides.clear()
@@ -148,11 +149,12 @@ def test_update_option_round_trip_budget_with_index_change(
         assert resp.status_code == 200, f"Unexpected: {resp.status_code} {resp.text}"
 
         total = counter.total_calls
-        assert total <= 5, (
-            f"update_option (with index change) exceeded baseline ceiling: {total}\n"
+        # Phase 5 tightened budget: ownership RPC + update RPC = 2 RT
+        assert total <= 2, (
+            f"update_option (with index change) exceeded Phase 5 budget of 2: {total}\n"
             f"Breakdown: {counter.calls}"
         )
-        print(f"\n[Phase 0 baseline] update_option (with index change) total calls: {total}")
+        print(f"\n[Phase 5] update_option (with index change) total calls: {total}")
         print(f"  Breakdown: {counter.calls}")
     finally:
         app.dependency_overrides.clear()

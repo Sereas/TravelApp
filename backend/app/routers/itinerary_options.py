@@ -236,68 +236,46 @@ async def update_option(
 ):
     """
     Update an option (e.g. option_index for single-item move). 409 if new option_index conflicts.
-    At least one field required.
+    At least one field required. Uses update_option_with_conflict_check RPC for atomicity:
+    2 round-trips total (ownership + RPC update).
     """
-    _ensure_resource_chain(supabase, trip_id, user_id, day_id=day_id)
-    result = (
-        supabase.table("day_options")
-        .select(_DAY_OPTIONS_SELECT)
-        .eq("option_id", str(option_id))
-        .eq("day_id", str(day_id))
-        .execute()
-    )
-    if not result.data or len(result.data) == 0:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Option not found")
     if not body.model_fields_set:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="At least one field must be provided for update",
         )
-    update_data: dict[str, object] = {}
-    if "option_index" in body.model_fields_set and body.option_index is not None:
-        conflict = (
-            supabase.table("day_options")
-            .select("option_id")
-            .eq("day_id", str(day_id))
-            .eq("option_index", body.option_index)
-            .execute()
-        )
-        if conflict.data:
-            for row in conflict.data:
-                if str(row.get("option_id")) != str(option_id):
-                    raise HTTPException(
-                        status_code=status.HTTP_409_CONFLICT,
-                        detail="Another option already uses this option_index in this day",
-                    )
-        update_data["option_index"] = body.option_index
-    if "starting_city" in body.model_fields_set:
-        update_data["starting_city"] = body.starting_city
-    if "ending_city" in body.model_fields_set:
-        update_data["ending_city"] = body.ending_city
-    if "created_by" in body.model_fields_set:
-        update_data["created_by"] = body.created_by
-    if not update_data:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="At least one field must be provided for update",
-        )
-    supabase.table("day_options").update(update_data).eq("option_id", str(option_id)).eq(
-        "day_id", str(day_id)
-    ).execute()
-    updated = (
-        supabase.table("day_options")
-        .select(_DAY_OPTIONS_SELECT)
-        .eq("option_id", str(option_id))
-        .eq("day_id", str(day_id))
-        .execute()
-    )
-    if not updated.data or len(updated.data) == 0:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Option was updated but could not be retrieved; please refresh",
-        )
+    _ensure_resource_chain(supabase, trip_id, user_id, day_id=day_id)  # RT 1
+    body_fields = body.model_fields_set
+    params: dict[str, object] = {
+        "p_option_id": str(option_id),
+        "p_day_id": str(day_id),
+        "p_option_index": body.option_index if "option_index" in body_fields else None,
+        "p_set_option_index": "option_index" in body_fields,
+        "p_starting_city": body.starting_city if "starting_city" in body_fields else None,
+        "p_set_starting_city": "starting_city" in body_fields,
+        "p_ending_city": body.ending_city if "ending_city" in body_fields else None,
+        "p_set_ending_city": "ending_city" in body_fields,
+        "p_created_by": body.created_by if "created_by" in body_fields else None,
+        "p_set_created_by": "created_by" in body_fields,
+    }
+    try:
+        result = supabase.rpc("update_option_with_conflict_check", params).execute()  # RT 2
+    except Exception as exc:
+        detail = str(exc)
+        if "OPTION_NOT_FOUND" in detail:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Option not found"
+            ) from exc
+        if "OPTION_INDEX_CONFLICT" in detail:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Another option already uses this option_index in this day",
+            ) from exc
+        raise
+    if not result.data or len(result.data) == 0:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Option not found")
     logger.info("option_updated", option_id=str(option_id), day_id=str(day_id))
-    return _option_row_to_response(updated.data[0])
+    return _option_row_to_response(result.data[0])
 
 
 @router.delete(

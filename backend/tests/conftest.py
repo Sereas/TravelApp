@@ -1419,6 +1419,83 @@ def mock_supabase_trips_and_days():
                 for i, d in enumerate(trip_days):
                     d["sort_order"] = i
                 return type("RpcChain", (), {"execute": lambda _: _RpcResult(None)})()
+            if name == "update_day_with_option_check":
+                from postgrest.exceptions import APIError
+
+                did = str(params.get("p_day_id", ""))
+                tid = str(params.get("p_trip_id", ""))
+                # Find the day
+                day = next(
+                    (d for d in self._days_store
+                     if str(d.get("day_id")) == did and str(d.get("trip_id")) == tid),
+                    None,
+                )
+                if day is None:
+                    def _raise_day_not_found():
+                        raise APIError({"message": "DAY_NOT_FOUND", "code": "P0002",
+                                        "hint": None, "details": None})
+                    return type("RpcChain", (), {"execute": lambda _: _raise_day_not_found()})()
+                # Validate active_option_id if p_set_active_option and value is not None
+                if params.get("p_set_active_option") and params.get("p_active_option_id") is not None:
+                    aoid = str(params["p_active_option_id"])
+                    valid = any(
+                        str(o.get("option_id")) == aoid and str(o.get("day_id")) == did
+                        for o in self._options_store
+                    )
+                    if not valid:
+                        def _raise_invalid_option():
+                            raise APIError({"message": "INVALID_ACTIVE_OPTION_ID",
+                                            "code": "P0002", "hint": None, "details": None})
+                        return type("RpcChain", (), {"execute": lambda _: _raise_invalid_option()})()
+                # Apply updates
+                if params.get("p_set_date"):
+                    day["date"] = params.get("p_date")
+                if params.get("p_set_sort_order"):
+                    day["sort_order"] = params.get("p_sort_order")
+                if params.get("p_set_active_option"):
+                    aoid_val = params.get("p_active_option_id")
+                    day["active_option_id"] = str(aoid_val) if aoid_val else None
+                updated_day = dict(day)
+                return type("RpcChain", (), {"execute": lambda _: _RpcResult([updated_day])})()
+            if name == "update_option_with_conflict_check":
+                from postgrest.exceptions import APIError
+
+                oid = str(params.get("p_option_id", ""))
+                did = str(params.get("p_day_id", ""))
+                # Find the option
+                option = next(
+                    (o for o in self._options_store
+                     if str(o.get("option_id")) == oid and str(o.get("day_id")) == did),
+                    None,
+                )
+                if option is None:
+                    def _raise_option_not_found():
+                        raise APIError({"message": "OPTION_NOT_FOUND", "code": "P0002",
+                                        "hint": None, "details": None})
+                    return type("RpcChain", (), {"execute": lambda _: _raise_option_not_found()})()
+                # Check option_index conflict
+                if params.get("p_set_option_index") and params.get("p_option_index") is not None:
+                    new_idx = int(params["p_option_index"])
+                    conflict = any(
+                        str(o.get("option_id")) != oid
+                        and str(o.get("day_id")) == did
+                        and int(o.get("option_index", -1)) == new_idx
+                        for o in self._options_store
+                    )
+                    if conflict:
+                        def _raise_conflict():
+                            raise APIError({"message": "OPTION_INDEX_CONFLICT",
+                                            "code": "P0001", "hint": None, "details": None})
+                        return type("RpcChain", (), {"execute": lambda _: _raise_conflict()})()
+                    option["option_index"] = new_idx
+                if params.get("p_set_starting_city"):
+                    option["starting_city"] = params.get("p_starting_city")
+                if params.get("p_set_ending_city"):
+                    option["ending_city"] = params.get("p_ending_city")
+                if params.get("p_set_created_by"):
+                    option["created_by"] = params.get("p_created_by")
+                updated_option = dict(option)
+                return type("RpcChain", (), {"execute": lambda _: _RpcResult([updated_option])})()
             return type("RpcChain", (), {"execute": lambda _: _RpcResult([])})()
 
     return trip_days_store, trips_store, MockSupabaseTripsAndDays

@@ -257,12 +257,12 @@ def test_update_location_round_trip_budget_no_google_place_id(
         assert resp.status_code == 200, f"Unexpected: {resp.status_code} {resp.text}"
 
         total = counter.total_calls
-        # Phase 0 baseline ceiling
-        assert total <= 6, (
-            f"update_location (no gp_id) exceeded baseline ceiling: {total}\n"
+        # Phase 5 tightened budget: ownership RPC + update (returns row) = 2 RT
+        assert total <= 3, (
+            f"update_location (no gp_id) exceeded Phase 5 budget of 3: {total}\n"
             f"Breakdown: {counter.calls}"
         )
-        print(f"\n[Phase 0 baseline] update_location (no gp_id) total calls: {total}")
+        print(f"\n[Phase 5] update_location (no gp_id) total calls: {total}")
         print(f"  Breakdown: {counter.calls}")
     finally:
         app.dependency_overrides.clear()
@@ -312,12 +312,12 @@ def test_update_location_round_trip_budget_with_google_place_id(
         assert resp.status_code == 200, f"Unexpected: {resp.status_code} {resp.text}"
 
         total = counter.total_calls
-        # Phase 0 baseline ceiling
-        assert total <= 6, (
-            f"update_location (with gp_id) exceeded baseline ceiling: {total}\n"
+        # Phase 5 tightened budget: ownership RPC + update (returns row) + place_photos = 3 RT
+        assert total <= 3, (
+            f"update_location (with gp_id) exceeded Phase 5 budget of 3: {total}\n"
             f"Breakdown: {counter.calls}"
         )
-        print(f"\n[Phase 0 baseline] update_location (with gp_id) total calls: {total}")
+        print(f"\n[Phase 5] update_location (with gp_id) total calls: {total}")
         print(f"  Breakdown: {counter.calls}")
     finally:
         app.dependency_overrides.clear()
