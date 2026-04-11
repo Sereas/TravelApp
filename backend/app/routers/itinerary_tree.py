@@ -14,10 +14,10 @@ from backend.app.models.schemas import (
     ItineraryOptionLocation,
     ItineraryResponse,
     ItineraryRoute,
-    LocationSummary,
     RouteSegmentSummary,
 )
 from backend.app.routers.trip_ownership import _ensure_resource_chain
+from backend.app.services.location_projection import build_location_summary
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger("itinerary_tree")
 
@@ -57,24 +57,7 @@ def _build_itinerary_response(
         opt_id = str(row["option_id"])
         loc_id = str(row["location_id"])
         loc_row = locations_by_id.get(loc_id)
-        if loc_row is None:
-            summary = LocationSummary(id=loc_id, name="")
-        else:
-            summary = LocationSummary(
-                id=loc_id,
-                name=loc_row.get("name", ""),
-                city=loc_row.get("city"),
-                address=loc_row.get("address"),
-                google_link=loc_row.get("google_link"),
-                category=loc_row.get("category"),
-                note=loc_row.get("note"),
-                working_hours=loc_row.get("working_hours"),
-                requires_booking=loc_row.get("requires_booking"),
-                image_url=loc_row.get("image_url"),
-                user_image_url=loc_row.get("user_image_url"),
-                attribution_name=loc_row.get("attribution_name"),
-                attribution_uri=loc_row.get("attribution_uri"),
-            )
+        summary = build_location_summary(loc_row, loc_id)
         node = ItineraryOptionLocation(
             id=str(row["id"]) if row.get("id") else loc_id,
             location_id=loc_id,
@@ -178,6 +161,8 @@ def _rpc_rows_to_tree_data(
                     "user_image_url": r.get("loc_user_image_url"),
                     "attribution_name": r.get("loc_attribution_name"),
                     "attribution_uri": r.get("loc_attribution_uri"),
+                    "latitude": r.get("loc_latitude"),
+                    "longitude": r.get("loc_longitude"),
                 }
 
     # Preserve day order (sort_order) and option order (option_index)

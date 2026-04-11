@@ -18,6 +18,8 @@ const optionLocation = {
     note: "Go at sunset",
     working_hours: "9:00-23:00",
     requires_booking: "yes",
+    latitude: null,
+    longitude: null,
     image_url: null,
     user_image_url: null,
     attribution_name: null,

@@ -140,7 +140,7 @@ def test_stream_happy_path_event_sequence(client: TestClient):
     mock_places._search_place_by_text.side_effect = fake_search
     _setup_overrides(sb, places_client=mock_places)
 
-    with patch("backend.app.routers.trip_locations.GoogleListScraper") as MockScraper:
+    with patch("backend.app.services.google_list_import.GoogleListScraper") as MockScraper:
         scraper_instance = MockScraper.return_value
         scraper_instance.extract_places = AsyncMock(return_value=scraped)
 
@@ -201,7 +201,7 @@ def test_stream_scraper_error_yields_error_event(client: TestClient):
     sb = _mock_supabase()
     _setup_overrides(sb, places_client=MagicMock())
 
-    with patch("backend.app.routers.trip_locations.GoogleListScraper") as MockScraper:
+    with patch("backend.app.services.google_list_import.GoogleListScraper") as MockScraper:
         scraper_instance = MockScraper.return_value
         scraper_instance.extract_places = AsyncMock(
             side_effect=GoogleListParseError(captcha_message)
@@ -257,7 +257,7 @@ def test_stream_empty_list_error_passes_through_scraper_message(client: TestClie
     sb = _mock_supabase()
     _setup_overrides(sb, places_client=MagicMock())
 
-    with patch("backend.app.routers.trip_locations.GoogleListScraper") as MockScraper:
+    with patch("backend.app.services.google_list_import.GoogleListScraper") as MockScraper:
         scraper_instance = MockScraper.return_value
         scraper_instance.extract_places = AsyncMock(
             side_effect=GoogleListParseError(empty_list_message)
@@ -305,7 +305,7 @@ def test_stream_captcha_error_passes_through_scraper_message(client: TestClient)
     sb = _mock_supabase()
     _setup_overrides(sb, places_client=MagicMock())
 
-    with patch("backend.app.routers.trip_locations.GoogleListScraper") as MockScraper:
+    with patch("backend.app.services.google_list_import.GoogleListScraper") as MockScraper:
         scraper_instance = MockScraper.return_value
         scraper_instance.extract_places = AsyncMock(
             side_effect=GoogleListParseError(captcha_message)
@@ -357,7 +357,7 @@ def test_stream_enrichment_failure_continues(client: TestClient):
     mock_places._search_place_nearby.side_effect = RuntimeError("Nearby search also failed")
     _setup_overrides(sb, places_client=mock_places)
 
-    with patch("backend.app.routers.trip_locations.GoogleListScraper") as MockScraper:
+    with patch("backend.app.services.google_list_import.GoogleListScraper") as MockScraper:
         scraper_instance = MockScraper.return_value
         scraper_instance.extract_places = AsyncMock(return_value=scraped)
 
@@ -416,7 +416,7 @@ def test_stream_all_duplicates_no_saving_event(client: TestClient):
     )
     _setup_overrides(sb, places_client=mock_places)
 
-    with patch("backend.app.routers.trip_locations.GoogleListScraper") as MockScraper:
+    with patch("backend.app.services.google_list_import.GoogleListScraper") as MockScraper:
         scraper_instance = MockScraper.return_value
         scraper_instance.extract_places = AsyncMock(return_value=scraped)
 

@@ -147,6 +147,8 @@ export interface LocationSummary {
   note: string | null;
   working_hours: string | null;
   requires_booking: string | null;
+  latitude: number | null;
+  longitude: number | null;
   image_url: string | null;
   user_image_url: string | null;
   attribution_name: string | null;

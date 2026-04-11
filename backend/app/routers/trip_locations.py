@@ -1,6 +1,5 @@
 """Trip locations API: add, list, batch-add, update locations for a trip."""
 
-import asyncio
 import contextlib
 import json
 import time
@@ -10,11 +9,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile, status
 from starlette.responses import StreamingResponse
 
-from backend.app.clients.google_list_scraper import GoogleListScraper
-from backend.app.clients.google_places import (
-    GoogleListParseError,
-    GooglePlacesClient,
-)
+from backend.app.clients.google_places import GooglePlacesClient
 from backend.app.core.rate_limit import limiter
 from backend.app.db.supabase import get_supabase_client
 from backend.app.dependencies import (
@@ -30,12 +25,15 @@ from backend.app.models.schemas import (
     LocationResponse,
     UpdateLocationBody,
 )
-from backend.app.routers.locations_google import (
-    _clean_working_hours,
-    _resolve_city,
-    _suggest_category,
-)
 from backend.app.routers.trip_ownership import _ensure_resource_chain
+from backend.app.services.google_list_import import (
+    ImportComplete,
+    import_google_list_iter,
+)
+from backend.app.services.google_list_import import (
+    ImportError as ImportServiceError,
+)
+from backend.app.services.location_projection import enrich_locations_with_photos
 from backend.app.services.place_photos import ensure_place_photo
 
 _ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
@@ -270,21 +268,8 @@ async def list_locations(
 
     # Batch-fetch photo URLs for all locations with a google_place_id (single query)
     t2 = time.perf_counter()
-    place_ids = [loc["google_place_id"] for loc in items if loc.get("google_place_id")]
-    photo_map: dict[str, dict] = {}
-    if place_ids:
-        photos = (
-            supabase.table("place_photos")
-            .select("google_place_id, photo_url, attribution_name, attribution_uri")
-            .in_("google_place_id", place_ids)
-            .execute()
-        )
-        photo_map = {row["google_place_id"]: row for row in (photos.data or [])}
-    for loc in items:
-        photo_row = photo_map.get(loc.get("google_place_id") or "")
-        loc["image_url"] = photo_row["photo_url"] if photo_row else None
-        loc["attribution_name"] = photo_row.get("attribution_name") if photo_row else None
-        loc["attribution_uri"] = photo_row.get("attribution_uri") if photo_row else None
+    items_by_id = {str(loc["location_id"]): loc for loc in items}
+    enrich_locations_with_photos(supabase, items_by_id)
     photo_ms = round((time.perf_counter() - t2) * 1000, 1)
 
     response.headers["X-Locations-Ownership-Ms"] = str(ownership_ms)
@@ -423,9 +408,8 @@ async def import_google_list(
 ):
     """Import locations from a Google Maps shared list into a trip.
 
-    Uses Playwright to scrape place names and coordinates from the shared list,
-    enriches each via Google Places API, deduplicates against existing trip
-    locations, and batch-inserts new ones.
+    Delegates all import logic to the google_list_import service.  This endpoint
+    drains the async iterator and returns a single ImportGoogleListResponse.
     """
     _ensure_resource_chain(supabase, trip_id, user_id)
 
@@ -435,163 +419,44 @@ async def import_google_list(
             detail="Google integration is not configured",
         )
 
-    scraper = GoogleListScraper()
-    try:
-        scraped_places = await scraper.extract_places(body.google_list_url)
-    except GoogleListParseError as exc:
-        logger.warning("google_list_parse_error", error=str(exc), error_category="external_api")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Failed to parse Google Maps list. Please check the URL and try again.",
-        ) from None
-
-    logger.info(
-        "google_list_scraped",
-        trip_id=str(trip_id),
-        count=len(scraped_places),
-    )
-
-    # Fetch existing place_ids for dedup (single DB query)
-    existing_rows = (
-        supabase.table("locations").select("google_place_id").eq("trip_id", str(trip_id)).execute()
-    ).data or []
-
-    existing_place_ids: set[str] = {
-        r["google_place_id"] for r in existing_rows if r.get("google_place_id")
-    }
+    from backend.app.services.google_list_import import EnrichingItem
 
     imported: list[ImportedLocationSummary] = []
     existing: list[ImportedLocationSummary] = []
     failed: list[ImportedLocationSummary] = []
 
-    rows_to_insert: list[dict] = []
-    seen_place_ids: set[str] = set()
-
-    for place in scraped_places:
-        display_name = place.name or f"({place.latitude}, {place.longitude})"
-        has_coords = place.latitude != 0.0 and place.longitude != 0.0
-        is_coord_slug = GooglePlacesClient._is_coordinate_style_place_slug
-        name_is_coords = place.name and is_coord_slug(place.name)
-        search_name = None if name_is_coords else (place.name or None)
-
-        resolved = None
-        used_nearby = False
-        try:
-            if search_name:
-                resolved = places_client._search_place_by_text(
-                    search_name,
-                    latitude=place.latitude if has_coords else None,
-                    longitude=place.longitude if has_coords else None,
-                    radius_m=500.0 if has_coords else None,
-                )
-            elif has_coords:
-                resolved = places_client._search_place_nearby(
-                    place.latitude,
-                    place.longitude,
-                )
-                used_nearby = True
-        except Exception:
-            # Text search with location bias failed — retry without bias
-            # (helps with landmarks like "Mont Blanc" where getlist coords
-            # may differ from the precise pin location in a single link).
-            if search_name and has_coords:
-                with contextlib.suppress(Exception):
-                    resolved = places_client._search_place_by_text(search_name)
-            # Still nothing — fall back to nearby search using coords only.
-            # Guard with `search_name` so we don't re-call nearby if the
-            # initial try block already attempted nearby (coord-only path).
-            if resolved is None and has_coords and search_name:
-                with contextlib.suppress(Exception):
-                    resolved = places_client._search_place_nearby(
-                        place.latitude,
-                        place.longitude,
-                    )
-                    used_nearby = True
-
-        if resolved is None:
-            failed.append(
-                ImportedLocationSummary(
-                    name=display_name,
-                    status="failed",
-                    detail="Places API lookup failed",
-                )
-            )
-            continue
-
-        if resolved.place_id in existing_place_ids or resolved.place_id in seen_place_ids:
-            existing.append(
-                ImportedLocationSummary(
-                    name=resolved.name or display_name,
-                    status="existing",
-                    detail=f"google_place_id {resolved.place_id} already in trip",
-                )
-            )
-            continue
-
-        seen_place_ids.add(resolved.place_id)
-
-        suggested_category = _suggest_category(resolved.types)
-        city = _resolve_city(resolved)
-        clean_hours = _clean_working_hours(resolved.opening_hours_text)
-
-        google_link = f"https://www.google.com/maps/place/?q=place_id:{resolved.place_id}"
-
-        row = {
-            "trip_id": str(trip_id),
-            "name": resolved.name or display_name,
-            "address": resolved.formatted_address,
-            "google_link": google_link,
-            "google_place_id": resolved.place_id,
-            "google_source_type": "google_list_import",
-            "google_raw": resolved.raw,
-            "added_by_user_id": str(user_id),
-            "added_by_email": user_email,
-            "city": city,
-            "working_hours": " | ".join(clean_hours) if clean_hours else None,
-            "category": suggested_category,
-            "latitude": resolved.latitude,
-            "longitude": resolved.longitude,
-            "note": _build_note(place.note, used_nearby, display_name),
-        }
-        rows_to_insert.append((row, resolved.photos))
-        imported.append(
-            ImportedLocationSummary(
-                name=resolved.name or display_name,
-                status="imported",
-                detail="Nearest place to dropped pin" if used_nearby else None,
-            )
-        )
-
-    if rows_to_insert:
-        db_rows = [row for row, _ in rows_to_insert]
-        result = supabase.table("locations").insert(db_rows).execute()
-        if not result.data or len(result.data) != len(db_rows):
-            logger.error(
-                "google_list_import_batch_failed",
-                trip_id=str(trip_id),
-                expected=len(db_rows),
-                got=len(result.data) if result.data else 0,
-                error_category="db",
-            )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to insert some locations; please try again",
-            )
-
-        # Fetch photos for each imported location (best-effort, non-blocking).
-        for (row, photos), _inserted in zip(rows_to_insert, result.data, strict=True):
-            gp_id = row.get("google_place_id")
-            if gp_id and photos:
-                with contextlib.suppress(Exception):
-                    ensure_place_photo(supabase, places_client, gp_id, photos)
-
-    logger.info(
-        "google_list_imported",
+    async for event in import_google_list_iter(
+        supabase,
+        places_client,
         trip_id=str(trip_id),
-        imported=len(imported),
-        existing=len(existing),
-        failed=len(failed),
-    )
+        user_id=str(user_id),
+        user_email=user_email,
+        url=body.google_list_url,
+    ):
+        if isinstance(event, ImportServiceError):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=event.message,
+            )
+        if isinstance(event, EnrichingItem):
+            if event.status == "existing":
+                existing.append(ImportedLocationSummary(name=event.name, status="existing"))
+            elif event.status == "failed":
+                failed.append(
+                    ImportedLocationSummary(
+                        name=event.name,
+                        status="failed",
+                        detail="Places API lookup failed",
+                    )
+                )
+        elif isinstance(event, ImportComplete):
+            for loc in event.inserted:
+                imported.append(
+                    ImportedLocationSummary(
+                        name=loc.get("name", ""),
+                        status="imported",
+                    )
+                )
 
     return ImportGoogleListResponse(
         imported_count=len(imported),
@@ -613,14 +478,76 @@ def _sse_event(data: dict) -> str:
     return f"data: {json.dumps(data)}\n\n"
 
 
-def _build_note(existing_note: str | None, used_nearby: bool, original_name: str) -> str | None:
-    """Combine the scraped note with a nearby-fallback hint when applicable."""
-    parts: list[str] = []
-    if used_nearby:
-        parts.append(f'Nearest place to dropped pin "{original_name}"')
-    if existing_note:
-        parts.append(existing_note)
-    return " · ".join(parts) if parts else None
+def _event_to_sse_dict(
+    event,
+    *,
+    total: int = 0,
+    existing_count: int = 0,
+    failed_count: int = 0,
+    existing_items: list[dict] | None = None,
+    failed_items: list[dict] | None = None,
+) -> dict | None:
+    """Map a service ImportEvent to the SSE data dict the frontend expects.
+
+    Returns None for events that have no SSE representation.
+    total: the scraping_done total, passed in for enriching events.
+    existing_count/failed_count: running counters from the generator.
+    existing_items/failed_items: accumulated EnrichingItem details, injected
+    into the final complete event so the frontend can render the skipped/
+    failed item lists (matches the non-streaming endpoint response shape).
+    """
+    from backend.app.services.google_list_import import (
+        EnrichingItem,
+        ImportComplete,
+        SavingStarted,
+        ScrapingDone,
+        ScrapingStarted,
+    )
+    from backend.app.services.google_list_import import (
+        ImportError as _ImportError,
+    )
+
+    if isinstance(event, ScrapingStarted):
+        return {
+            "event": "scraping",
+            "message": "Exploring the list and having a look at the places",
+        }
+    if isinstance(event, ScrapingDone):
+        return {
+            "event": "scraping_done",
+            "total": event.total_items,
+            "message": f"Found {event.total_items} places",
+        }
+    if isinstance(event, EnrichingItem):
+        return {
+            "event": "enriching",
+            "current": event.index,
+            "total": total,
+            "name": event.name,
+            "status": event.status,
+        }
+    if isinstance(event, SavingStarted):
+        return {
+            "event": "saving",
+            "message": "Almost there — saving your places...",
+        }
+    if isinstance(event, ImportComplete):
+        imported_summaries = [
+            {"name": loc.get("name", ""), "status": "imported", "detail": None}
+            for loc in event.inserted
+        ]
+        return {
+            "event": "complete",
+            "imported_count": len(event.inserted),
+            "existing_count": existing_count,
+            "failed_count": failed_count,
+            "imported": imported_summaries,
+            "existing": list(existing_items or []),
+            "failed": list(failed_items or []),
+        }
+    if isinstance(event, _ImportError):
+        return {"event": "error", "message": event.message}
+    return None
 
 
 @router.post(
@@ -640,7 +567,9 @@ async def import_google_list_stream(
     """SSE streaming variant of import-google-list.
 
     Streams progress events as each place is processed, allowing the
-    frontend to show a real-time progress bar.
+    frontend to show a real-time progress bar. Delegates all import logic
+    to google_list_import service — this function only handles SSE formatting
+    and pre-stream HTTP error checks.
     """
     # Pre-stream checks (return proper HTTP errors, not SSE events)
     _ensure_resource_chain(supabase, trip_id, user_id)
@@ -652,296 +581,50 @@ async def import_google_list_stream(
         )
 
     async def event_generator():
+        from backend.app.services.google_list_import import (
+            EnrichingItem as _EnrichingItem,
+        )
+        from backend.app.services.google_list_import import (
+            ScrapingDone as _ScrapingDone,
+        )
+
+        total_items = 0
+        existing_count = 0
+        failed_count = 0
+        existing_items: list[dict] = []
+        failed_items: list[dict] = []
         try:
-            # Phase 1: Scraping
-            yield _sse_event(
-                {
-                    "event": "scraping",
-                    "message": "Exploring the list and having a look at the places",
-                }
-            )
-
-            scraper = GoogleListScraper()
-            try:
-                scraped_places = await scraper.extract_places(body.google_list_url)
-            except GoogleListParseError as exc:
-                logger.warning(
-                    "google_list_parse_error", error=str(exc), error_category="external_api"
-                )
-                # Internal/infra errors get a generic user-friendly message;
-                # user-actionable errors (empty list, bad URL) pass through.
-                raw = str(exc)
-                _INTERNAL_MARKERS = ("CAPTCHA", "rate-limit", "Playwright", "Failed to scrape")
-                if any(m in raw for m in _INTERNAL_MARKERS):
-                    user_message = (
-                        "We're having temporary technical difficulties importing this list. "
-                        "Please try again in a few minutes."
-                    )
-                else:
-                    user_message = raw
-                yield _sse_event(
-                    {
-                        "event": "error",
-                        "message": user_message,
-                    }
-                )
-                return
-
-            total = len(scraped_places)
-            yield _sse_event(
-                {
-                    "event": "scraping_done",
-                    "total": total,
-                    "message": f"Found {total} places",
-                }
-            )
-
-            logger.info("google_list_scraped", trip_id=str(trip_id), count=total)
-
-            # Fetch existing place_ids for dedup (single DB query)
-            existing_rows = (
-                supabase.table("locations")
-                .select("google_place_id")
-                .eq("trip_id", str(trip_id))
-                .execute()
-            ).data or []
-            existing_place_ids: set[str] = {
-                r["google_place_id"] for r in existing_rows if r.get("google_place_id")
-            }
-
-            imported: list[ImportedLocationSummary] = []
-            existing_list: list[ImportedLocationSummary] = []
-            failed: list[ImportedLocationSummary] = []
-            rows_to_insert: list[tuple[dict, list]] = []
-            seen_place_ids: set[str] = set()
-
-            # Phase 2: Enrichment (per-place progress)
-            for i, place in enumerate(scraped_places, 1):
-                if await request.is_disconnected():
-                    logger.info("import_stream_client_disconnected", trip_id=str(trip_id))
-                    return
-
-                display_name = place.name or f"({place.latitude}, {place.longitude})"
-                has_coords = place.latitude != 0.0 and place.longitude != 0.0
-                # If the scraped name is DMS coordinates (not a venue name),
-                # skip text search and go straight to nearby search — same
-                # strategy as resolve_from_link() in google_places.py.
-                is_coord_slug = GooglePlacesClient._is_coordinate_style_place_slug
-                name_is_coords = place.name and is_coord_slug(place.name)
-                search_name = None if name_is_coords else (place.name or None)
-
-                resolved = None
-                used_nearby = False
-                logger.debug(
-                    "list_import_resolving",
-                    scraped_name=place.name,
-                    lat=place.latitude,
-                    lng=place.longitude,
-                    search_name=search_name,
-                    has_coords=has_coords,
-                )
-                try:
-                    if search_name:
-                        resolved = await asyncio.to_thread(
-                            places_client._search_place_by_text,
-                            search_name,
-                            latitude=place.latitude if has_coords else None,
-                            longitude=place.longitude if has_coords else None,
-                            radius_m=500.0 if has_coords else None,
-                        )
-                        logger.debug(
-                            "list_import_resolved",
-                            scraped_name=search_name,
-                            resolved_name=resolved.name,
-                            resolved_place_id=resolved.place_id,
-                            method="text_with_bias",
-                        )
-                    elif has_coords:
-                        resolved = await asyncio.to_thread(
-                            places_client._search_place_nearby,
-                            place.latitude,
-                            place.longitude,
-                        )
-                        used_nearby = True
-                except Exception:
-                    logger.debug(
-                        "list_import_text_failed",
-                        scraped_name=search_name,
-                        method="text_with_bias",
-                    )
-                    # Text search with location bias failed — retry without bias
-                    # (helps with landmarks like "Mont Blanc" where getlist coords
-                    # may differ from the precise pin location in a single link).
-                    if search_name and has_coords:
-                        try:
-                            resolved = await asyncio.to_thread(
-                                places_client._search_place_by_text,
-                                search_name,
-                            )
-                            logger.debug(
-                                "list_import_resolved",
-                                scraped_name=search_name,
-                                resolved_name=resolved.name,
-                                resolved_place_id=resolved.place_id,
-                                method="text_no_bias",
-                            )
-                        except Exception:
-                            logger.debug(
-                                "list_import_text_failed",
-                                scraped_name=search_name,
-                                method="text_no_bias",
-                            )
-                    # Still nothing — fall back to nearby search using coords only.
-                    # Guard with `search_name` so we don't re-call nearby if the
-                    # initial try block already attempted nearby (coord-only path).
-                    if resolved is None and has_coords and search_name:
-                        try:
-                            resolved = await asyncio.to_thread(
-                                places_client._search_place_nearby,
-                                place.latitude,
-                                place.longitude,
-                            )
-                            used_nearby = True
-                            logger.debug(
-                                "list_import_resolved",
-                                scraped_name=display_name,
-                                resolved_name=resolved.name,
-                                resolved_place_id=resolved.place_id,
-                                method="nearby_fallback",
-                            )
-                        except Exception:
-                            pass
-
-                if resolved is None:
-                    logger.warning(
-                        "google_list_enrichment_failed",
-                        place_name=display_name,
-                        error_category="external_api",
-                    )
-                    failed.append(
-                        ImportedLocationSummary(
-                            name=display_name,
-                            status="failed",
-                            detail="Places API lookup failed",
-                        )
-                    )
-                    yield _sse_event(
-                        {
-                            "event": "enriching",
-                            "current": i,
-                            "total": total,
-                            "name": display_name,
-                            "status": "failed",
-                        }
-                    )
-                    continue
-
-                if resolved.place_id in existing_place_ids or resolved.place_id in seen_place_ids:
-                    existing_list.append(
-                        ImportedLocationSummary(
-                            name=resolved.name or display_name, status="existing"
-                        )
-                    )
-                    yield _sse_event(
-                        {
-                            "event": "enriching",
-                            "current": i,
-                            "total": total,
-                            "name": resolved.name or display_name,
-                            "status": "existing",
-                        }
-                    )
-                    continue
-
-                seen_place_ids.add(resolved.place_id)
-                suggested_category = _suggest_category(resolved.types)
-                city = _resolve_city(resolved)
-                clean_hours = _clean_working_hours(resolved.opening_hours_text)
-                google_link = f"https://www.google.com/maps/place/?q=place_id:{resolved.place_id}"
-
-                row = {
-                    "trip_id": str(trip_id),
-                    "name": resolved.name or display_name,
-                    "address": resolved.formatted_address,
-                    "google_link": google_link,
-                    "google_place_id": resolved.place_id,
-                    "google_source_type": "google_list_import",
-                    "google_raw": resolved.raw,
-                    "added_by_user_id": str(user_id),
-                    "added_by_email": user_email,
-                    "city": city,
-                    "working_hours": " | ".join(clean_hours) if clean_hours else None,
-                    "category": suggested_category,
-                    "latitude": resolved.latitude,
-                    "longitude": resolved.longitude,
-                    "note": _build_note(place.note, used_nearby, display_name),
-                }
-                rows_to_insert.append((row, resolved.photos))
-                imported.append(
-                    ImportedLocationSummary(
-                        name=resolved.name or display_name,
-                        status="imported",
-                        detail="Nearest place to dropped pin" if used_nearby else None,
-                    )
-                )
-                yield _sse_event(
-                    {
-                        "event": "enriching",
-                        "current": i,
-                        "total": total,
-                        "name": resolved.name or display_name,
-                        "status": "imported",
-                    }
-                )
-
-            # Phase 3: Batch insert + photos
-            if rows_to_insert:
-                yield _sse_event(
-                    {
-                        "event": "saving",
-                        "message": "Almost there — saving your places...",
-                    }
-                )
-
-                db_rows = [row for row, _ in rows_to_insert]
-                insert_result = supabase.table("locations").insert(db_rows).execute()
-                if not insert_result.data or len(insert_result.data) != len(db_rows):
-                    yield _sse_event(
-                        {"event": "error", "message": "Failed to save locations. Please try again."}
-                    )
-                    return
-
-                for (row, photos), _inserted in zip(
-                    rows_to_insert, insert_result.data, strict=True
-                ):
-                    gp_id = row.get("google_place_id")
-                    if gp_id and photos:
-                        with contextlib.suppress(Exception):
-                            await asyncio.to_thread(
-                                ensure_place_photo, supabase, places_client, gp_id, photos
-                            )
-
-            logger.info(
-                "google_list_imported",
+            async for event in import_google_list_iter(
+                supabase,
+                places_client,
                 trip_id=str(trip_id),
-                imported=len(imported),
-                existing=len(existing_list),
-                failed=len(failed),
-            )
-
-            # Phase 4: Complete
-            yield _sse_event(
-                {
-                    "event": "complete",
-                    "imported_count": len(imported),
-                    "existing_count": len(existing_list),
-                    "failed_count": len(failed),
-                    "imported": [s.model_dump() for s in imported],
-                    "existing": [s.model_dump() for s in existing_list],
-                    "failed": [s.model_dump() for s in failed],
-                }
-            )
-
+                user_id=str(user_id),
+                user_email=user_email,
+                url=body.google_list_url,
+            ):
+                if isinstance(event, _ScrapingDone):
+                    total_items = event.total_items
+                elif isinstance(event, _EnrichingItem):
+                    if event.status == "existing":
+                        existing_count += 1
+                        existing_items.append(
+                            {"name": event.name, "status": "existing", "detail": None}
+                        )
+                    elif event.status == "failed":
+                        failed_count += 1
+                        failed_items.append(
+                            {"name": event.name, "status": "failed", "detail": None}
+                        )
+                sse_dict = _event_to_sse_dict(
+                    event,
+                    total=total_items,
+                    existing_count=existing_count,
+                    failed_count=failed_count,
+                    existing_items=existing_items,
+                    failed_items=failed_items,
+                )
+                if sse_dict is not None:
+                    yield _sse_event(sse_dict)
         except Exception as exc:
             logger.error("import_stream_error", error=str(exc), error_category="internal")
             yield _sse_event({"event": "error", "message": "An unexpected error occurred."})

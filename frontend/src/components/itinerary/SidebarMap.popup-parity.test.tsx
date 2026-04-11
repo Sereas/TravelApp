@@ -153,6 +153,8 @@ const sampleOption: ItineraryOption = {
         note: null,
         working_hours: null,
         requires_booking: null,
+        latitude: 48.8584,
+        longitude: 2.2945,
         image_url: null,
         user_image_url: null,
         attribution_name: null,

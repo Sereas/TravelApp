@@ -1073,6 +1073,12 @@ def mock_supabase_trips_and_days():
                             "loc_note": loc.get("note"),
                             "loc_working_hours": loc.get("working_hours"),
                             "loc_requires_booking": loc.get("requires_booking"),
+                            "loc_photo_url": loc.get("image_url"),
+                            "loc_user_image_url": loc.get("user_image_url"),
+                            "loc_attribution_name": loc.get("attribution_name"),
+                            "loc_attribution_uri": loc.get("attribution_uri"),
+                            "loc_latitude": loc.get("latitude"),
+                            "loc_longitude": loc.get("longitude"),
                         }
                     )
         return rows

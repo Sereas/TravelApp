@@ -392,3 +392,53 @@ def test_get_itinerary_no_jwt_returns_401(client: TestClient):
     trip_id = uuid4()
     r = client.get(f"/api/v1/trips/{trip_id}/itinerary")
     assert r.status_code == 401
+
+
+def test_itinerary_tree_returns_lat_lng(
+    client: TestClient,
+    mock_user_id,
+    mock_supabase_trips_and_days,
+):
+    """LocationSummary embedded in itinerary must include latitude/longitude (Phase 6)."""
+    (
+        trip_id,
+        day1,
+        _day2,
+        _option1,
+        option2,
+        loc1,
+        loc2,
+        mock_sb,
+    ) = _setup_full_itinerary(mock_supabase_trips_and_days, mock_user_id)
+
+    # Add coordinates to the fixture locations so the RPC mock can surface them
+    for loc in mock_sb._locations_store:
+        if str(loc.get("location_id")) == loc1:
+            loc["latitude"] = 48.8606
+            loc["longitude"] = 2.3376
+        elif str(loc.get("location_id")) == loc2:
+            loc["latitude"] = 48.8584
+            loc["longitude"] = 2.2945
+
+    async def override_user():
+        return mock_user_id
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        r = client.get(f"/api/v1/trips/{trip_id}/itinerary")
+        assert r.status_code == 200
+        data = r.json()
+        day1_node = next(d for d in data["days"] if d["id"] == day1)
+        opt2_node = next(o for o in day1_node["options"] if o["id"] == option2)
+        loc_nodes = opt2_node["locations"]
+        # loc1 first (sort_order 0)
+        first_loc_summary = loc_nodes[0]["location"]
+        assert first_loc_summary["latitude"] == 48.8606
+        assert first_loc_summary["longitude"] == 2.3376
+        # loc2 second (sort_order 1)
+        second_loc_summary = loc_nodes[1]["location"]
+        assert second_loc_summary["latitude"] == 48.8584
+        assert second_loc_summary["longitude"] == 2.2945
+    finally:
+        app.dependency_overrides.clear()

@@ -139,6 +139,8 @@ export const sampleItinerary: ItineraryResponse = {
                 note: null,
                 working_hours: null,
                 requires_booking: null,
+                latitude: 35.7148,
+                longitude: 139.7967,
                 image_url: null,
                 user_image_url: null,
                 attribution_name: null,

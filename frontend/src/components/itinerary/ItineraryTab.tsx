@@ -74,7 +74,7 @@ const TRANSPORT_ICONS: Record<
  */
 function buildDayMapLocations(
   selectedOption: ItineraryOption | undefined,
-  locations: Location[]
+  _locations?: Location[]
 ): ItineraryDayMapLocation[] {
   if (!selectedOption) return [];
   const sorted = [...selectedOption.locations].sort(
@@ -82,32 +82,27 @@ function buildDayMapLocations(
   );
   const seen = new Set<string>();
   return sorted
-    .map((ol) => {
-      const loc = locations.find((l) => l.id === ol.location_id);
-      return loc ? { ol, loc } : null;
-    })
     .filter(
-      (item): item is NonNullable<typeof item> =>
-        !!item &&
-        typeof item.loc.latitude === "number" &&
-        typeof item.loc.longitude === "number"
+      (ol) =>
+        typeof ol.location.latitude === "number" &&
+        typeof ol.location.longitude === "number"
     )
-    .filter(({ loc }) => {
-      if (seen.has(loc.id)) return false;
-      seen.add(loc.id);
+    .filter((ol) => {
+      if (seen.has(ol.location_id)) return false;
+      seen.add(ol.location_id);
       return true;
     })
-    .map(({ loc }) => ({
-      id: loc.id,
-      name: loc.name,
-      latitude: loc.latitude as number,
-      longitude: loc.longitude as number,
-      category: loc.category ?? null,
-      image_url: loc.image_url ?? null,
-      user_image_url: loc.user_image_url ?? null,
-      requires_booking: loc.requires_booking ?? null,
-      city: loc.city ?? null,
-      note: loc.note ?? null,
+    .map((ol) => ({
+      id: ol.location_id,
+      name: ol.location.name,
+      latitude: ol.location.latitude as number,
+      longitude: ol.location.longitude as number,
+      category: ol.location.category ?? null,
+      image_url: ol.location.image_url ?? null,
+      user_image_url: ol.location.user_image_url ?? null,
+      requires_booking: ol.location.requires_booking ?? null,
+      city: ol.location.city ?? null,
+      note: ol.location.note ?? null,
     }));
 }
 
