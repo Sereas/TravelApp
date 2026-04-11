@@ -382,9 +382,7 @@ def test_update_day_set_active_option_id_persists(
     day_id = str(uuid4())
     option_id = str(uuid4())
     mock_sb = MockSupabase({trip_id: str(mock_user_id)}, mock_user_id)
-    trips_store.append(
-        {"trip_id": trip_id, "user_id": str(mock_user_id), "trip_name": "Paris"}
-    )
+    trips_store.append({"trip_id": trip_id, "user_id": str(mock_user_id), "trip_name": "Paris"})
     days_store.append(
         {
             "day_id": day_id,
@@ -440,9 +438,7 @@ def test_update_day_clear_active_option_id_with_null(
     day_id = str(uuid4())
     stale_option_id = str(uuid4())
     mock_sb = MockSupabase({trip_id: str(mock_user_id)}, mock_user_id)
-    trips_store.append(
-        {"trip_id": trip_id, "user_id": str(mock_user_id), "trip_name": "Paris"}
-    )
+    trips_store.append({"trip_id": trip_id, "user_id": str(mock_user_id), "trip_name": "Paris"})
     days_store.append(
         {
             "day_id": day_id,
@@ -488,9 +484,7 @@ def test_update_day_active_option_id_cross_day_rejected(
     day_b = str(uuid4())
     option_on_b = str(uuid4())
     mock_sb = MockSupabase({trip_id: str(mock_user_id)}, mock_user_id)
-    trips_store.append(
-        {"trip_id": trip_id, "user_id": str(mock_user_id), "trip_name": "Paris"}
-    )
+    trips_store.append({"trip_id": trip_id, "user_id": str(mock_user_id), "trip_name": "Paris"})
     days_store.extend(
         [
             {
