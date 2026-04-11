@@ -1425,6 +1425,187 @@ def mock_supabase_trips_and_days():
 
 
 # ---------------------------------------------------------------------------
+# Execute-call counter — opt-in, used by round-trip budget tests.
+# ---------------------------------------------------------------------------
+
+
+class _ExecuteCounter:
+    """Wraps any .execute() call on a Supabase mock and counts by (table, op)."""
+
+    def __init__(self):
+        # calls[table_or_rpc][op] -> int
+        self.calls: dict[str, dict[str, int]] = {}
+        self._total = 0
+
+    def record(self, table: str, op: str) -> None:
+        self.calls.setdefault(table, {}).setdefault(op, 0)
+        self.calls[table][op] += 1
+        self._total += 1
+
+    @property
+    def total_calls(self) -> int:
+        return self._total
+
+    def reset(self) -> None:
+        self.calls.clear()
+        self._total = 0
+
+
+def _wrap_execute(obj, counter: _ExecuteCounter, table: str, op: str):
+    """Return a callable whose .execute() records a call and delegates."""
+    original_execute = getattr(obj, "execute", None)
+
+    class _Counted:
+        def execute(self_inner):
+            counter.record(table, op)
+            if original_execute is not None:
+                return original_execute()
+            return type("Result", (), {"data": []})()
+
+        # Forward every other attribute so chains still work
+        def __getattr__(self_inner, name):
+            return getattr(obj, name)
+
+    return _Counted()
+
+
+class _CountingTableProxy:
+    """
+    Thin proxy that intercepts the terminal .execute() call on a query builder
+    returned by supabase.table(name), records it, then delegates.
+    """
+
+    def __init__(self, inner, counter: _ExecuteCounter, table: str):
+        self._inner = inner
+        self._counter = counter
+        self._table = table
+        self._op = "select"  # default; overridden by insert/update/delete/upsert
+
+    def select(self, *a, **kw):
+        self._op = "select"
+        self._inner = self._inner.select(*a, **kw) if hasattr(self._inner, "select") else self._inner
+        return self
+
+    def insert(self, *a, **kw):
+        self._op = "insert"
+        self._inner = self._inner.insert(*a, **kw) if hasattr(self._inner, "insert") else self._inner
+        return self
+
+    def update(self, *a, **kw):
+        self._op = "update"
+        self._inner = self._inner.update(*a, **kw) if hasattr(self._inner, "update") else self._inner
+        return self
+
+    def delete(self, *a, **kw):
+        self._op = "delete"
+        self._inner = self._inner.delete(*a, **kw) if hasattr(self._inner, "delete") else self._inner
+        return self
+
+    def upsert(self, *a, **kw):
+        self._op = "upsert"
+        self._inner = self._inner.upsert(*a, **kw) if hasattr(self._inner, "upsert") else self._inner
+        return self
+
+    def eq(self, *a, **kw):
+        self._inner = self._inner.eq(*a, **kw) if hasattr(self._inner, "eq") else self._inner
+        return self
+
+    def neq(self, *a, **kw):
+        self._inner = self._inner.neq(*a, **kw) if hasattr(self._inner, "neq") else self._inner
+        return self
+
+    def in_(self, *a, **kw):
+        self._inner = self._inner.in_(*a, **kw) if hasattr(self._inner, "in_") else self._inner
+        return self
+
+    def order(self, *a, **kw):
+        self._inner = self._inner.order(*a, **kw) if hasattr(self._inner, "order") else self._inner
+        return self
+
+    def limit(self, *a, **kw):
+        self._inner = self._inner.limit(*a, **kw) if hasattr(self._inner, "limit") else self._inner
+        return self
+
+    def execute(self):
+        self._counter.record(self._table, self._op)
+        if hasattr(self._inner, "execute"):
+            return self._inner.execute()
+        return type("Result", (), {"data": []})()
+
+
+class _CountingRpcProxy:
+    """Wraps supabase.rpc(name, params) and records the execute() call."""
+
+    def __init__(self, inner, counter: _ExecuteCounter, name: str):
+        self._inner = inner
+        self._counter = counter
+        self._name = name
+
+    def execute(self):
+        self._counter.record(f"rpc:{self._name}", "rpc")
+        if hasattr(self._inner, "execute"):
+            return self._inner.execute()
+        return type("Result", (), {"data": []})()
+
+
+class CountingSupabaseMock:
+    """
+    Wraps an existing MockSupabase instance (from mock_supabase_trips_and_days
+    or similar) and intercepts every .execute() to count calls.
+
+    Usage
+    -----
+    counter = _ExecuteCounter()
+    counting_mock = CountingSupabaseMock(real_mock, counter)
+    app.dependency_overrides[get_supabase_client] = lambda: counting_mock
+    # ... make request ...
+    assert counter.total_calls <= N
+    """
+
+    def __init__(self, inner, counter: _ExecuteCounter):
+        self._inner = inner
+        self._counter = counter
+
+    def table(self, name: str):
+        inner_table = self._inner.table(name)
+        return _CountingTableProxy(inner_table, self._counter, name)
+
+    def rpc(self, name: str, params=None):
+        inner_rpc = self._inner.rpc(name, params or {})
+        return _CountingRpcProxy(inner_rpc, self._counter, name)
+
+    # Forward storage/auth attributes (for fixtures that set self.auth etc.)
+    def __getattr__(self, item):
+        return getattr(self._inner, item)
+
+
+@pytest.fixture
+def mock_supabase_counting(mock_supabase_trips_and_days):
+    """
+    Returns (days_store, trips_store, MockSupabaseFactory, counter).
+
+    The factory now produces CountingSupabaseMock instances that transparently
+    wrap MockSupabaseTripsAndDays but count every .execute() call.
+
+    Example
+    -------
+    days_store, trips_store, MockFactory, counter = mock_supabase_counting
+    mock_sb = MockFactory({trip_id: user_id}, user_id)
+    # inject mock_sb, make request, then:
+    assert counter.total_calls <= 10
+    assert counter.calls["trip_days"]["select"] == 2
+    """
+    days_store, trips_store, MockSupabaseTripsAndDays = mock_supabase_trips_and_days
+    counter = _ExecuteCounter()
+
+    def _counting_factory(trip_owners, user_id):
+        inner = MockSupabaseTripsAndDays(trip_owners, user_id)
+        return CountingSupabaseMock(inner, counter)
+
+    return days_store, trips_store, _counting_factory, counter
+
+
+# ---------------------------------------------------------------------------
 # Rate limiting — disable globally so existing tests are unaffected.
 # The try/except guard allows this fixture to run even before the
 # rate_limit module is created (Red phase).
