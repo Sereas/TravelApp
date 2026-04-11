@@ -38,6 +38,12 @@ import { LoadingSpinner } from "@/components/feedback/LoadingSpinner";
 import { Globe } from "lucide-react";
 import { TripView } from "@/features/trip-view";
 import type { ReadOnlyItineraryState } from "@/features/itinerary/itinerary-state-types";
+import { usePinHighlight } from "@/features/trip-view/usePinHighlight";
+import {
+  getSelectedOption,
+  buildItineraryLocationMap,
+  buildAvailableDays,
+} from "@/lib/itinerary-derived";
 
 /**
  * Adapt the narrow public location summary to the full `Location` shape
@@ -82,53 +88,18 @@ function useSharedItineraryReadState(
     // intentional no-op: shared viewers cannot mutate the owner's selection
   }, []);
 
-  const getSelectedOption = useCallback(
-    (day: ItineraryDay): ItineraryOption | undefined => {
-      // Mirror the authenticated `useItineraryState.getSelectedOption`:
-      // server-persisted `active_option_id` wins, then Main, then first.
-      if (day.active_option_id) {
-        const active = day.options.find((o) => o.id === day.active_option_id);
-        if (active) return active;
-      }
-      return day.options.find((o) => o.option_index === 1) ?? day.options[0];
-    },
+  const getSelectedOptionCallback = useCallback(
+    (day: ItineraryDay): ItineraryOption | undefined => getSelectedOption(day),
     []
   );
 
-  const itineraryLocationMap = useMemo(() => {
-    const map = new Map<string, string[]>();
-    for (const day of itinerary.days) {
-      const dayLabel = day.date
-        ? new Date(day.date + "T00:00:00").toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-          })
-        : `Day ${day.sort_order + 1}`;
-      for (const option of day.options) {
-        for (const loc of option.locations) {
-          const existing = map.get(loc.location_id);
-          if (existing) {
-            if (!existing.includes(dayLabel)) existing.push(dayLabel);
-          } else {
-            map.set(loc.location_id, [dayLabel]);
-          }
-        }
-      }
-    }
-    return map;
-  }, [itinerary]);
+  const itineraryLocationMap = useMemo(
+    () => buildItineraryLocationMap(itinerary),
+    [itinerary]
+  );
 
   const availableDays = useMemo(
-    () =>
-      itinerary.days.map((d, i) => ({
-        id: d.id,
-        label: d.date
-          ? new Date(d.date + "T00:00:00").toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-            })
-          : `Day ${i + 1}`,
-      })),
+    () => buildAvailableDays(itinerary),
     [itinerary]
   );
 
@@ -147,7 +118,7 @@ function useSharedItineraryReadState(
     fetchItinerary: async () => {},
     clearItineraryActionError: () => {},
     selectOption,
-    getSelectedOption,
+    getSelectedOption: getSelectedOptionCallback,
   };
 }
 
@@ -208,11 +179,6 @@ export default function SharedTripPage() {
   );
 }
 
-// Sidebar pin click → scroll-to-card + highlight-pulse timing. Matches the
-// owner route's timings so both views feel identical.
-const HIGHLIGHT_START_DELAY_MS = 350;
-const HIGHLIGHT_ANIMATION_MS = 2000;
-
 function SharedTripContent({ data }: { data: SharedTripData }) {
   const trip = useMemo(() => toTrip(data.trip), [data.trip]);
   const locations = useMemo(
@@ -229,51 +195,13 @@ function SharedTripContent({ data }: { data: SharedTripData }) {
     seq: number;
   } | null>(null);
   const focusSeqRef = useRef(0);
-  const [highlightedLocationId, setHighlightedLocationId] = useState<
-    string | null
-  >(null);
-  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null
-  );
+
+  // Highlight logic is shared with the owner route via usePinHighlight.
+  const { highlightedLocationId, handlePinClick } = usePinHighlight();
 
   const handleCardClick = useCallback((locationId: string) => {
     focusSeqRef.current += 1;
     setFocusedLocation({ id: locationId, seq: focusSeqRef.current });
-  }, []);
-
-  const handlePinClick = useCallback((locationId: string) => {
-    if (highlightTimeoutRef.current != null) {
-      clearTimeout(highlightTimeoutRef.current);
-      highlightTimeoutRef.current = null;
-    }
-    setHighlightedLocationId(null);
-
-    requestAnimationFrame(() => {
-      const el = document.querySelector<HTMLElement>(
-        `[data-location-id="${CSS.escape(locationId)}"]`
-      );
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
-    });
-
-    highlightTimeoutRef.current = setTimeout(() => {
-      setHighlightedLocationId(locationId);
-      highlightTimeoutRef.current = setTimeout(() => {
-        setHighlightedLocationId((prev) => (prev === locationId ? null : prev));
-        highlightTimeoutRef.current = null;
-      }, HIGHLIGHT_ANIMATION_MS);
-    }, HIGHLIGHT_START_DELAY_MS);
-  }, []);
-
-  // Cancel any pending highlight timeout on unmount.
-  useEffect(() => {
-    return () => {
-      if (highlightTimeoutRef.current != null) {
-        clearTimeout(highlightTimeoutRef.current);
-        highlightTimeoutRef.current = null;
-      }
-    };
   }, []);
 
   return (

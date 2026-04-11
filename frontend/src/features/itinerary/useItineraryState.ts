@@ -11,6 +11,11 @@ import {
   type RouteWithSegmentsResponse,
 } from "@/lib/api";
 import type { FullItineraryState } from "@/features/itinerary/itinerary-state-types";
+import {
+  getSelectedOption as _getSelectedOption,
+  buildItineraryLocationMap,
+  buildAvailableDays,
+} from "@/lib/itinerary-derived";
 
 interface UseItineraryStateParams {
   tripId: string;
@@ -165,63 +170,22 @@ export function useItineraryState({
   }, [enabled, fetchItinerary]);
 
   const getSelectedOption = useCallback(
-    (day: ItineraryDay): ItineraryOption | undefined => {
-      // Server-persisted selection wins. If the pointer is stale (e.g. the
-      // option was deleted and ON DELETE SET NULL fired, or an optimistic
-      // patch referenced an option that no longer exists after refetch), we
-      // fall through to the Main (option_index === 1) option, then to the
-      // first available option.
-      if (day.active_option_id) {
-        const active = day.options.find((o) => o.id === day.active_option_id);
-        if (active) return active;
-      }
-      return (
-        day.options.find((option) => option.option_index === 1) ??
-        day.options[0]
-      );
-    },
+    (day: ItineraryDay): ItineraryOption | undefined => _getSelectedOption(day),
     []
   );
 
-  const itineraryLocationMap = useMemo(() => {
-    const map = new Map<string, string[]>();
-    if (!itinerary) return map;
+  const itineraryLocationMap = useMemo(
+    () =>
+      itinerary
+        ? buildItineraryLocationMap(itinerary)
+        : new Map<string, string[]>(),
+    [itinerary]
+  );
 
-    for (const day of itinerary.days) {
-      const dayLabel = day.date
-        ? new Date(day.date + "T00:00:00").toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-          })
-        : `Day ${day.sort_order + 1}`;
-
-      for (const option of day.options) {
-        for (const optionLocation of option.locations) {
-          const existing = map.get(optionLocation.location_id);
-          if (existing) {
-            if (!existing.includes(dayLabel)) existing.push(dayLabel);
-          } else {
-            map.set(optionLocation.location_id, [dayLabel]);
-          }
-        }
-      }
-    }
-
-    return map;
-  }, [itinerary]);
-
-  const availableDays = useMemo(() => {
-    if (!itinerary) return [];
-    return itinerary.days.map((day, index) => ({
-      id: day.id,
-      label: day.date
-        ? new Date(day.date + "T00:00:00").toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-          })
-        : `Day ${index + 1}`,
-    }));
-  }, [itinerary]);
+  const availableDays = useMemo(
+    () => (itinerary ? buildAvailableDays(itinerary) : []),
+    [itinerary]
+  );
 
   const getOrphanedDays = useCallback(
     (newStart: string, newEnd: string): ItineraryDay[] => {

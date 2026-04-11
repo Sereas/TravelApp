@@ -15,7 +15,7 @@
  * automatically shared with `/shared/[token]`.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api, type Trip, type Location } from "@/lib/api";
 import { type TripUpdatePayload } from "@/components/trips/EditTripForm";
@@ -31,13 +31,7 @@ import { ChevronLeft, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { useItineraryState } from "@/features/itinerary/useItineraryState";
 import { TripView, type AddingLocationMode } from "@/features/trip-view";
-
-// Sidebar pin click → scroll + highlight timing. The delay gives the
-// smooth-scroll time to settle so the keyframe peak plays after the card
-// is actually in view. Total on-screen time for the pulse is roughly
-// HIGHLIGHT_START_DELAY_MS + HIGHLIGHT_ANIMATION_MS once the scroll ends.
-const HIGHLIGHT_START_DELAY_MS = 350;
-const HIGHLIGHT_ANIMATION_MS = 2000;
+import { usePinHighlight } from "@/features/trip-view/usePinHighlight";
 
 export default function TripDetailPage() {
   const params = useParams<{ id: string }>();
@@ -66,16 +60,8 @@ export default function TripDetailPage() {
     seq: number;
   } | null>(null);
   const focusSeqRef = useRef(0);
-  // Transient highlight flash when a sidebar map pin is clicked. Only one
-  // card can be highlighted at a time; clicking a new pin cancels the
-  // previous highlight immediately. Tracked via a ref so we can clear the
-  // scheduled cleanup on re-click or unmount.
-  const [highlightedLocationId, setHighlightedLocationId] = useState<
-    string | null
-  >(null);
-  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null
-  );
+  // Transient highlight flash when a sidebar map pin is clicked.
+  const { highlightedLocationId, handlePinClick } = usePinHighlight();
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
 
   const itineraryState = useItineraryState({
@@ -120,64 +106,6 @@ export default function TripDetailPage() {
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tripId]);
-
-  // When a sidebar map pin is clicked: (1) smoothly scroll the card into
-  // the vertical center of the viewport, (2) AFTER the scroll has had time
-  // to land, mark the card as highlighted so the CSS pulse plays out while
-  // the card is actually in view, (3) clear the highlight once the
-  // animation completes. Any in-flight highlight timeout is cancelled
-  // first so rapid clicks don't leak timers.
-  //
-  // Note: we deliberately do NOT bump `focusedLocation` here — that would
-  // trigger the map's focus effect (flyTo + zoom-in), which the user
-  // doesn't want for pin clicks. The pin's own "selected" visual is
-  // already handled locally by the marker's click listener inside
-  // ItineraryDayMap before this callback fires.
-  const handlePinClick = useCallback((locationId: string) => {
-    // Cancel any in-flight highlight (pre-scroll wait or post-apply clear)
-    // and drop any currently-visible highlight so a rapid re-click on a
-    // second pin gives the user an instant visual reset.
-    if (highlightTimeoutRef.current != null) {
-      clearTimeout(highlightTimeoutRef.current);
-      highlightTimeoutRef.current = null;
-    }
-    setHighlightedLocationId(null);
-
-    // Defer querySelector by a frame so any pending DOM commit lands first,
-    // then kick off the smooth scroll.
-    requestAnimationFrame(() => {
-      const el = document.querySelector<HTMLElement>(
-        `[data-location-id="${CSS.escape(locationId)}"]`
-      );
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
-    });
-
-    // Delay applying the highlight class until the smooth scroll has had
-    // time to mostly complete. Otherwise the keyframe peak plays out while
-    // the card is still offscreen and the user never sees it. For an
-    // already-visible card the only downside is a brief beat before the
-    // flash — barely perceptible.
-    highlightTimeoutRef.current = setTimeout(() => {
-      setHighlightedLocationId(locationId);
-      highlightTimeoutRef.current = setTimeout(() => {
-        setHighlightedLocationId((prev) => (prev === locationId ? null : prev));
-        highlightTimeoutRef.current = null;
-      }, HIGHLIGHT_ANIMATION_MS);
-    }, HIGHLIGHT_START_DELAY_MS);
-  }, []);
-
-  // Cancel any pending highlight timeout on unmount so React's strict-mode
-  // double-invocation and route changes don't leave a dangling callback.
-  useEffect(() => {
-    return () => {
-      if (highlightTimeoutRef.current != null) {
-        clearTimeout(highlightTimeoutRef.current);
-        highlightTimeoutRef.current = null;
-      }
-    };
-  }, []);
 
   if (loading) {
     return (
