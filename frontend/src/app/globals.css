@@ -4,6 +4,15 @@
 
 @layer base {
   :root {
+    /* Safe-area insets (iOS notch, Dynamic Island, Android gesture bar).
+     * Consumed via the `pt-safe-t` / `pb-safe-b` / `pl-safe-l` / `pr-safe-r`
+     * Tailwind utilities (see `tailwind.config.ts` → spacing extension).
+     * The `env()` function returns 0px on browsers without a notch. */
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+
     /* Page + surfaces — warm neutral base */
     --background: 75 25% 97%;
     --foreground: 20 12% 14%;
@@ -155,6 +164,38 @@
   }
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
+  }
+
+  /* Invisible 44×44 hit area for small interactive elements.
+   *
+   * Apply to any button that's visually smaller than 44px on either axis.
+   * The `::after` pseudo-element expands the hit area to 44×44 without
+   * changing the element's visual size — so filter pills, icon buttons,
+   * and small chevrons stay compact on desktop but remain comfortably
+   * tappable on touch. The pseudo is absolutely positioned and
+   * `pointer-events: auto` so it forwards clicks to the base element.
+   *
+   * Requires the base element to have `position: relative` (the rule
+   * below adds it automatically).
+   *
+   * Consumed in Phase 2 by LocationCard menu/camera, filter pills, and
+   * the compact day map expand button.
+   */
+  .touch-target {
+    position: relative;
+  }
+  .touch-target::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    min-width: 44px;
+    min-height: 44px;
+    width: 100%;
+    height: 100%;
+    transform: translate(-50%, -50%);
+    /* Forward clicks to the base element. */
+    pointer-events: auto;
   }
 
   @keyframes page-flip-in {
