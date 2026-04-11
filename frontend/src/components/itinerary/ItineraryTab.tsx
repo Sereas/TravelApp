@@ -9,12 +9,19 @@ import { ItineraryDayRail } from "@/components/itinerary/ItineraryDayRail";
 import { ItineraryDayCard } from "@/components/itinerary/ItineraryDayCard";
 import {
   ItineraryDayMap,
+  type ItineraryDayMapLocation,
   type MapRoutePolyline,
 } from "@/components/itinerary/ItineraryDayMap";
 import { ItineraryInspectorPanel } from "@/components/itinerary/ItineraryInspectorPanel";
 import { UnscheduledLocationsPanel } from "@/components/itinerary/UnscheduledLocationsPanel";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import type { ItineraryDay, ItineraryOption, Location, Trip } from "@/lib/api";
 import { ROUTE_COLORS } from "@/components/itinerary/ItineraryDayCard";
 import type {
@@ -23,7 +30,14 @@ import type {
 } from "@/features/itinerary/itinerary-state-types";
 import { cn } from "@/lib/utils";
 import { useReadOnly } from "@/lib/read-only-context";
-import { Car, Expand, Footprints, MapPin, TrainFront } from "lucide-react";
+import {
+  Car,
+  Expand,
+  Footprints,
+  Map as MapIcon,
+  MapPin,
+  TrainFront,
+} from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Helpers (hoisted to module scope to avoid recreation per render)
@@ -50,6 +64,83 @@ const TRANSPORT_ICONS: Record<
   }>
 > = { walk: Footprints, drive: Car, transit: TrainFront };
 
+/**
+ * Build the ordered, deduplicated list of day-map pin locations for a
+ * given itinerary option. Pure function hoisted to module scope so both
+ * `SidebarMap` (desktop compact preview) and the Phase 4 mobile sheet
+ * share the same logic — without this, the mobile sheet was missing
+ * the dedup-by-location-id behavior (a hotel that depart-and-returns
+ * to the same place would show two pins stacked).
+ */
+function buildDayMapLocations(
+  selectedOption: ItineraryOption | undefined,
+  locations: Location[]
+): ItineraryDayMapLocation[] {
+  if (!selectedOption) return [];
+  const sorted = [...selectedOption.locations].sort(
+    (a, b) => a.sort_order - b.sort_order
+  );
+  const seen = new Set<string>();
+  return sorted
+    .map((ol) => {
+      const loc = locations.find((l) => l.id === ol.location_id);
+      return loc ? { ol, loc } : null;
+    })
+    .filter(
+      (item): item is NonNullable<typeof item> =>
+        !!item &&
+        typeof item.loc.latitude === "number" &&
+        typeof item.loc.longitude === "number"
+    )
+    .filter(({ loc }) => {
+      if (seen.has(loc.id)) return false;
+      seen.add(loc.id);
+      return true;
+    })
+    .map(({ loc }) => ({
+      id: loc.id,
+      name: loc.name,
+      latitude: loc.latitude as number,
+      longitude: loc.longitude as number,
+      category: loc.category ?? null,
+      image_url: loc.image_url ?? null,
+      user_image_url: loc.user_image_url ?? null,
+      requires_booking: loc.requires_booking ?? null,
+      city: loc.city ?? null,
+      note: loc.note ?? null,
+    }));
+}
+
+/**
+ * Build the route-polyline overlay list for a given option. Both the
+ * desktop `SidebarMap` compact preview and the Phase 4 mobile sheet
+ * call this so they show identical routes.
+ */
+function buildDayMapRoutes(
+  selectedOption: ItineraryOption | undefined
+): MapRoutePolyline[] {
+  if (!selectedOption?.routes?.length) return [];
+  return selectedOption.routes
+    .map((route, ri) => {
+      const polylines = (route.segments ?? [])
+        .filter((s) => s.encoded_polyline)
+        .sort((a, b) => a.segment_order - b.segment_order)
+        .map((s) => s.encoded_polyline!);
+      if (polylines.length === 0) return null;
+      const dur =
+        route.duration_seconds != null ? fmtDur(route.duration_seconds) : "";
+      const dist =
+        route.distance_meters != null ? fmtDist(route.distance_meters) : "";
+      return {
+        routeId: route.route_id,
+        color: ROUTE_COLORS[ri % ROUTE_COLORS.length].hex,
+        encodedPolylines: polylines,
+        label: [dur, dist].filter(Boolean).join(" · "),
+      };
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null);
+}
+
 // ---------------------------------------------------------------------------
 // Sidebar map — compact preview + expand to Dialog
 // ---------------------------------------------------------------------------
@@ -72,67 +163,15 @@ const SidebarMap = React.memo(function SidebarMap({
     ? getSelectedOption(selectedDay)
     : undefined;
 
-  const mapLocations = useMemo(() => {
-    if (!selectedOption) return [];
-    const sorted = [...selectedOption.locations].sort(
-      (a, b) => a.sort_order - b.sort_order
-    );
-    // Deduplicate by location_id — a location can appear multiple times
-    // in an option (e.g. depart and return to same spot). Show only the
-    // first occurrence on the map.
-    const seen = new Set<string>();
-    return sorted
-      .map((ol) => {
-        const loc = locations.find((l) => l.id === ol.location_id);
-        return loc ? { ol, loc } : null;
-      })
-      .filter(
-        (item): item is NonNullable<typeof item> =>
-          !!item &&
-          typeof item.loc.latitude === "number" &&
-          typeof item.loc.longitude === "number"
-      )
-      .filter(({ loc }) => {
-        if (seen.has(loc.id)) return false;
-        seen.add(loc.id);
-        return true;
-      })
-      .map(({ loc }) => ({
-        id: loc.id,
-        name: loc.name,
-        latitude: loc.latitude as number,
-        longitude: loc.longitude as number,
-        category: loc.category ?? null,
-        image_url: loc.image_url ?? null,
-        user_image_url: loc.user_image_url ?? null,
-        requires_booking: loc.requires_booking ?? null,
-        city: loc.city ?? null,
-        note: loc.note ?? null,
-      }));
-  }, [selectedOption, locations]);
+  const mapLocations = useMemo(
+    () => buildDayMapLocations(selectedOption, locations),
+    [selectedOption, locations]
+  );
 
-  const mapRoutes: MapRoutePolyline[] = useMemo(() => {
-    if (!selectedOption?.routes?.length) return [];
-    return selectedOption.routes
-      .map((route, ri) => {
-        const polylines = (route.segments ?? [])
-          .filter((s) => s.encoded_polyline)
-          .sort((a, b) => a.segment_order - b.segment_order)
-          .map((s) => s.encoded_polyline!);
-        if (polylines.length === 0) return null;
-        const dur =
-          route.duration_seconds != null ? fmtDur(route.duration_seconds) : "";
-        const dist =
-          route.distance_meters != null ? fmtDist(route.distance_meters) : "";
-        return {
-          routeId: route.route_id,
-          color: ROUTE_COLORS[ri % ROUTE_COLORS.length].hex,
-          encodedPolylines: polylines,
-          label: [dur, dist].filter(Boolean).join(" · "),
-        };
-      })
-      .filter((r): r is NonNullable<typeof r> => r !== null);
-  }, [selectedOption]);
+  const mapRoutes = useMemo(
+    () => buildDayMapRoutes(selectedOption),
+    [selectedOption]
+  );
 
   const routes = selectedOption?.routes ?? [];
 
@@ -404,6 +443,22 @@ export function ItineraryTab({
     return cities;
   }, [selectedDay, getSelectedOption]);
 
+  // Mobile map sheet — same locations + routes as the desktop SidebarMap
+  // compact preview. Computed here at render scope so both the sheet
+  // body and the sheet trigger can share the same memoized data.
+  const selectedOptionForMobileMap = useMemo(
+    () => (selectedDay ? getSelectedOption(selectedDay) : undefined),
+    [selectedDay, getSelectedOption]
+  );
+  const mobileMapLocations = useMemo(
+    () => buildDayMapLocations(selectedOptionForMobileMap, locations),
+    [selectedOptionForMobileMap, locations]
+  );
+  const mobileMapRoutes = useMemo(
+    () => buildDayMapRoutes(selectedOptionForMobileMap),
+    [selectedOptionForMobileMap]
+  );
+
   return (
     <section
       id="tab-panel-itinerary"
@@ -516,7 +571,45 @@ export function ItineraryTab({
               onSelectDay={setSelectedDayId}
             />
 
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+            {/* Mobile-only Map button. Opens a bottom sheet containing
+             * the current day's map. On desktop (`lg+`) this is hidden
+             * because the sticky sidebar below already shows the map.
+             *
+             * NOTE: we deliberately render `ItineraryDayMap` directly
+             * inside the sheet instead of going through the inline
+             * `SidebarMap` component — the sheet IS the fullscreen view,
+             * so the compact-preview → nested-Dialog pattern would be
+             * redundant and create a Dialog inside a Dialog. */}
+            <div className="lg:hidden">
+              <Sheet>
+                <SheetTrigger asChild>
+                  <button
+                    type="button"
+                    className="touch-target inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-brand-muted"
+                  >
+                    <MapIcon size={14} aria-hidden="true" />
+                    Map
+                  </button>
+                </SheetTrigger>
+                <SheetContent
+                  scrollLocked
+                  className="h-[85dvh]"
+                  aria-describedby={undefined}
+                >
+                  <SheetTitle className="sr-only">Day map</SheetTitle>
+                  <div className="min-h-0 flex-1 px-2 pb-2 pt-2">
+                    <div className="h-full overflow-hidden rounded-xl">
+                      <ItineraryDayMap
+                        locations={mobileMapLocations}
+                        routes={mobileMapRoutes}
+                      />
+                    </div>
+                  </div>
+                </SheetContent>
+              </Sheet>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-trip-itinerary">
               <div className="space-y-4">
                 {visibleDays.map((day) => {
                   const currentOption = getSelectedOption(day);
@@ -575,9 +668,47 @@ export function ItineraryTab({
                     </div>
                   );
                 })}
+
+                {/* Mobile-inline Inspector + Unscheduled panels.
+                 *
+                 * Architect's Phase 4 decision (option d): the day map
+                 * goes into a bottom sheet (above), but Inspector and
+                 * Unscheduled are authoring tools used *while looking
+                 * at the day card* — burying them behind a sheet would
+                 * break the editing workflow. So they stay inline in
+                 * the main column on mobile.
+                 *
+                 * On desktop (`lg+`) these render in the sticky sidebar
+                 * below (`hidden lg:block`). Both trees are always in
+                 * the DOM; CSS handles visibility. */}
+                <div className="space-y-4 lg:hidden">
+                  <ItineraryInspectorPanel
+                    day={selectedDay}
+                    currentOption={
+                      selectedDay ? getSelectedOption(selectedDay) : undefined
+                    }
+                  />
+                  {!readOnly && itineraryMutations && (
+                    <UnscheduledLocationsPanel
+                      locations={locations}
+                      itineraryLocationMap={itineraryLocationMap}
+                      currentDayId={
+                        selectedDayId ?? itinerary.days[0]?.id ?? null
+                      }
+                      currentDayCities={currentDayCities}
+                      onScheduleToDay={
+                        itineraryMutations.handleScheduleLocationToDay
+                      }
+                    />
+                  )}
+                </div>
               </div>
 
-              <div className="space-y-4 xl:sticky xl:top-[6.75rem] xl:self-start">
+              {/* Desktop-only sticky sidebar. Hidden on mobile — the
+               * day map is reachable via the Map button + Sheet above,
+               * and Inspector + Unscheduled render inline below the
+               * day cards. */}
+              <div className="hidden space-y-4 lg:block lg:sticky lg:top-[6.75rem] lg:self-start">
                 <SidebarMap
                   selectedDay={selectedDay}
                   getSelectedOption={getSelectedOption}
