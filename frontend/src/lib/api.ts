@@ -199,6 +199,18 @@ export interface ItineraryDay {
   id: string;
   date: string | null;
   sort_order: number;
+  /**
+   * Server-persisted pointer to the currently-active option for this day.
+   * When null/undefined (or pointing at an option that no longer exists on
+   * this day), the frontend falls back to `option_index === 1` ("Main").
+   * Backed by `trip_days.active_option_id`; survives logout/login; shared
+   * viewers see the owner's current value.
+   *
+   * Optional at the type level so test fixtures can omit it — the backend
+   * always returns the field (even as null), so runtime code can rely on
+   * truthy checks without worrying about the `undefined` branch.
+   */
+  active_option_id?: string | null;
   options: ItineraryOption[];
 }
 
@@ -209,6 +221,7 @@ interface DayResponse {
   date: string | null;
   sort_order: number;
   created_at: string | null;
+  active_option_id?: string | null;
 }
 
 /** Flat option from options API (create/update); no locations. */
@@ -569,11 +582,23 @@ export const api = {
         body: JSON.stringify(body),
       }),
 
-    /** Update a day (date, sort_order). */
+    /**
+     * Update a day.
+     *
+     * Fields:
+     *  - `date` / `sort_order`: standard metadata.
+     *  - `active_option_id`: persists the user's current option selection for
+     *    this day. Pass `null` to clear (fall back to Main). The backend
+     *    rejects 422 if the referenced option doesn't belong to this day.
+     */
     updateDay: (
       tripId: string,
       dayId: string,
-      body: { date?: string | null; sort_order?: number }
+      body: {
+        date?: string | null;
+        sort_order?: number;
+        active_option_id?: string | null;
+      }
     ) =>
       request<DayResponse>(`/api/v1/trips/${tripId}/days/${dayId}`, {
         method: "PATCH",

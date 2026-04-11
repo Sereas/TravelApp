@@ -72,20 +72,27 @@ function toTrip(info: SharedTripData["trip"]): Trip {
 function useSharedItineraryReadState(
   itinerary: ItineraryResponse
 ): ReadOnlyItineraryState {
-  const [selectedOptions, setSelectedOptions] = useState<
-    Record<string, string>
-  >({});
-
-  const selectOption = useCallback((dayId: string, optionId: string) => {
-    setSelectedOptions((prev) => ({ ...prev, [dayId]: optionId }));
+  // In the shared (public) view, option selection is read-only: the viewer
+  // sees whatever `active_option_id` the owner currently has persisted on
+  // each day, and `selectOption` is a no-op because there's no writable
+  // session. This keeps the zero-drift contract with `TripView` — the
+  // component signature is identical, gating happens at the `useReadOnly()`
+  // layer.
+  const selectOption = useCallback((_dayId: string, _optionId: string) => {
+    // intentional no-op: shared viewers cannot mutate the owner's selection
   }, []);
 
   const getSelectedOption = useCallback(
     (day: ItineraryDay): ItineraryOption | undefined => {
-      const selectedId = selectedOptions[day.id];
-      return day.options.find((o) => o.id === selectedId) ?? day.options[0];
+      // Mirror the authenticated `useItineraryState.getSelectedOption`:
+      // server-persisted `active_option_id` wins, then Main, then first.
+      if (day.active_option_id) {
+        const active = day.options.find((o) => o.id === day.active_option_id);
+        if (active) return active;
+      }
+      return day.options.find((o) => o.option_index === 1) ?? day.options[0];
     },
-    [selectedOptions]
+    []
   );
 
   const itineraryLocationMap = useMemo(() => {

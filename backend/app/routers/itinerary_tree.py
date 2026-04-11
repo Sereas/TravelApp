@@ -97,12 +97,14 @@ def _build_itinerary_response(
                 continue
             opt.locations = locs
             opts_with_locations.append(opt)
+        active_option_id = d.get("active_option_id")
         days.append(
             ItineraryDay(
                 id=did,
                 date=d.get("date"),
                 sort_order=int(d.get("sort_order", 0)),
                 created_at=d.get("created_at"),
+                active_option_id=(str(active_option_id) if active_option_id else None),
                 options=opts_with_locations,
             )
         )
@@ -130,6 +132,7 @@ def _rpc_rows_to_tree_data(
                     "date": r.get("day_date"),
                     "sort_order": r.get("day_sort_order", 0),
                     "created_at": r.get("day_created_at"),
+                    "active_option_id": r.get("day_active_option_id"),
                 }
             )
         oid = r.get("option_id")

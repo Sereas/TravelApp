@@ -366,6 +366,183 @@ def test_update_day_empty_body_returns_422(
         app.dependency_overrides.clear()
 
 
+def test_update_day_set_active_option_id_persists(
+    client: TestClient,
+    mock_user_id,
+    mock_supabase_trips_and_days,
+):
+    """PATCH active_option_id with a matching option -> 200 and value persisted.
+
+    This is the feature flow: the owner picks an Alternative option, and we
+    persist the choice on `trip_days` so it survives logout/login and is what
+    shared viewers see.
+    """
+    days_store, trips_store, MockSupabase = mock_supabase_trips_and_days
+    trip_id = str(uuid4())
+    day_id = str(uuid4())
+    option_id = str(uuid4())
+    mock_sb = MockSupabase({trip_id: str(mock_user_id)}, mock_user_id)
+    trips_store.append(
+        {"trip_id": trip_id, "user_id": str(mock_user_id), "trip_name": "Paris"}
+    )
+    days_store.append(
+        {
+            "day_id": day_id,
+            "trip_id": trip_id,
+            "date": None,
+            "sort_order": 0,
+            "created_at": "2025-01-01T12:00:00Z",
+            "active_option_id": None,
+        }
+    )
+    # Seed the option on this day so validation passes.
+    mock_sb._options_store.append(
+        {
+            "option_id": option_id,
+            "day_id": day_id,
+            "option_index": 2,
+            "starting_city": None,
+            "ending_city": None,
+            "created_by": "Alt",
+            "created_at": "2025-01-01T12:00:00Z",
+        }
+    )
+
+    async def override_user():
+        return mock_user_id
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        r = client.patch(
+            f"/api/v1/trips/{trip_id}/days/{day_id}",
+            json={"active_option_id": option_id},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["active_option_id"] == option_id
+        # And the store actually has the new pointer.
+        assert days_store[0]["active_option_id"] == option_id
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_update_day_clear_active_option_id_with_null(
+    client: TestClient,
+    mock_user_id,
+    mock_supabase_trips_and_days,
+):
+    """PATCH active_option_id=null clears the pointer and 200s.
+
+    Used when the user wants to fall back to the Main option explicitly.
+    """
+    days_store, trips_store, MockSupabase = mock_supabase_trips_and_days
+    trip_id = str(uuid4())
+    day_id = str(uuid4())
+    stale_option_id = str(uuid4())
+    mock_sb = MockSupabase({trip_id: str(mock_user_id)}, mock_user_id)
+    trips_store.append(
+        {"trip_id": trip_id, "user_id": str(mock_user_id), "trip_name": "Paris"}
+    )
+    days_store.append(
+        {
+            "day_id": day_id,
+            "trip_id": trip_id,
+            "date": None,
+            "sort_order": 0,
+            "created_at": "2025-01-01T12:00:00Z",
+            "active_option_id": stale_option_id,
+        }
+    )
+
+    async def override_user():
+        return mock_user_id
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        r = client.patch(
+            f"/api/v1/trips/{trip_id}/days/{day_id}",
+            json={"active_option_id": None},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["active_option_id"] is None
+        assert days_store[0]["active_option_id"] is None
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_update_day_active_option_id_cross_day_rejected(
+    client: TestClient,
+    mock_user_id,
+    mock_supabase_trips_and_days,
+):
+    """PATCH with an option_id that belongs to a different day -> 422.
+
+    Prevents a crafted request from pointing day A at an option from day B
+    even though both days belong to the user. The FK alone can't catch this;
+    the handler must verify `option.day_id == day_id`.
+    """
+    days_store, trips_store, MockSupabase = mock_supabase_trips_and_days
+    trip_id = str(uuid4())
+    day_a = str(uuid4())
+    day_b = str(uuid4())
+    option_on_b = str(uuid4())
+    mock_sb = MockSupabase({trip_id: str(mock_user_id)}, mock_user_id)
+    trips_store.append(
+        {"trip_id": trip_id, "user_id": str(mock_user_id), "trip_name": "Paris"}
+    )
+    days_store.extend(
+        [
+            {
+                "day_id": day_a,
+                "trip_id": trip_id,
+                "date": None,
+                "sort_order": 0,
+                "created_at": "2025-01-01T12:00:00Z",
+                "active_option_id": None,
+            },
+            {
+                "day_id": day_b,
+                "trip_id": trip_id,
+                "date": None,
+                "sort_order": 1,
+                "created_at": "2025-01-01T12:00:00Z",
+                "active_option_id": None,
+            },
+        ]
+    )
+    # Option is on day B, but we'll try to assign it to day A.
+    mock_sb._options_store.append(
+        {
+            "option_id": option_on_b,
+            "day_id": day_b,
+            "option_index": 1,
+            "starting_city": None,
+            "ending_city": None,
+            "created_by": None,
+            "created_at": "2025-01-01T12:00:00Z",
+        }
+    )
+
+    async def override_user():
+        return mock_user_id
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        r = client.patch(
+            f"/api/v1/trips/{trip_id}/days/{day_a}",
+            json={"active_option_id": option_on_b},
+        )
+        assert r.status_code == 422
+        assert "does not belong to this day" in r.text
+        # And day A was NOT mutated.
+        day_a_row = next(d for d in days_store if d["day_id"] == day_a)
+        assert day_a_row["active_option_id"] is None
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_delete_day_returns_204(
     client: TestClient,
     mock_user_id,

@@ -181,7 +181,14 @@
    * Consumed in Phase 2 by LocationCard menu/camera, filter pills, and
    * the compact day map expand button.
    */
-  .touch-target {
+  /* Only apply `position: relative` when the element isn't already
+   * absolutely/fixed/sticky positioned. Otherwise this utility would
+   * clobber `absolute` / `fixed` / `sticky` on buttons that also need
+   * a touch-friendly hit area (e.g. the SidebarMap expand button,
+   * which is `touch-target absolute top-2 right-2`). Absolute/fixed/
+   * sticky elements already establish a containing block for the
+   * `::after` pseudo, so they don't need `position: relative`. */
+  .touch-target:not(.absolute):not(.fixed):not(.sticky) {
     position: relative;
   }
   .touch-target::after {
@@ -346,6 +353,32 @@
     background: hsl(var(--background));
     border-radius: 12px 0 0 12px;
     box-shadow: inset 1px 0 0 hsl(var(--border));
+  }
+
+  /* Active ticket — the selected day in the itinerary timeline ribbon.
+   * Driven by `aria-current="date"` set by `ItineraryDayRail`, so the
+   * visual state always matches the accessibility state. We override the
+   * `.ticket-card` base shorthand `background` and `box-shadow` here
+   * because Tailwind `bg-*` / `ring-*` utilities lose the cascade fight
+   * against the base rule's shorthand declarations.
+   *
+   * No `transform: translateY(...)` on purpose — the parent ribbon's
+   * scroll container is `overflow-x-auto`, which in CSS implicitly forces
+   * `overflow-y: auto` too, so any lifted tile would get its top edge
+   * clipped by the scroller. We signal "active" with brand colors + a
+   * brand-colored ring and glow instead. */
+  .ticket-card[aria-current="date"] {
+    background: hsl(var(--brand-muted));
+    box-shadow:
+      0 4px 14px hsl(var(--brand) / 0.22),
+      0 0 0 2px hsl(var(--brand-strong));
+  }
+  .ticket-card[aria-current="date"]::before {
+    border-left-color: hsl(var(--brand-strong));
+  }
+  .ticket-card[aria-current="date"]::after {
+    background: hsl(var(--brand-muted));
+    box-shadow: inset 1px 0 0 hsl(var(--brand-strong));
   }
 
   /* Stamp badge — decorative circle */

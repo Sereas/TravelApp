@@ -65,7 +65,12 @@ export function ItineraryDayRail({
        * `pointer-events-none` so it never blocks clicks on partially
        * visible day pills underneath. */}
       <div className="relative">
-        <div className="-mx-1 flex gap-2 overflow-x-auto scrollbar-hide px-1 pb-1">
+        {/* `py-2 px-1` gives the selected-day tile enough room for its
+         * brand-colored ring + glow box-shadow to render — otherwise the
+         * scroll container's implicit `overflow-y: auto` (a side-effect
+         * of `overflow-x-auto`) clips the shadow on the top and bottom
+         * edges, making the active tile look cropped. */}
+        <div className="-mx-1 flex gap-2 overflow-x-auto scrollbar-hide px-1 py-2">
           {days.map((day, i) => {
             const option = selectedOptionsByDay[day.id];
             const locationCount = option?.locations.length ?? 0;
@@ -83,8 +88,14 @@ export function ItineraryDayRail({
                 aria-label={`Day ${i + 1}: ${dateLabel}${city.text ? `, ${city.text}` : ""}${isPlanned ? `, ${locationCount} stop${locationCount === 1 ? "" : "s"}` : ""}`}
                 className={cn(
                   "ticket-card group relative min-w-[140px] shrink-0 px-3 py-2.5 text-left transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  // The selected state is driven entirely from CSS via
+                  // `.ticket-card[aria-current="date"]` in globals.css —
+                  // `.ticket-card` sets its own `background` and `box-shadow`,
+                  // so plain Tailwind bg-*/ring-*/shadow-* utilities lose the
+                  // cascade fight. Using aria-current keeps the styling in
+                  // lockstep with the accessibility state.
                   isSelected
-                    ? "ring-2 ring-primary shadow-sm"
+                    ? "z-10"
                     : isPlanned
                       ? "hover:shadow-sm"
                       : "opacity-60 hover:opacity-100"

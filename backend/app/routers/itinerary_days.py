@@ -22,7 +22,7 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger("itinerary_days")
 
 router = APIRouter(prefix="/trips", tags=["itinerary-days"])
 
-_TRIP_DAYS_SELECT = "day_id, trip_id, date, sort_order, created_at"
+_TRIP_DAYS_SELECT = "day_id, trip_id, date, sort_order, created_at, active_option_id"
 
 
 def _create_main_option_for_day(supabase, day_id: str) -> None:
@@ -46,12 +46,14 @@ def _day_row_to_response(row: dict) -> DayResponse:
             created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
         except ValueError:
             created_at = None
+    active_option_id = row.get("active_option_id")
     return DayResponse(
         id=str(row["day_id"]),
         trip_id=str(row["trip_id"]),
         date=d,
         sort_order=int(row.get("sort_order", 0)),
         created_at=created_at,
+        active_option_id=str(active_option_id) if active_option_id else None,
     )
 
 
@@ -234,6 +236,31 @@ async def update_day(
         update_data["date"] = body.date.isoformat() if body.date else None
     if "sort_order" in body.model_fields_set:
         update_data["sort_order"] = body.sort_order
+    if "active_option_id" in body.model_fields_set:
+        # active_option_id is persisted per-day so the user's currently-chosen
+        # option survives logout/login and is what shared viewers see. We must
+        # ensure the referenced option actually belongs to *this* day before
+        # writing — otherwise a crafted request could point day A at an option
+        # from day B (or even another user's trip). `_ensure_resource_chain`
+        # above already verified the trip ownership + day-in-trip chain, so we
+        # only need to verify option.day_id == day_id here.
+        if body.active_option_id is None:
+            update_data["active_option_id"] = None
+        else:
+            option_check = (
+                supabase.table("day_options")
+                .select("option_id")
+                .eq("option_id", body.active_option_id)
+                .eq("day_id", str(day_id))
+                .limit(1)
+                .execute()
+            )
+            if not option_check.data:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="active_option_id does not belong to this day",
+                )
+            update_data["active_option_id"] = body.active_option_id
     if not update_data:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

@@ -71,9 +71,6 @@ export function useItineraryState({
   const [itineraryActionError, setItineraryActionError] = useState<
     string | null
   >(null);
-  const [selectedOptionByDay, setSelectedOptionByDay] = useState<
-    Record<string, string>
-  >({});
   const [createOptionLoading, setCreateOptionLoading] = useState<string | null>(
     null
   );
@@ -169,17 +166,21 @@ export function useItineraryState({
 
   const getSelectedOption = useCallback(
     (day: ItineraryDay): ItineraryOption | undefined => {
-      const selectedId = selectedOptionByDay[day.id];
-      if (selectedId) {
-        const selected = day.options.find((option) => option.id === selectedId);
-        if (selected) return selected;
+      // Server-persisted selection wins. If the pointer is stale (e.g. the
+      // option was deleted and ON DELETE SET NULL fired, or an optimistic
+      // patch referenced an option that no longer exists after refetch), we
+      // fall through to the Main (option_index === 1) option, then to the
+      // first available option.
+      if (day.active_option_id) {
+        const active = day.options.find((o) => o.id === day.active_option_id);
+        if (active) return active;
       }
       return (
         day.options.find((option) => option.option_index === 1) ??
         day.options[0]
       );
     },
-    [selectedOptionByDay]
+    []
   );
 
   const itineraryLocationMap = useMemo(() => {
@@ -232,9 +233,57 @@ export function useItineraryState({
     [itinerary]
   );
 
-  const selectOption = useCallback((dayId: string, optionId: string) => {
-    setSelectedOptionByDay((prev) => ({ ...prev, [dayId]: optionId }));
-  }, []);
+  const selectOption = useCallback(
+    (dayId: string, optionId: string) => {
+      // Optimistically patch the itinerary tree so the switch is instant in
+      // the UI, then persist to the server. On failure, roll back to the
+      // previous `active_option_id` for this day and surface an error.
+      //
+      // We capture `previous` synchronously BEFORE calling `setItinerary` so
+      // the rollback path doesn't rely on mutating a closure variable inside
+      // an updater — under React StrictMode, updaters are invoked twice with
+      // the same input, which is safe here but subtle. Capturing up-front
+      // also side-steps any stale-closure risk from a concurrent refetch.
+      const previous =
+        itinerary?.days.find((day) => day.id === dayId)?.active_option_id ??
+        null;
+      setItinerary((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          days: prev.days.map((day) =>
+            day.id === dayId ? { ...day, active_option_id: optionId } : day
+          ),
+        };
+      });
+
+      void (async () => {
+        try {
+          await api.itinerary.updateDay(tripId, dayId, {
+            active_option_id: optionId,
+          });
+        } catch (err) {
+          // Roll back to the previous pointer so the UI stays consistent
+          // with server state.
+          setItinerary((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              days: prev.days.map((day) =>
+                day.id === dayId ? { ...day, active_option_id: previous } : day
+              ),
+            };
+          });
+          setItineraryActionError(
+            err instanceof Error
+              ? err.message
+              : "Failed to save option selection"
+          );
+        }
+      })();
+    },
+    [itinerary, tripId]
+  );
 
   const clearItineraryActionError = useCallback(() => {
     setItineraryActionError(null);
@@ -413,11 +462,11 @@ export function useItineraryState({
   const handleDeleteOption = useCallback(
     async (dayId: string, optionId: string) => {
       setItineraryActionError(null);
-      setSelectedOptionByDay((prev) => {
-        const next = { ...prev };
-        delete next[dayId];
-        return next;
-      });
+      // Optimistically remove the option and, if it was the active pointer,
+      // clear `active_option_id` so `getSelectedOption` falls back to Main
+      // immediately. The DB mirrors this via the `ON DELETE SET NULL` FK on
+      // `trip_days.active_option_id → day_options(option_id)` so the server
+      // state converges without a second request.
       setItinerary((prev) => {
         if (!prev) return prev;
         return {
@@ -426,6 +475,10 @@ export function useItineraryState({
             day.id === dayId
               ? {
                   ...day,
+                  active_option_id:
+                    day.active_option_id === optionId
+                      ? null
+                      : day.active_option_id,
                   options: day.options.filter(
                     (option) => option.id !== optionId
                   ),

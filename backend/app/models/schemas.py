@@ -222,6 +222,15 @@ class UpdateDayBody(BaseModel):
         ge=0,
         description="Optional for single-item move; reorder endpoint preferred.",
     )
+    active_option_id: str | None = Field(
+        None,
+        description=(
+            "UUID of the option to mark as the day's active (user-selected) "
+            "option. Pass `null` to clear and fall back to the Main option. "
+            "The referenced option MUST belong to this same day; the server "
+            "rejects 422 otherwise."
+        ),
+    )
 
 
 class DayResponse(BaseModel):
@@ -232,6 +241,13 @@ class DayResponse(BaseModel):
     date: date_type | None = None
     sort_order: int = Field(..., ge=0)
     created_at: datetime | None = None
+    active_option_id: str | None = Field(
+        None,
+        description=(
+            "UUID of the currently-active option for this day, or null. "
+            "Persisted across sessions; shared viewers see the owner's value."
+        ),
+    )
 
 
 class ReassignDayDateBody(BaseModel):
@@ -447,6 +463,7 @@ class ItineraryDay(BaseModel):
     date: date_type | None = None
     sort_order: int
     created_at: datetime | None = None
+    active_option_id: str | None = None
     options: list[ItineraryOption] = Field(default_factory=list)
 
 

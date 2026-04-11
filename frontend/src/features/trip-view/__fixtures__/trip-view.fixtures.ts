@@ -115,6 +115,7 @@ export const sampleItinerary: ItineraryResponse = {
       id: "day-1",
       date: "2026-09-01",
       sort_order: 0,
+      active_option_id: null,
       options: [
         {
           id: "opt-1",
