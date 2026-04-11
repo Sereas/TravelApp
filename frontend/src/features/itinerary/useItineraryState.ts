@@ -87,6 +87,7 @@ export function useItineraryState({
   >({});
   const hasFetchedRef = useRef(false);
   const calculatingRouteIdRef = useRef<string | null>(null);
+  const isMountedRef = useRef(true);
 
   const fetchItinerary = useCallback(async () => {
     setItineraryError(null);
@@ -157,6 +158,13 @@ export function useItineraryState({
       setItineraryLoading(false);
     }
   }, [tripId]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     hasFetchedRef.current = false;
@@ -678,6 +686,56 @@ export function useItineraryState({
     [fetchItinerary, tripId]
   );
 
+  /**
+   * Fire-and-forget helper: fetch route segments from the API and patch them
+   * into local state.  Owns the `calculatingRouteId` lifecycle — sets it to
+   * null in the finally block.  Silently guards against post-unmount state
+   * updates via `isMountedRef`.
+   *
+   * Extracted so both `handleRouteCreated` and `handleRetryRouteMetrics` share
+   * exactly the same background fetch logic.
+   */
+  const _fetchAndPatchRouteMetrics = useCallback(
+    (dayId: string, optionId: string, routeId: string) => {
+      void (async () => {
+        try {
+          const withSegments = await api.itinerary.getRouteWithSegments(
+            tripId,
+            dayId,
+            optionId,
+            routeId
+          );
+          if (!isMountedRef.current) return;
+          setItinerary((prev) =>
+            prev
+              ? patchRouteInItinerary(
+                  prev,
+                  dayId,
+                  optionId,
+                  routeId,
+                  withSegments
+                )
+              : prev
+          );
+        } catch (err) {
+          if (!isMountedRef.current) return;
+          setRouteMetricsError((prev) => ({
+            ...prev,
+            [routeId]:
+              err instanceof Error
+                ? err.message
+                : "Could not calculate distance and duration",
+          }));
+        } finally {
+          if (isMountedRef.current) {
+            setCalculatingRouteId(null);
+          }
+        }
+      })();
+    },
+    [tripId]
+  );
+
   const handleRouteCreated = useCallback(
     async (dayId: string, optionId: string, routeResponse: RouteResponse) => {
       const routeId = routeResponse.route_id;
@@ -687,79 +745,28 @@ export function useItineraryState({
         return next;
       });
       setCalculatingRouteId(routeId);
+      // Refresh the itinerary tree first (fast — single RPC, no Google calls).
       await fetchItinerary();
-      try {
-        const withSegments = await api.itinerary.getRouteWithSegments(
-          tripId,
-          dayId,
-          optionId,
-          routeId
-        );
-        setItinerary((prev) =>
-          prev
-            ? patchRouteInItinerary(
-                prev,
-                dayId,
-                optionId,
-                routeId,
-                withSegments
-              )
-            : prev
-        );
-      } catch (err) {
-        setRouteMetricsError((prev) => ({
-          ...prev,
-          [routeId]:
-            err instanceof Error
-              ? err.message
-              : "Could not calculate distance and duration",
-        }));
-      } finally {
-        setCalculatingRouteId(null);
-      }
+      // Kick off segment fetch in the background so the user isn't blocked.
+      // `calculatingRouteId` stays set until the background fetch completes
+      // (or fails) — the spinner stays visible, but the rest of the UI is
+      // immediately interactive.
+      _fetchAndPatchRouteMetrics(dayId, optionId, routeId);
     },
-    [fetchItinerary, tripId]
+    [fetchItinerary, _fetchAndPatchRouteMetrics]
   );
 
   const handleRetryRouteMetrics = useCallback(
-    async (dayId: string, optionId: string, routeId: string) => {
+    (dayId: string, optionId: string, routeId: string) => {
       setRouteMetricsError((prev) => {
         const next = { ...prev };
         delete next[routeId];
         return next;
       });
       setCalculatingRouteId(routeId);
-      try {
-        const withSegments = await api.itinerary.getRouteWithSegments(
-          tripId,
-          dayId,
-          optionId,
-          routeId
-        );
-        setItinerary((prev) =>
-          prev
-            ? patchRouteInItinerary(
-                prev,
-                dayId,
-                optionId,
-                routeId,
-                withSegments
-              )
-            : prev
-        );
-      } catch (err) {
-        setRouteMetricsError((prev) => ({
-          ...prev,
-          [routeId]:
-            err instanceof Error
-              ? err.message
-              : "Could not calculate distance and duration",
-        }));
-      } finally {
-        setCalculatingRouteId(null);
-      }
+      _fetchAndPatchRouteMetrics(dayId, optionId, routeId);
     },
-    [tripId]
+    [_fetchAndPatchRouteMetrics]
   );
 
   const handleReorderOptionLocations = useCallback(

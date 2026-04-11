@@ -135,22 +135,21 @@ class TestErrorSanitization:
 
     def test_compute_segment_error_message_is_sanitized(self):
         """
-        MED-06 — RED phase.
+        MED-06 — Phase 4 updated.
 
-        ``_compute_one_segment`` calls ``str(e)`` on the raw exception and
-        stores it verbatim as ``error_message`` in the segment_cache row.  That
-        row is later returned in ``RouteSegmentResponse.error_message``.
+        ``_compute_one_segment_async`` (Phase 4 replacement of ``_compute_one_segment``)
+        builds the error_message via ``_build_segment_cache_row``.  The message
+        must be a generic sanitized string rather than ``str(e)`` verbatim so
+        internal API keys, project IDs, and HTTP status codes from Google are
+        never persisted or surfaced to clients.
 
-        The field must be sanitized before storage so internal API details
-        (keys, project IDs, HTTP status codes from Google) are not persisted
-        or surfaced to clients.
-
-        Currently FAILS because ``route_calculation.py`` line 300 sets
-        ``msg = str(e)`` and stores it as-is with no sanitization step.
+        Verified fixed in Phase 4: ``_build_segment_cache_row`` always stores
+        the constant ``"Route calculation failed for this segment"`` as
+        ``error_message`` regardless of exception content.
         """
-        from unittest.mock import MagicMock
+        import asyncio
 
-        from backend.app.services.route_calculation import _compute_one_segment
+        from backend.app.services.route_calculation import _compute_one_segment_async
 
         sensitive_exception_message = (
             "HTTP 403 Forbidden: API key AIzaSyABC123_secret restricted for "
@@ -161,25 +160,23 @@ class TestErrorSanitization:
             def compute_leg(self, *args, **kwargs):
                 raise RuntimeError(sensitive_exception_message)
 
-        mock_supabase = MagicMock()
-        upsert_chain = MagicMock()
-        upsert_chain.execute.return_value = MagicMock(data=[{"id": "seg-uuid-1"}])
-        mock_supabase.table.return_value.upsert.return_value = upsert_chain
+        import asyncio as _asyncio
 
-        fetch_chain = MagicMock()
-        fetch_chain.execute.return_value = MagicMock(data=[{"id": "seg-uuid-1", "retry_count": 1}])
-        mock_supabase.table.return_value.select.return_value.eq.return_value = fetch_chain
+        semaphore = _asyncio.Semaphore(4)
 
-        _seg_id, cache_row = _compute_one_segment(
-            supabase=mock_supabase,
-            origin_place_id="place_A",
-            dest_place_id="place_B",
-            origin_lat=48.8,
-            origin_lng=2.3,
-            dest_lat=48.9,
-            dest_lng=2.4,
-            transport_mode="walk",
-            google_client=_FakeGoogleClient(),
+        _cache_key_val, cache_row = asyncio.get_event_loop().run_until_complete(
+            _compute_one_segment_async(
+                google_client=_FakeGoogleClient(),
+                origin_place_id="place_A",
+                origin_lat=48.8,
+                origin_lng=2.3,
+                dest_place_id="place_B",
+                dest_lat=48.9,
+                dest_lng=2.4,
+                transport_mode="walk",
+                existing_retry_count=0,
+                semaphore=semaphore,
+            )
         )
 
         stored_error_message = cache_row.get("error_message", "")

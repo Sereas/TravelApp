@@ -3,9 +3,10 @@
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from backend.app.clients.google_routes import GoogleRoutesClient
+from backend.app.core.rate_limit import limiter
 from backend.app.db.supabase import get_supabase_client
 from backend.app.dependencies import get_current_user_id, get_google_routes_client
 from backend.app.models.schemas import (
@@ -150,7 +151,9 @@ async def create_route(
     "/{trip_id}/days/{day_id}/options/{option_id}/routes/{route_id}",
     response_model=RouteResponse | RouteWithSegmentsResponse,
 )
+@limiter.limit("20/minute")
 async def get_route(
+    request: Request,
     trip_id: UUID,
     day_id: UUID,
     option_id: UUID,
@@ -181,7 +184,7 @@ async def get_route(
     if include_segments:
         # Retry-on-view: reuse cache or recompute only eligible segments
         try:
-            with_segments = get_route_with_fresh_segments(
+            with_segments = await get_route_with_fresh_segments(
                 supabase,
                 str(route_id),
                 transport_mode=None,
@@ -308,7 +311,9 @@ async def update_route(
     "/{trip_id}/days/{day_id}/options/{option_id}/routes/{route_id}/recalculate",
     response_model=RouteWithSegmentsResponse,
 )
+@limiter.limit("20/minute")
 async def recalculate_route_endpoint(
+    request: Request,
     trip_id: UUID,
     day_id: UUID,
     option_id: UUID,
@@ -337,7 +342,7 @@ async def recalculate_route_endpoint(
     )
     force_refresh = bool(body and body.force_refresh)
     try:
-        result = get_route_with_fresh_segments(
+        result = await get_route_with_fresh_segments(
             supabase,
             str(route_id),
             transport_mode=transport_mode,

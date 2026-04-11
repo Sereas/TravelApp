@@ -96,9 +96,10 @@ test.describe("route save — performance baseline @maps-perf", () => {
 
     console.log(`[route-save-perf] elapsed=${elapsedMs}ms`);
 
-    // Phase 0: no performance budget enforced yet.
-    // Phase 4 will replace this with: expect(elapsedMs).toBeLessThan(800);
-    expect(elapsedMs).toBeGreaterThan(0); // trivial sanity — always passes
+    // Phase 4: route-save is now fire-and-forget on the frontend.
+    // The route label appears as soon as fetchItinerary() returns (single RPC,
+    // no Google calls on the critical path).  Hard budget: 800 ms.
+    expect(elapsedMs).toBeLessThan(800);
 
     await apiClient.deleteTrip(trip.id);
   });

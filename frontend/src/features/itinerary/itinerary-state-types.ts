@@ -96,7 +96,7 @@ export interface ItineraryMutations {
     dayId: string,
     optionId: string,
     routeId: string
-  ) => Promise<void>;
+  ) => void;
   handleScheduleLocationToDay: (
     locationId: string,
     dayId: string

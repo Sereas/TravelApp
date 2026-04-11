@@ -164,7 +164,7 @@ export interface ItineraryDayCardProps {
     dayId: string,
     optionId: string,
     routeId: string
-  ) => Promise<void>;
+  ) => void;
   calculatingRouteId: string | null;
   routeMetricsError: Record<string, string>;
   onInspectLocation: (dayId: string, locationId: string) => void;
@@ -216,7 +216,7 @@ export function ItineraryDayCard({
   const safeUpdateTimePeriod = onUpdateTimePeriod ?? noopVoid;
   const safeReorderLocations = onReorderLocations ?? noopVoid;
   const safeRouteCreated = onRouteCreated ?? noopAsync;
-  const safeRetryRouteMetrics = onRetryRouteMetrics ?? noopAsync;
+  const safeRetryRouteMetrics = onRetryRouteMetrics ?? noopVoid;
   const alreadyAdded = useMemo(
     () => new Set(currentOption?.locations.map((l) => l.location_id) ?? []),
     [currentOption]

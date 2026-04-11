@@ -2,10 +2,16 @@
 
 Entry point: get_route_with_fresh_segments() — used when user views route or explicitly refreshes.
 Cache is reused when eligible; only missing/stale/retry-eligible segments are recomputed.
+
+Phase 4: Google leg calls are dispatched concurrently via asyncio.gather +
+asyncio.to_thread.  Cache writes go through the batch_upsert_segment_cache RPC
+(single call) and route_segments are persisted via persist_route_segments RPC
+(single atomic call).  Supabase client calls remain synchronous.
 """
 
 from __future__ import annotations
 
+import asyncio
 import time
 from datetime import UTC, datetime
 from typing import Any
@@ -39,6 +45,11 @@ COOLDOWN_RETRYABLE_MINUTES = 5
 COOLDOWN_CONFIG_MINUTES = 30
 COOLDOWN_NO_ROUTE_WALK_DRIVE_MINUTES = 24 * 60  # 24 hours
 COOLDOWN_NO_ROUTE_TRANSIT_MINUTES = 4 * 60  # 4 hours
+
+# -------- Concurrency cap for Google Routes API calls --------
+# Per-request semaphore; avoids rate-limit spikes on long routes.
+GOOGLE_ROUTES_MAX_CONCURRENT_LEGS = 4
+
 
 # -------- Helpers --------
 
@@ -217,42 +228,28 @@ def _fetch_cached_segment(
     return None
 
 
-def _compute_one_segment(
-    supabase: Any,
-    google_client: GoogleRoutesClient | None,
+# ---------------------------------------------------------------------------
+# Phase 4: segment computation helpers — async, concurrent Google calls
+# ---------------------------------------------------------------------------
+
+
+def _build_segment_cache_row(
     origin_place_id: str | None,
+    dest_place_id: str | None,
     origin_lat: float,
     origin_lng: float,
-    dest_place_id: str | None,
     dest_lat: float,
     dest_lng: float,
     transport_mode: str,
-) -> tuple[str, dict[str, Any]]:
-    """
-    Call Google for one leg; classify success/failure; upsert segment_cache.
-    Returns (segment_cache_id, row_dict for response).
-    """
-    cache_key = _cache_key(
-        origin_place_id,
-        dest_place_id,
-        origin_lat,
-        origin_lng,
-        dest_lat,
-        dest_lng,
-        transport_mode,
-    )
-    fingerprint = _input_fingerprint(
-        origin_place_id,
-        dest_place_id,
-        origin_lat,
-        origin_lng,
-        dest_lat,
-        dest_lng,
-        transport_mode,
-    )
-    now = _now_utc()
-
-    # Build base row for upsert
+    now: datetime,
+    cache_key_val: str,
+    fingerprint: str,
+    existing_retry_count: int = 0,
+    *,
+    leg=None,
+    error_exc: Exception | None = None,
+) -> dict[str, Any]:
+    """Build a segment_cache row dict for batch upsert."""
     base = {
         "origin_place_id": origin_place_id,
         "destination_place_id": dest_place_id,
@@ -261,60 +258,21 @@ def _compute_one_segment(
         "destination_lat": dest_lat,
         "destination_lng": dest_lng,
         "transport_mode": transport_mode,
-        "cache_key": cache_key,
+        "cache_key": cache_key_val,
         "input_fingerprint": fingerprint,
         "last_attempt_at": now.isoformat(),
         "provider": "google",
     }
 
-    if not google_client:
-        row = {
-            **base,
-            "status": STATUS_CONFIG_ERROR,
-            "error_type": "not_configured",
-            "error_message": "Google Routes API not configured",
-            "provider_http_status": None,
-            "next_retry_at": _add_minutes(now, COOLDOWN_CONFIG_MINUTES).isoformat(),
-            "cache_expires_at": None,
-            "retry_count": 0,
-        }
-        ins = supabase.table("segment_cache").upsert(row, on_conflict="cache_key").execute()
-        if ins.data and len(ins.data) > 0:
-            return str(ins.data[0]["id"]), row
-        # fetch by key
-        existing = _fetch_cached_segment(supabase, cache_key)
-        if existing:
-            return str(existing["id"]), {**existing, **row}
-        raise RuntimeError("Failed to upsert segment_cache")
-
-    try:
-        leg = google_client.compute_leg(
-            origin_lat,
-            origin_lng,
-            dest_lat,
-            dest_lng,
-            transport_mode,
-        )
-    except Exception as e:
-        http_status = getattr(getattr(e, "response", None), "status_code", None)
-        raw_msg = str(e)
-        logger.warning(
-            "route_segment_calculation_error",
-            error=raw_msg,
-            cache_key=cache_key,
-            error_category="external_api",
-        )
-        # Sanitize: do not store raw exception text (may contain API keys, project IDs)
+    if error_exc is not None:
+        http_status = getattr(getattr(error_exc, "response", None), "status_code", None)
+        raw_msg = str(error_exc)
         msg = "Route calculation failed for this segment"
         status, error_type, cooldown_minutes = classify_provider_error(
-            http_status,
-            raw_msg,
-            transport_mode,
+            http_status, raw_msg, transport_mode
         )
         next_retry = _add_minutes(now, cooldown_minutes) if cooldown_minutes else None
-        existing = _fetch_cached_segment(supabase, cache_key)
-        retry_count = (existing.get("retry_count") or 0) + 1 if existing else 1
-        row = {
+        return {
             **base,
             "status": status,
             "error_type": error_type,
@@ -323,28 +281,17 @@ def _compute_one_segment(
             "provider_http_status": http_status,
             "next_retry_at": next_retry.isoformat() if next_retry else None,
             "cache_expires_at": None,
-            "retry_count": retry_count,
+            "retry_count": existing_retry_count + 1,
         }
-        logger.warning(
-            "google_routes_leg_failed",
-            key=cache_key,
-            status=status,
-            error_type=error_type,
-            http_status=http_status,
-            error_category="external_api",
-        )
-        supabase.table("segment_cache").upsert(row, on_conflict="cache_key").execute()
-        again = _fetch_cached_segment(supabase, cache_key)
-        if again:
-            return str(again["id"]), {**again, **row}
-        raise RuntimeError("Failed to upsert segment_cache after error") from e
 
-    # Success
+    if leg is None:
+        raise ValueError("Either leg or error_exc must be provided")
+
     cache_expires_at = None
     if transport_mode == "transit":
         cache_expires_at = _add_minutes(now, TRANSIT_SUCCESS_TTL_MINUTES).isoformat()
 
-    row = {
+    return {
         **base,
         "distance_meters": leg.distance_meters,
         "duration_seconds": leg.duration_seconds,
@@ -360,11 +307,81 @@ def _compute_one_segment(
         "retry_count": 0,
         "calculated_at": now.isoformat(),
     }
-    supabase.table("segment_cache").upsert(row, on_conflict="cache_key").execute()
-    again = _fetch_cached_segment(supabase, cache_key)
-    if again:
-        return str(again["id"]), {**again, **row}
-    raise RuntimeError("Failed to upsert segment_cache after success")
+
+
+async def _compute_one_segment_async(
+    google_client: GoogleRoutesClient,
+    origin_place_id: str | None,
+    origin_lat: float,
+    origin_lng: float,
+    dest_place_id: str | None,
+    dest_lat: float,
+    dest_lng: float,
+    transport_mode: str,
+    existing_retry_count: int,
+    semaphore: asyncio.Semaphore,
+) -> tuple[str, dict[str, Any]]:
+    """
+    Call Google for one leg via asyncio.to_thread (respects semaphore cap).
+    Returns (cache_key, row_dict).  Never raises — errors are encoded in the row.
+    """
+    cache_key_val = _cache_key(
+        origin_place_id, dest_place_id,
+        origin_lat, origin_lng,
+        dest_lat, dest_lng,
+        transport_mode,
+    )
+    fingerprint = _input_fingerprint(
+        origin_place_id, dest_place_id,
+        origin_lat, origin_lng,
+        dest_lat, dest_lng,
+        transport_mode,
+    )
+    now = _now_utc()
+
+    async with semaphore:
+        try:
+            leg = await asyncio.to_thread(
+                google_client.compute_leg,
+                origin_lat, origin_lng,
+                dest_lat, dest_lng,
+                transport_mode,
+            )
+            row = _build_segment_cache_row(
+                origin_place_id, dest_place_id,
+                origin_lat, origin_lng,
+                dest_lat, dest_lng,
+                transport_mode, now,
+                cache_key_val, fingerprint,
+                existing_retry_count=0,
+                leg=leg,
+            )
+        except Exception as exc:
+            logger.warning(
+                "route_segment_calculation_error",
+                error=str(exc),
+                cache_key=cache_key_val,
+                error_category="external_api",
+            )
+            row = _build_segment_cache_row(
+                origin_place_id, dest_place_id,
+                origin_lat, origin_lng,
+                dest_lat, dest_lng,
+                transport_mode, now,
+                cache_key_val, fingerprint,
+                existing_retry_count=existing_retry_count,
+                error_exc=exc,
+            )
+            logger.warning(
+                "google_routes_leg_failed",
+                key=cache_key_val,
+                status=row["status"],
+                error_type=row.get("error_type"),
+                http_status=row.get("provider_http_status"),
+                error_category="external_api",
+            )
+
+    return cache_key_val, row
 
 
 def _segment_response(
@@ -394,7 +411,7 @@ def _segment_response(
     )
 
 
-def get_route_with_fresh_segments(
+async def get_route_with_fresh_segments(
     supabase: Any,
     route_id: str,
     transport_mode: str | None = None,
@@ -405,12 +422,18 @@ def get_route_with_fresh_segments(
     Load route and segments; for each segment decide reuse vs recompute (retry-on-view).
     Recompute when: force_refresh, or missing cache, or fingerprint changed, or
     status allows retry and cooldown expired.
-    Update option_routes totals and route_segments; return route with segment status.
+
+    Phase 4: Google calls run concurrently (asyncio.gather).
+    Cache writes are batched into a single RPC (batch_upsert_segment_cache).
+    Segment rows + route totals are persisted atomically (persist_route_segments).
     """
     start = time.perf_counter()
     route_row = (
         supabase.table("option_routes")
-        .select("route_id, option_id, label, transport_mode, sort_order")
+        .select(
+            "route_id, option_id, label, transport_mode, sort_order, "
+            "duration_seconds, distance_meters"
+        )
         .eq("route_id", route_id)
         .execute()
     )
@@ -431,12 +454,15 @@ def get_route_with_fresh_segments(
     ol_ids = [str(s["option_location_id"]) for s in ordered]
     if len(ordered) < 2:
         # Zero or one stop: no segments to compute; persist zero totals
-        supabase.table("option_routes").update(
+        supabase.rpc(
+            "persist_route_segments",
             {
-                "duration_seconds": 0,
-                "distance_meters": 0,
-            }
-        ).eq("route_id", route_id).execute()
+                "p_route_id": route_id,
+                "p_segment_rows": [],
+                "p_total_duration": 0,
+                "p_total_distance": 0,
+            },
+        ).execute()
         return RouteWithSegmentsResponse(
             route_id=route_id,
             option_id=option_id,
@@ -449,6 +475,7 @@ def get_route_with_fresh_segments(
             segments=[],
             route_status="ok",
         )
+
     # Resolve option_location_id → location_id via option_locations
     ol_rows = (
         supabase.table("option_locations").select("id, location_id").in_("id", ol_ids).execute()
@@ -465,7 +492,7 @@ def get_route_with_fresh_segments(
     )
     loc_by_id = {str(r["location_id"]): r for r in (loc_rows.data or [])}
 
-    result = _get_route_segments_impl(
+    result = await _get_route_segments_impl(
         supabase,
         route_id,
         route,
@@ -493,7 +520,7 @@ def get_route_with_fresh_segments(
     return result
 
 
-def _get_route_segments_impl(
+async def _get_route_segments_impl(
     supabase: Any,
     route_id: str,
     route: dict,
@@ -506,8 +533,15 @@ def _get_route_segments_impl(
     google_client: GoogleRoutesClient | None,
     force_refresh: bool,
 ) -> RouteWithSegmentsResponse:
-    """Inner implementation for route segment computation."""
-    # Load existing route_segments and their cache rows
+    """
+    Inner async implementation for route segment computation.
+
+    Phase 4 changes vs prior sync implementation:
+    - Google calls dispatched concurrently via asyncio.gather + asyncio.to_thread.
+    - Cache writes batched into one batch_upsert_segment_cache RPC call.
+    - Segment rows + totals persisted atomically via persist_route_segments RPC.
+    """
+    # Load existing route_segments and their cache rows (used for cache-hit checks)
     rs_rows = (
         supabase.table("route_segments")
         .select("segment_order, from_location_id, to_location_id, segment_cache_id")
@@ -532,12 +566,19 @@ def _get_route_segments_impl(
         )
         cache_rows_by_id = {str(r["id"]): r for r in (cache_list.data or [])}
 
-    segments_out: list[RouteSegmentResponse] = []
-    total_distance = 0
-    total_duration = 0
-    any_non_success = False
-    # After loop we'll write route_segments for new/changed
-    segment_order_to_cache_id: dict[int, str] = {}
+    # ---------------------------------------------------------------------------
+    # Step 1: classify each segment — cache hit or needs Google call
+    # ---------------------------------------------------------------------------
+
+    # Per-segment inputs keyed by segment index
+    seg_inputs: list[dict] = []          # params for each segment (all N-1 segments)
+    cache_hit_rows: dict[int, dict] = {}  # seg_index → existing cache row (no Google needed)
+    needs_google: list[int] = []          # seg indices that need a Google call
+    # Cache every row fetched in Step 1 (hit OR miss triggering recompute) so
+    # Step 2 can read retry_count without issuing per-segment SELECTs. Avoids
+    # the N+1 round-trips against `segment_cache` previously caused by a second
+    # _fetch_cached_segment call inside the Google-dispatch loop.
+    fetched_cache_rows: dict[int, dict | None] = {}
 
     for i in range(len(ordered) - 1):
         from_loc_id = location_ids[i]
@@ -555,11 +596,199 @@ def _get_route_segments_impl(
         to_lat = float(to_lat_raw or 0.0)
         to_lng = float(to_lng_raw or 0.0)
 
-        # Skip Google call if either endpoint is missing coordinates (avoid 0,0 requests)
         missing_coords = (
-            from_lat_raw is None or from_lng_raw is None or to_lat_raw is None or to_lng_raw is None
+            from_lat_raw is None or from_lng_raw is None
+            or to_lat_raw is None or to_lng_raw is None
         )
+
+        seg_inputs.append(
+            {
+                "from_loc_id": from_loc_id,
+                "to_loc_id": to_loc_id,
+                "from_place": from_place,
+                "to_place": to_place,
+                "from_lat": from_lat,
+                "from_lng": from_lng,
+                "to_lat": to_lat,
+                "to_lng": to_lng,
+                "missing_coords": missing_coords,
+            }
+        )
+
         if missing_coords:
+            continue  # will generate INPUT_ERROR row below without Google
+
+        fingerprint = _input_fingerprint(
+            from_place, to_place, from_lat, from_lng, to_lat, to_lng, mode
+        )
+        cache_key_val = _cache_key(
+            from_place, to_place, from_lat, from_lng, to_lat, to_lng, mode
+        )
+
+        # Check cache by segment order from existing route_segments
+        existing_for_order = next(
+            (s for s in existing_segments if int(s["segment_order"]) == i), None
+        )
+        cache_row: dict[str, Any] | None = None
+        if existing_for_order:
+            cache_row = cache_rows_by_id.get(str(existing_for_order["segment_cache_id"]))
+
+        # If not found by segment order, try by cache_key (shared across routes)
+        if cache_row is None:
+            cache_row = _fetch_cached_segment(supabase, cache_key_val)
+
+        # Capture the row (hit or miss) so Step 2 can read retry_count without
+        # re-selecting from segment_cache.
+        fetched_cache_rows[i] = cache_row
+
+        do_recompute = should_recompute_on_view(cache_row, force_refresh, fingerprint, mode)
+
+        if do_recompute:
+            needs_google.append(i)
+        else:
+            cache_hit_rows[i] = cache_row  # type: ignore[assignment]
+
+    # ---------------------------------------------------------------------------
+    # Step 2: dispatch Google calls concurrently for segments that need it
+    # ---------------------------------------------------------------------------
+
+    google_results: dict[int, tuple[str, dict]] = {}  # seg_index → (cache_key, row)
+
+    if needs_google and google_client is not None:
+        semaphore = asyncio.Semaphore(GOOGLE_ROUTES_MAX_CONCURRENT_LEGS)
+        tasks = []
+        for i in needs_google:
+            s = seg_inputs[i]
+            # Reuse the cache row already fetched in Step 1 (if any) instead of
+            # issuing another SELECT. For cache-miss segments this is None,
+            # which correctly maps to retry_count = 0.
+            existing_cache_row = fetched_cache_rows.get(i)
+            existing_retry = (
+                (existing_cache_row.get("retry_count") or 0) if existing_cache_row else 0
+            )
+            tasks.append(
+                _compute_one_segment_async(
+                    google_client,
+                    s["from_place"], s["from_lat"], s["from_lng"],
+                    s["to_place"], s["to_lat"], s["to_lng"],
+                    mode,
+                    existing_retry,
+                    semaphore,
+                )
+            )
+        raw_results = await asyncio.gather(*tasks, return_exceptions=True)
+        for idx, seg_i in enumerate(needs_google):
+            r = raw_results[idx]
+            if isinstance(r, Exception):
+                # Unexpected — _compute_one_segment_async should never raise
+                logger.error(
+                    "unexpected_segment_compute_error",
+                    seg_index=seg_i,
+                    error=str(r),
+                    error_category="internal",
+                )
+                # Build an error row inline
+                s = seg_inputs[seg_i]
+                now = _now_utc()
+                ck = _cache_key(
+                    s["from_place"], s["to_place"],
+                    s["from_lat"], s["from_lng"],
+                    s["to_lat"], s["to_lng"],
+                    mode,
+                )
+                fp = _input_fingerprint(
+                    s["from_place"], s["to_place"],
+                    s["from_lat"], s["from_lng"],
+                    s["to_lat"], s["to_lng"],
+                    mode,
+                )
+                err_row = _build_segment_cache_row(
+                    s["from_place"], s["to_place"],
+                    s["from_lat"], s["from_lng"],
+                    s["to_lat"], s["to_lng"],
+                    mode, now, ck, fp,
+                    existing_retry_count=0,
+                    error_exc=r,
+                )
+                google_results[seg_i] = (ck, err_row)
+            else:
+                google_results[seg_i] = r
+
+    elif needs_google and google_client is None:
+        # Google not configured — build config_error rows for all pending segments
+        now = _now_utc()
+        for i in needs_google:
+            s = seg_inputs[i]
+            ck = _cache_key(
+                s["from_place"], s["to_place"],
+                s["from_lat"], s["from_lng"],
+                s["to_lat"], s["to_lng"],
+                mode,
+            )
+            fp = _input_fingerprint(
+                s["from_place"], s["to_place"],
+                s["from_lat"], s["from_lng"],
+                s["to_lat"], s["to_lng"],
+                mode,
+            )
+            row = {
+                "origin_place_id": s["from_place"],
+                "destination_place_id": s["to_place"],
+                "origin_lat": s["from_lat"],
+                "origin_lng": s["from_lng"],
+                "destination_lat": s["to_lat"],
+                "destination_lng": s["to_lng"],
+                "transport_mode": mode,
+                "cache_key": ck,
+                "input_fingerprint": fp,
+                "last_attempt_at": now.isoformat(),
+                "provider": "google",
+                "status": STATUS_CONFIG_ERROR,
+                "error_type": "not_configured",
+                "error_message": "Google Routes API not configured",
+                "provider_http_status": None,
+                "next_retry_at": _add_minutes(now, COOLDOWN_CONFIG_MINUTES).isoformat(),
+                "cache_expires_at": None,
+                "retry_count": 0,
+            }
+            google_results[i] = (ck, row)
+
+    # ---------------------------------------------------------------------------
+    # Step 3: batch upsert all computed rows into segment_cache (single RPC)
+    # ---------------------------------------------------------------------------
+
+    computed_rows_by_cache_key: dict[str, dict] = {}
+    if google_results:
+        rows_to_upsert = [row for (_ck, row) in google_results.values()]
+        upserted = supabase.rpc(
+            "batch_upsert_segment_cache", {"p_rows": rows_to_upsert}
+        ).execute()
+        # Index returned rows by cache_key so we can look up IDs
+        for returned_row in (upserted.data or []):
+            ck = returned_row.get("cache_key") or ""
+            computed_rows_by_cache_key[ck] = returned_row
+        # Fall back to our built rows for any that didn't return (shouldn't happen)
+        for seg_i in google_results:
+            ck, built_row = google_results[seg_i]
+            if ck not in computed_rows_by_cache_key:
+                computed_rows_by_cache_key[ck] = built_row
+
+    # ---------------------------------------------------------------------------
+    # Step 4: assemble final segment list + route_segments rows for persistence
+    # ---------------------------------------------------------------------------
+
+    segments_out: list[RouteSegmentResponse] = []
+    total_distance = 0
+    total_duration = 0
+    any_non_success = False
+    persist_segment_rows: list[dict] = []
+
+    for i in range(len(ordered) - 1):
+        s = seg_inputs[i]
+        from_loc_id = s["from_loc_id"]
+        to_loc_id = s["to_loc_id"]
+
+        if s["missing_coords"]:
             segments_out.append(
                 RouteSegmentResponse(
                     segment_order=i,
@@ -578,68 +807,14 @@ def _get_route_segments_impl(
             any_non_success = True
             continue
 
-        fingerprint = _input_fingerprint(
-            from_place,
-            to_place,
-            from_lat,
-            from_lng,
-            to_lat,
-            to_lng,
-            mode,
-        )
-        cache_key = _cache_key(
-            from_place,
-            to_place,
-            from_lat,
-            from_lng,
-            to_lat,
-            to_lng,
-            mode,
-        )
+        # Determine the final cache row for this segment
+        if i in google_results:
+            ck, _ = google_results[i]
+            cache_row = computed_rows_by_cache_key.get(ck)
+        else:
+            cache_row = cache_hit_rows.get(i)
 
-        # Existing segment cache row (by segment_order)
-        existing_for_order = next(
-            (s for s in existing_segments if int(s["segment_order"]) == i),
-            None,
-        )
-        cache_row: dict[str, Any] | None = None
-        if existing_for_order:
-            cache_row = cache_rows_by_id.get(str(existing_for_order["segment_cache_id"]))
-
-        # If we don't have a cached row, try fetch by cache_key (might exist from another route)
         if cache_row is None:
-            cache_row = _fetch_cached_segment(supabase, cache_key)
-
-        do_recompute = should_recompute_on_view(cache_row, force_refresh, fingerprint, mode)
-
-        if do_recompute:
-            cache_id, new_row = _compute_one_segment(
-                supabase,
-                google_client,
-                from_place,
-                from_lat,
-                from_lng,
-                to_place,
-                to_lat,
-                to_lng,
-                mode,
-            )
-            cache_row = new_row
-            segment_order_to_cache_id[i] = cache_id
-        else:
-            cache_id = cache_row.get("id") if cache_row else None
-            if cache_id:
-                segment_order_to_cache_id[i] = str(cache_id)
-
-        if cache_row:
-            status = cache_row.get("status") or ""
-            status = STATUS_LEGACY_TO_NEW.get(status, status)
-            if status != STATUS_SUCCESS:
-                any_non_success = True
-            total_distance += cache_row.get("distance_meters") or 0
-            total_duration += cache_row.get("duration_seconds") or 0
-            segments_out.append(_segment_response(i, from_loc_id, to_loc_id, cache_row))
-        else:
             any_non_success = True
             segments_out.append(
                 RouteSegmentResponse(
@@ -654,28 +829,66 @@ def _get_route_segments_impl(
                     error_message="No cache and compute failed",
                 )
             )
+            continue
 
-    # Persist route_segments: delete all then batch-insert in a single round-trip
-    supabase.table("route_segments").delete().eq("route_id", route_id).execute()
-    if segment_order_to_cache_id:
-        segment_rows = [
-            {
-                "route_id": route_id,
-                "segment_order": seg_order,
-                "from_location_id": location_ids[seg_order],
-                "to_location_id": location_ids[seg_order + 1],
-                "segment_cache_id": cache_id,
-            }
-            for seg_order, cache_id in segment_order_to_cache_id.items()
-        ]
-        supabase.table("route_segments").insert(segment_rows).execute()
+        status = cache_row.get("status") or ""
+        status = STATUS_LEGACY_TO_NEW.get(status, status)
+        if status != STATUS_SUCCESS:
+            any_non_success = True
+        total_distance += cache_row.get("distance_meters") or 0
+        total_duration += cache_row.get("duration_seconds") or 0
+        segments_out.append(_segment_response(i, from_loc_id, to_loc_id, cache_row))
 
-    supabase.table("option_routes").update(
-        {
-            "duration_seconds": total_duration,
-            "distance_meters": total_distance,
+        cache_id = cache_row.get("id")
+        if cache_id:
+            persist_segment_rows.append(
+                {
+                    "segment_order": i,
+                    "from_location_id": from_loc_id,
+                    "to_location_id": to_loc_id,
+                    "segment_cache_id": str(cache_id),
+                }
+            )
+
+    # ---------------------------------------------------------------------------
+    # Step 5: persist route_segments + update option_routes totals atomically
+    #
+    # Skip the write when the DB already matches what we'd write: no new Google
+    # computations happened AND every segment_cache_id is unchanged AND the
+    # option_routes totals already match. This keeps full-cache-hit reads
+    # read-only instead of churning DELETE+INSERT+UPDATE on every view.
+    # ---------------------------------------------------------------------------
+
+    def _persist_needed() -> bool:
+        if google_results:
+            return True  # new computation, always persist
+        if len(existing_segments) != len(persist_segment_rows):
+            return True  # structural change
+        existing_by_order = {
+            int(s["segment_order"]): s for s in existing_segments
         }
-    ).eq("route_id", route_id).execute()
+        for row in persist_segment_rows:
+            existing_row = existing_by_order.get(int(row["segment_order"]))
+            if existing_row is None:
+                return True
+            if str(existing_row.get("segment_cache_id")) != str(
+                row["segment_cache_id"]
+            ):
+                return True
+        if int(route.get("duration_seconds") or 0) != int(total_duration):
+            return True
+        return int(route.get("distance_meters") or 0) != int(total_distance)
+
+    if _persist_needed():
+        supabase.rpc(
+            "persist_route_segments",
+            {
+                "p_route_id": route_id,
+                "p_segment_rows": persist_segment_rows,
+                "p_total_duration": total_duration,
+                "p_total_distance": total_distance,
+            },
+        ).execute()
 
     return RouteWithSegmentsResponse(
         route_id=route_id,

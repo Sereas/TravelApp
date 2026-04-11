@@ -146,7 +146,7 @@ interface ItineraryRouteManagerProps {
     dayId: string,
     optionId: string,
     routeId: string
-  ) => Promise<void>;
+  ) => void;
   onSaveRoute: (
     transport: TransportMode,
     locationIds: string[],
