@@ -76,7 +76,6 @@ export default function TripDetailPage() {
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
-  const [deletingTrip, setDeletingTrip] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
 
   const itineraryState = useItineraryState({
@@ -378,21 +377,6 @@ export default function TripDetailPage() {
     // Itinerary tab embeds LocationSummary (name, note, etc.); refetch so it shows the update.
     fetchItinerary();
   }
-
-  async function handleDeleteTrip() {
-    setDeletingTrip(true);
-    try {
-      await api.trips.delete(tripId);
-      router.push("/trips");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete trip");
-      setDeletingTrip(false);
-    }
-  }
-  // Keep reference alive so build doesn't flag as unused — handleDeleteTrip
-  // is wired up in a pending UI surface.
-  void handleDeleteTrip;
-  void deletingTrip;
 
   async function handleDeleteLocation(locationId: string) {
     try {

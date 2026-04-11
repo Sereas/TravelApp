@@ -459,31 +459,6 @@ export const api = {
         method: "DELETE",
       }),
 
-    importGoogleList: (tripId: string, body: { google_list_url: string }) =>
-      request<{
-        imported_count: number;
-        existing_count: number;
-        failed_count: number;
-        imported: Array<{
-          name: string;
-          status: string;
-          detail: string | null;
-        }>;
-        existing: Array<{
-          name: string;
-          status: string;
-          detail: string | null;
-        }>;
-        failed: Array<{
-          name: string;
-          status: string;
-          detail: string | null;
-        }>;
-      }>(`/api/v1/trips/${tripId}/locations/import-google-list`, {
-        method: "POST",
-        body: JSON.stringify(body),
-      }),
-
     importGoogleListStream: async (
       tripId: string,
       body: { google_list_url: string },

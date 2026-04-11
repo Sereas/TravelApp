@@ -32,8 +32,6 @@ const Sheet = DialogPrimitive.Root;
 
 const SheetTrigger = DialogPrimitive.Trigger;
 
-const SheetClose = DialogPrimitive.Close;
-
 const SheetPortal = DialogPrimitive.Portal;
 
 const SheetOverlay = React.forwardRef<
@@ -126,20 +124,6 @@ const SheetHeader = ({
 );
 SheetHeader.displayName = "SheetHeader";
 
-const SheetFooter = ({
-  className,
-  ...props
-}: React.HTMLAttributes<HTMLDivElement>) => (
-  <div
-    className={cn(
-      "flex flex-col-reverse gap-2 px-5 pb-3 pt-2 sm:flex-row sm:justify-end",
-      className
-    )}
-    {...props}
-  />
-);
-SheetFooter.displayName = "SheetFooter";
-
 const SheetTitle = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Title>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>
@@ -170,12 +154,8 @@ SheetDescription.displayName = "SheetDescription";
 export {
   Sheet,
   SheetTrigger,
-  SheetClose,
-  SheetPortal,
-  SheetOverlay,
   SheetContent,
   SheetHeader,
-  SheetFooter,
   SheetTitle,
   SheetDescription,
 };
