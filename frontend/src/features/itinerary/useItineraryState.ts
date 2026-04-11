@@ -8,7 +8,6 @@ import {
   type ItineraryResponse,
   type Location,
   type RouteResponse,
-  type RouteWithSegmentsResponse,
 } from "@/lib/api";
 import type { FullItineraryState } from "@/features/itinerary/itinerary-state-types";
 import {
@@ -16,6 +15,16 @@ import {
   buildItineraryLocationMap,
   buildAvailableDays,
 } from "@/lib/itinerary-derived";
+import {
+  locationSummaryFromLocation,
+  locationSummaryPlaceholder,
+  mutateDay,
+  mutateOption,
+  mutateOptionLocation,
+  removeOptionLocation,
+} from "@/lib/itinerary-mutations";
+import { withOptimisticUpdate } from "./withOptimisticUpdate";
+import { useFetchAndPatchRouteMetrics } from "./useFetchAndPatchRouteMetrics";
 
 interface UseItineraryStateParams {
   tripId: string;
@@ -23,44 +32,33 @@ interface UseItineraryStateParams {
   locations: Location[];
 }
 
+/** Patch a single route's metrics + segments into the itinerary tree. */
 function patchRouteInItinerary(
   prev: ItineraryResponse,
   dayId: string,
   optionId: string,
   routeId: string,
-  data: RouteWithSegmentsResponse
+  data: import("@/lib/api").RouteWithSegmentsResponse
 ): ItineraryResponse {
-  return {
-    ...prev,
-    days: prev.days.map((day) => {
-      if (day.id !== dayId) return day;
-      return {
-        ...day,
-        options: day.options.map((option) => {
-          if (option.id !== optionId) return option;
-          return {
-            ...option,
-            routes: option.routes.map((route) =>
-              route.route_id === routeId
-                ? {
-                    ...route,
-                    duration_seconds: data.duration_seconds,
-                    distance_meters: data.distance_meters,
-                    route_status: data.route_status,
-                    segments: data.segments.map((segment) => ({
-                      segment_order: segment.segment_order,
-                      duration_seconds: segment.duration_seconds,
-                      distance_meters: segment.distance_meters,
-                      encoded_polyline: segment.encoded_polyline,
-                    })),
-                  }
-                : route
-            ),
-          };
-        }),
-      };
-    }),
-  };
+  return mutateOption(prev, dayId, optionId, (option) => ({
+    ...option,
+    routes: option.routes.map((route) =>
+      route.route_id === routeId
+        ? {
+            ...route,
+            duration_seconds: data.duration_seconds,
+            distance_meters: data.distance_meters,
+            route_status: data.route_status,
+            segments: data.segments.map((segment) => ({
+              segment_order: segment.segment_order,
+              duration_seconds: segment.duration_seconds,
+              distance_meters: segment.distance_meters,
+              encoded_polyline: segment.encoded_polyline,
+            })),
+          }
+        : route
+    ),
+  }));
 }
 
 export function useItineraryState({
@@ -221,12 +219,10 @@ export function useItineraryState({
         null;
       setItinerary((prev) => {
         if (!prev) return prev;
-        return {
-          ...prev,
-          days: prev.days.map((day) =>
-            day.id === dayId ? { ...day, active_option_id: optionId } : day
-          ),
-        };
+        return mutateDay(prev, dayId, (day) => ({
+          ...day,
+          active_option_id: optionId,
+        }));
       });
 
       void (async () => {
@@ -239,12 +235,10 @@ export function useItineraryState({
           // with server state.
           setItinerary((prev) => {
             if (!prev) return prev;
-            return {
-              ...prev,
-              days: prev.days.map((day) =>
-                day.id === dayId ? { ...day, active_option_id: previous } : day
-              ),
-            };
+            return mutateDay(prev, dayId, (day) => ({
+              ...day,
+              active_option_id: previous,
+            }));
           });
           setItineraryActionError(
             err instanceof Error
@@ -321,31 +315,18 @@ export function useItineraryState({
       }
 
       setItineraryActionError(null);
-      setItinerary((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          days: prev.days.map((day) =>
-            day.id === dayId
-              ? {
-                  ...day,
-                  options: day.options.map((option) =>
-                    option.id === optionId ? { ...option, ...updates } : option
-                  ),
-                }
-              : day
+      return withOptimisticUpdate({
+        setter: setItinerary,
+        optimisticUpdate: (prev) =>
+          mutateOption(prev, dayId, optionId, (o) => ({ ...o, ...updates })),
+        serverCall: () =>
+          api.itinerary.updateOption(tripId, dayId, optionId, updates),
+        refetch: fetchItinerary,
+        onError: (err) =>
+          setItineraryActionError(
+            err instanceof Error ? err.message : "Failed to update option details"
           ),
-        };
       });
-
-      try {
-        await api.itinerary.updateOption(tripId, dayId, optionId, updates);
-      } catch (err) {
-        setItineraryActionError(
-          err instanceof Error ? err.message : "Failed to update option details"
-        );
-        await fetchItinerary();
-      }
     },
     [fetchItinerary, tripId]
   );
@@ -393,29 +374,22 @@ export function useItineraryState({
         }
         setItinerary((prev) => {
           if (!prev) return prev;
-          return {
-            ...prev,
-            days: prev.days.map((day) =>
-              day.id === dayId
-                ? {
-                    ...day,
-                    options: [
-                      ...day.options,
-                      {
-                        id: newOption.id,
-                        option_index: newOption.option_index,
-                        starting_city: newOption.starting_city,
-                        ending_city: newOption.ending_city,
-                        created_by: newOption.created_by ?? label ?? null,
-                        created_at: newOption.created_at,
-                        locations: [],
-                        routes: [],
-                      },
-                    ],
-                  }
-                : day
-            ),
-          };
+          return mutateDay(prev, dayId, (day) => ({
+            ...day,
+            options: [
+              ...day.options,
+              {
+                id: newOption.id,
+                option_index: newOption.option_index,
+                starting_city: newOption.starting_city,
+                ending_city: newOption.ending_city,
+                created_by: newOption.created_by ?? label ?? null,
+                created_at: newOption.created_at,
+                locations: [],
+                routes: [],
+              },
+            ],
+          }));
         });
         return newOption.id;
       } catch (err) {
@@ -439,35 +413,23 @@ export function useItineraryState({
       // immediately. The DB mirrors this via the `ON DELETE SET NULL` FK on
       // `trip_days.active_option_id → day_options(option_id)` so the server
       // state converges without a second request.
-      setItinerary((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          days: prev.days.map((day) =>
-            day.id === dayId
-              ? {
-                  ...day,
-                  active_option_id:
-                    day.active_option_id === optionId
-                      ? null
-                      : day.active_option_id,
-                  options: day.options.filter(
-                    (option) => option.id !== optionId
-                  ),
-                }
-              : day
+      return withOptimisticUpdate({
+        setter: setItinerary,
+        optimisticUpdate: (prev) =>
+          mutateDay(prev, dayId, (day) => ({
+            ...day,
+            active_option_id:
+              day.active_option_id === optionId ? null : day.active_option_id,
+            options: day.options.filter((option) => option.id !== optionId),
+          })),
+        serverCall: () =>
+          api.itinerary.deleteOption(tripId, dayId, optionId),
+        refetch: fetchItinerary,
+        onError: (err) =>
+          setItineraryActionError(
+            err instanceof Error ? err.message : "Failed to delete alternative"
           ),
-        };
       });
-
-      try {
-        await api.itinerary.deleteOption(tripId, dayId, optionId);
-      } catch (err) {
-        setItineraryActionError(
-          err instanceof Error ? err.message : "Failed to delete alternative"
-        );
-        await fetchItinerary();
-      }
     },
     [fetchItinerary, tripId]
   );
@@ -493,69 +455,21 @@ export function useItineraryState({
 
       setItinerary((prev) => {
         if (!prev) return prev;
-        return {
-          ...prev,
-          days: prev.days.map((day) =>
-            day.id === dayId
-              ? {
-                  ...day,
-                  options: day.options.map((option) => {
-                    if (option.id !== optionId) return option;
-                    const newLocations = locationIds.map(
-                      (locationId, index) => {
-                        const loc = locations.find((l) => l.id === locationId);
-                        return {
-                          id: crypto.randomUUID(),
-                          location_id: locationId,
-                          sort_order: startOrder + index,
-                          time_period: "morning",
-                          location: loc
-                            ? {
-                                id: loc.id,
-                                name: loc.name,
-                                city: loc.city,
-                                address: loc.address,
-                                google_link: loc.google_link,
-                                category: loc.category,
-                                note: loc.note,
-                                working_hours: loc.working_hours,
-                                requires_booking: loc.requires_booking,
-                                latitude: loc.latitude,
-                                longitude: loc.longitude,
-                                image_url: loc.image_url,
-                                user_image_url: loc.user_image_url,
-                                attribution_name: loc.attribution_name,
-                                attribution_uri: loc.attribution_uri,
-                              }
-                            : {
-                                id: locationId,
-                                name: "Loading...",
-                                city: null,
-                                address: null,
-                                google_link: null,
-                                category: null,
-                                note: null,
-                                working_hours: null,
-                                requires_booking: null,
-                                latitude: null,
-                                longitude: null,
-                                image_url: null,
-                                user_image_url: null,
-                                attribution_name: null,
-                                attribution_uri: null,
-                              },
-                        };
-                      }
-                    );
-                    return {
-                      ...option,
-                      locations: [...option.locations, ...newLocations],
-                    };
-                  }),
-                }
-              : day
-          ),
-        };
+        return mutateOption(prev, dayId, optionId, (option) => {
+          const newLocations = locationIds.map((locationId, index) => {
+            const loc = locations.find((l) => l.id === locationId);
+            return {
+              id: crypto.randomUUID(),
+              location_id: locationId,
+              sort_order: startOrder + index,
+              time_period: "morning",
+              location: loc
+                ? locationSummaryFromLocation(loc)
+                : locationSummaryPlaceholder(locationId),
+            };
+          });
+          return { ...option, locations: [...option.locations, ...newLocations] };
+        });
       });
 
       try {
@@ -580,45 +494,30 @@ export function useItineraryState({
   const handleRemoveLocationFromOption = useCallback(
     async (dayId: string, optionId: string, olId: string) => {
       setItineraryActionError(null);
+      // The route-cleanup logic (removing stops / dropping routes < 2 stops)
+      // is intentionally kept inline here because it touches both `locations`
+      // and `routes` simultaneously — a single mutateOption call with custom
+      // per-field logic is cleaner than chaining two helpers.
       setItinerary((prev) => {
         if (!prev) return prev;
-        return {
-          ...prev,
-          days: prev.days.map((d) =>
-            d.id === dayId
-              ? {
-                  ...d,
-                  options: d.options.map((o) => {
-                    if (o.id !== optionId) return o;
-                    const nextLocations = o.locations.filter(
-                      (location) => location.id !== olId
+        return mutateOption(prev, dayId, optionId, (o) => {
+          const nextLocations = o.locations.filter(
+            (location) => location.id !== olId
+          );
+          const nextRoutes =
+            o.routes.length > 0
+              ? (o.routes
+                  .map((route) => {
+                    const remainingIds = route.option_location_ids.filter(
+                      (id) => id !== olId
                     );
-                    const nextRoutes =
-                      o.routes.length > 0
-                        ? (o.routes
-                            .map((route) => {
-                              const remainingIds =
-                                route.option_location_ids.filter(
-                                  (id) => id !== olId
-                                );
-                              if (remainingIds.length < 2) return null;
-                              return {
-                                ...route,
-                                option_location_ids: remainingIds,
-                              };
-                            })
-                            .filter(Boolean) as typeof o.routes)
-                        : o.routes;
-                    return {
-                      ...o,
-                      locations: nextLocations,
-                      routes: nextRoutes,
-                    };
-                  }),
-                }
-              : d
-          ),
-        };
+                    if (remainingIds.length < 2) return null;
+                    return { ...route, option_location_ids: remainingIds };
+                  })
+                  .filter(Boolean) as typeof o.routes)
+              : o.routes;
+          return { ...o, locations: nextLocations, routes: nextRoutes };
+        });
       });
 
       try {
@@ -635,7 +534,7 @@ export function useItineraryState({
         await fetchItinerary();
       }
     },
-    [fetchItinerary, itinerary, tripId]
+    [fetchItinerary, tripId]
   );
 
   const handleUpdateLocationTimePeriod = useCallback(
@@ -646,99 +545,34 @@ export function useItineraryState({
       timePeriod: string
     ) => {
       setItineraryActionError(null);
-      setItinerary((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          days: prev.days.map((day) =>
-            day.id === dayId
-              ? {
-                  ...day,
-                  options: day.options.map((option) =>
-                    option.id === optionId
-                      ? {
-                          ...option,
-                          locations: option.locations.map((location) =>
-                            location.id === olId
-                              ? { ...location, time_period: timePeriod }
-                              : location
-                          ),
-                        }
-                      : option
-                  ),
-                }
-              : day
+      return withOptimisticUpdate({
+        setter: setItinerary,
+        optimisticUpdate: (prev) =>
+          mutateOptionLocation(prev, dayId, optionId, olId, (ol) => ({
+            ...ol,
+            time_period: timePeriod,
+          })),
+        serverCall: () =>
+          api.itinerary.updateOptionLocation(tripId, dayId, optionId, olId, {
+            time_period: timePeriod,
+          }),
+        refetch: fetchItinerary,
+        onError: (err) =>
+          setItineraryActionError(
+            err instanceof Error ? err.message : "Failed to update time of day"
           ),
-        };
       });
-
-      try {
-        await api.itinerary.updateOptionLocation(
-          tripId,
-          dayId,
-          optionId,
-          olId,
-          { time_period: timePeriod }
-        );
-      } catch (err) {
-        setItineraryActionError(
-          err instanceof Error ? err.message : "Failed to update time of day"
-        );
-        await fetchItinerary();
-      }
     },
     [fetchItinerary, tripId]
   );
 
-  /**
-   * Fire-and-forget helper: fetch route segments from the API and patch them
-   * into local state.  Owns the `calculatingRouteId` lifecycle — sets it to
-   * null in the finally block.  Silently guards against post-unmount state
-   * updates via `isMountedRef`.
-   *
-   * Extracted so both `handleRouteCreated` and `handleRetryRouteMetrics` share
-   * exactly the same background fetch logic.
-   */
-  const _fetchAndPatchRouteMetrics = useCallback(
-    (dayId: string, optionId: string, routeId: string) => {
-      void (async () => {
-        try {
-          const withSegments = await api.itinerary.getRouteWithSegments(
-            tripId,
-            dayId,
-            optionId,
-            routeId
-          );
-          if (!isMountedRef.current) return;
-          setItinerary((prev) =>
-            prev
-              ? patchRouteInItinerary(
-                  prev,
-                  dayId,
-                  optionId,
-                  routeId,
-                  withSegments
-                )
-              : prev
-          );
-        } catch (err) {
-          if (!isMountedRef.current) return;
-          setRouteMetricsError((prev) => ({
-            ...prev,
-            [routeId]:
-              err instanceof Error
-                ? err.message
-                : "Could not calculate distance and duration",
-          }));
-        } finally {
-          if (isMountedRef.current) {
-            setCalculatingRouteId(null);
-          }
-        }
-      })();
-    },
-    [tripId]
-  );
+  const { fetchAndPatch: _fetchAndPatchRouteMetrics } =
+    useFetchAndPatchRouteMetrics(
+      setItinerary,
+      setCalculatingRouteId,
+      setRouteMetricsError,
+      isMountedRef
+    );
 
   const handleRouteCreated = useCallback(
     async (dayId: string, optionId: string, routeResponse: RouteResponse) => {
@@ -755,9 +589,9 @@ export function useItineraryState({
       // `calculatingRouteId` stays set until the background fetch completes
       // (or fails) — the spinner stays visible, but the rest of the UI is
       // immediately interactive.
-      _fetchAndPatchRouteMetrics(dayId, optionId, routeId);
+      _fetchAndPatchRouteMetrics(tripId, dayId, optionId, routeId);
     },
-    [fetchItinerary, _fetchAndPatchRouteMetrics]
+    [fetchItinerary, _fetchAndPatchRouteMetrics, tripId]
   );
 
   const handleRetryRouteMetrics = useCallback(
@@ -768,9 +602,9 @@ export function useItineraryState({
         return next;
       });
       setCalculatingRouteId(routeId);
-      _fetchAndPatchRouteMetrics(dayId, optionId, routeId);
+      _fetchAndPatchRouteMetrics(tripId, dayId, optionId, routeId);
     },
-    [_fetchAndPatchRouteMetrics]
+    [_fetchAndPatchRouteMetrics, tripId]
   );
 
   const handleReorderOptionLocations = useCallback(
@@ -794,35 +628,23 @@ export function useItineraryState({
       if (reordered.length !== newOrderedOlIds.length) return;
 
       setItineraryActionError(null);
-      setItinerary((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          days: prev.days.map((currentDay) =>
-            currentDay.id !== dayId
-              ? currentDay
-              : {
-                  ...currentDay,
-                  options: currentDay.options.map((currentOption) =>
-                    currentOption.id !== optionId
-                      ? currentOption
-                      : { ...currentOption, locations: reordered }
-                  ),
-                }
+      return withOptimisticUpdate({
+        setter: setItinerary,
+        optimisticUpdate: (prev) =>
+          mutateOption(prev, dayId, optionId, (o) => ({
+            ...o,
+            locations: reordered,
+          })),
+        serverCall: () =>
+          api.itinerary.reorderOptionLocations(tripId, dayId, optionId, {
+            ol_ids: newOrderedOlIds,
+          }),
+        refetch: fetchItinerary,
+        onError: (err) =>
+          setItineraryActionError(
+            err instanceof Error ? err.message : "Failed to reorder locations"
           ),
-        };
       });
-
-      try {
-        await api.itinerary.reorderOptionLocations(tripId, dayId, optionId, {
-          ol_ids: newOrderedOlIds,
-        });
-      } catch (err) {
-        setItineraryActionError(
-          err instanceof Error ? err.message : "Failed to reorder locations"
-        );
-        await fetchItinerary();
-      }
     },
     [fetchItinerary, itinerary, tripId]
   );
@@ -839,52 +661,32 @@ export function useItineraryState({
       if (location) {
         setItinerary((prev) => {
           if (!prev) return prev;
-          return {
-            ...prev,
-            days: prev.days.map((currentDay) => {
-              if (currentDay.id !== dayId) return currentDay;
-              const mainOption = currentDay.options.find(
-                (option) => option.option_index === 1
-              );
-              if (!mainOption) return currentDay;
-              return {
-                ...currentDay,
-                options: currentDay.options.map((option) =>
-                  option.id === mainOption.id
-                    ? {
-                        ...option,
-                        locations: [
-                          ...option.locations,
-                          {
-                            id: crypto.randomUUID(),
-                            location_id: locationId,
-                            sort_order: option.locations.length,
-                            time_period: "morning",
-                            location: {
-                              id: location.id,
-                              name: location.name,
-                              city: location.city,
-                              address: location.address,
-                              google_link: location.google_link,
-                              category: location.category,
-                              note: location.note,
-                              working_hours: location.working_hours,
-                              requires_booking: location.requires_booking,
-                              latitude: location.latitude,
-                              longitude: location.longitude,
-                              image_url: location.image_url,
-                              user_image_url: location.user_image_url,
-                              attribution_name: location.attribution_name,
-                              attribution_uri: location.attribution_uri,
-                            },
-                          },
-                        ],
-                      }
-                    : option
-                ),
-              };
-            }),
-          };
+          return mutateDay(prev, dayId, (currentDay) => {
+            const mainOption = currentDay.options.find(
+              (option) => option.option_index === 1
+            );
+            if (!mainOption) return currentDay;
+            return {
+              ...currentDay,
+              options: currentDay.options.map((option) =>
+                option.id !== mainOption.id
+                  ? option
+                  : {
+                      ...option,
+                      locations: [
+                        ...option.locations,
+                        {
+                          id: crypto.randomUUID(),
+                          location_id: locationId,
+                          sort_order: option.locations.length,
+                          time_period: "morning",
+                          location: locationSummaryFromLocation(location),
+                        },
+                      ],
+                    }
+              ),
+            };
+          });
         });
       }
 
