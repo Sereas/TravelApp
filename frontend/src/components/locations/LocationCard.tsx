@@ -201,6 +201,13 @@ export function LocationCard({
               alt={name}
               className="h-full w-full object-cover"
               loading="lazy"
+              // `sizes` matches the Phase 3 responsive grid:
+              //   - below sm (< 640px): 1 column → 100vw
+              //   - sm–lg (640–1023px): 2 columns → 50vw
+              //   - lg+ (1024px+): 3 columns AND a 480px sidebar on the
+              //     right → (100vw - 480px) / 3 ≈ 33vw for typical
+              //     desktop widths. Uses 30vw as a conservative estimate.
+              sizes="(min-width: 1024px) 30vw, (min-width: 640px) 50vw, 100vw"
             />
             {showAttribution && (
               <div className="absolute bottom-0 right-0 bg-black/50 px-1.5 py-0.5 text-[10px] leading-tight text-white/80">

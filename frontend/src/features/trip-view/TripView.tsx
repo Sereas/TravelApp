@@ -416,7 +416,7 @@ export function TripView({
           {/* Trip name */}
           <div className="mt-1">
             {isReadOnly ? (
-              <h1 className="text-left text-3xl font-bold tracking-tight text-foreground px-1 -mx-1 sm:text-4xl">
+              <h1 className="-mx-1 px-1 text-left text-2xl font-bold tracking-tight text-foreground sm:text-3xl md:text-4xl">
                 {trip.name}
               </h1>
             ) : editingName ? (
@@ -445,14 +445,14 @@ export function TripView({
                     onInlineNameSave?.(val);
                   }
                 }}
-                className="w-full bg-transparent text-3xl font-bold tracking-tight text-foreground outline-none ring-1 ring-primary/30 rounded-lg px-1 sm:text-4xl"
+                className="w-full rounded-lg bg-transparent px-1 text-2xl font-bold tracking-tight text-foreground outline-none ring-1 ring-primary/30 sm:text-3xl md:text-4xl"
               />
             ) : (
               <button
                 type="button"
                 aria-label={trip.name}
                 onClick={() => setEditingName(true)}
-                className="cursor-text text-left text-3xl font-bold tracking-tight text-foreground rounded-lg px-1 -mx-1 transition-colors hover:bg-muted/50 sm:text-4xl"
+                className="-mx-1 cursor-text rounded-lg px-1 text-left text-2xl font-bold tracking-tight text-foreground transition-colors hover:bg-muted/50 sm:text-3xl md:text-4xl"
               >
                 {trip.name}
               </button>

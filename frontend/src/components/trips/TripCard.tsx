@@ -55,6 +55,11 @@ export function TripCard({
             src={imageUrl}
             alt={name}
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            loading="lazy"
+            // `sizes` matches the `/trips` grid: 1 col < sm, 2 cols
+            // sm–lg, 3 cols at lg+. No sidebar on the trips list page,
+            // so each card is roughly 1/N of the viewport minus gutters.
+            sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
           />
         ) : (
           <TripGradient

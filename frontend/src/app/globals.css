@@ -252,13 +252,17 @@
   @media (prefers-reduced-motion: reduce) {
     /* Reduced-motion users still get a clearly visible cue — a static
        strong ring + glow with a short fade-in transition rather than the
-       keyframed pulse. */
+       keyframed pulse.
+       `!important` is load-bearing: the global reduced-motion safety net
+       at the bottom of this file flattens all `transition-duration`, and
+       we need this specific fade-in transition to survive so the
+       highlight cue remains perceivable to non-animation users. */
     .animate-location-highlight {
       animation: none;
       box-shadow:
         0 0 0 3px hsl(var(--brand) / 0.75),
         0 0 20px 4px hsl(var(--brand) / 0.25);
-      transition: box-shadow 0.2s ease-out;
+      transition: box-shadow 0.2s ease-out !important;
     }
   }
 
@@ -435,4 +439,29 @@
 
 .maplibregl-popup-anchor-right .maplibregl-popup-tip {
   border-left-color: hsl(var(--card)) !important;
+}
+
+/* ============================================================================
+ * Global reduced-motion safety net.
+ *
+ * Individual keyframes above (`page-flip-in`, `location-highlight-pulse`)
+ * already have their own `@media (prefers-reduced-motion: reduce)` overrides.
+ * This block is a belt-and-suspenders global rule that also flattens:
+ *   - any Tailwind animation (`animate-shimmer`, `animate-in`, etc.)
+ *   - any `framer/motion` driven transitions (via `motion.div`)
+ *   - any CSS transition the codebase adds later
+ *
+ * The `!important` is load-bearing: Tailwind's `animate-*` utilities and
+ * `transition-*` utilities emit `!important`-less rules that would
+ * otherwise win against a non-!important override inside a media query.
+ * ========================================================================= */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
