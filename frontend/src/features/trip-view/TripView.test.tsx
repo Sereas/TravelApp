@@ -28,10 +28,16 @@ import {
 // Mocks
 // ---------------------------------------------------------------------------
 
-// SidebarLocationMap — expose received `readOnly` prop via a data attribute so
-// we can assert it was threaded through correctly.
-vi.mock("@/components/locations/SidebarLocationMap", () => ({
-  SidebarLocationMap: ({
+// PlacesSidebarMapTrigger — mock the wrapper component rather than
+// SidebarLocationMap directly. The real wrapper renders SidebarLocationMap
+// in TWO wrappers (hidden lg:block desktop + lg:hidden mobile sheet with
+// forceMount), which produces two copies of the testid in the DOM and
+// also mounts a Radix Sheet portal that interferes with query scoping.
+// Mocking the wrapper gives exactly one testid and avoids the portal.
+// The `data-readonly` and `mock-sidebar-pin-*` testids are preserved so
+// existing tests see the same DOM shape as before Phase 3.
+vi.mock("@/features/trip-view/PlacesSidebarMapTrigger", () => ({
+  PlacesSidebarMapTrigger: ({
     locations,
     readOnly,
     onPinClick,
@@ -625,5 +631,121 @@ describe("TripView — Phase 2 touch hardening", () => {
     expect(stickyBar).not.toBeNull();
     // `top-14` alone is the pre-Phase-2 value — must be absent or replaced.
     expect(stickyBar!.className).not.toMatch(/(^|\s)top-14(\s|$)/);
+  });
+});
+
+// ===========================================================================
+// Phase 3 — Mobile bottom-sheet sidebar contracts
+// ===========================================================================
+
+describe("TripView — Phase 3 mobile bottom-sheet sidebar", () => {
+  // -------------------------------------------------------------------------
+  // Contract 1: breakpoint lowered from xl: to lg: on the Places tab grid
+  // -------------------------------------------------------------------------
+
+  it("Places tab outer grid uses lg: breakpoint (NOT xl:) for sidebar column", () => {
+    const { container } = renderTripView();
+    // After Phase 3, the grid switches from xl:grid-cols-[minmax(0,1fr)_480px]
+    // to lg:grid-cols-[minmax(0,1fr)_480px] or lg:grid-cols-trip-places.
+    // Verify the lg: variant is present.
+    const lgGrid =
+      container.querySelector(
+        ".lg\\:grid-cols-\\[minmax\\(0\\,1fr\\)_480px\\]"
+      ) ??
+      container.querySelector("[class*='lg:grid-cols-trip-places']") ??
+      container.querySelector("[class*='lg:grid-cols-']");
+    expect(lgGrid).not.toBeNull();
+  });
+
+  it("Places tab outer grid does NOT use xl:grid-cols- (regression guard — xl removed)", () => {
+    const { container } = renderTripView();
+    // The old xl:grid-cols-[minmax(0,1fr)_480px] class must be gone.
+    const xlGrid = container.querySelector(
+      ".xl\\:grid-cols-\\[minmax\\(0\\,1fr\\)_480px\\]"
+    );
+    expect(xlGrid).toBeNull();
+  });
+
+  // -------------------------------------------------------------------------
+  // Contract 2: PlacesSidebarMapTrigger replaces the raw hidden xl:flex column
+  // -------------------------------------------------------------------------
+
+  it("Places tab does NOT render the old hidden xl:flex sidebar wrapper (regression guard)", () => {
+    const { container } = renderTripView();
+    // The pre-Phase-3 sidebar column used hidden xl:flex.
+    // After Phase 3 this class combination must be gone.
+    const oldSidebar = container.querySelector(".hidden.xl\\:flex");
+    expect(oldSidebar).toBeNull();
+  });
+
+  it("Places tab renders PlacesSidebarMapTrigger (identified by its test-id sentinel)", () => {
+    renderTripView();
+    // PlacesSidebarMapTrigger is mocked at the top of this file with
+    // data-testid="sidebar-location-map-mock" (re-used from the existing mock).
+    // After Phase 3, TripView uses PlacesSidebarMapTrigger instead of the raw
+    // SidebarLocationMap + hidden xl:flex wrapper. The mock still surfaces the
+    // sidebar-location-map-mock testid so existing assertions keep working.
+    expect(screen.getByTestId("sidebar-location-map-mock")).toBeInTheDocument();
+  });
+
+  // -------------------------------------------------------------------------
+  // Contract 3: Mobile-only Map button in the filter toolbar
+  // -------------------------------------------------------------------------
+
+  it("Places tab toolbar has a mobile Map button with lg:hidden class when locations exist", () => {
+    const { container } = renderTripView();
+    // After Phase 3 a "Map" pill button is added to the filter toolbar,
+    // gated with lg:hidden so desktop users (who see the sidebar) don't get it.
+    // Query by accessible name first, then verify it has lg:hidden.
+    const mapButtons = screen
+      .getAllByRole("button", { name: /map/i })
+      .filter((btn) => btn.className.includes("lg:hidden"));
+    expect(mapButtons.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("mobile Map button is in the filter toolbar (sibling of Search/City/Category buttons)", () => {
+    const { container } = renderTripView();
+    // The filter toolbar is the flex-wrap row containing Search, City, Category, Added-by pills.
+    // The Map button should be in the same row.
+    const searchBtn = screen.getByRole("button", { name: /search/i });
+    const toolbar = searchBtn.closest(".flex.flex-wrap");
+    expect(toolbar).not.toBeNull();
+    const mapBtn = within(toolbar as HTMLElement)
+      .getAllByRole("button", { name: /map/i })
+      .find((btn) => btn.className.includes("lg:hidden"));
+    expect(mapBtn).toBeDefined();
+  });
+
+  it("mobile Map button is NOT rendered when locations is empty", () => {
+    renderTripView({ locations: [] });
+    // When there are no locations the toolbar doesn't render, so the Map button
+    // must not appear.
+    const mapBtns = screen
+      .queryAllByRole("button", { name: /map/i })
+      .filter((btn) => btn.className.includes("lg:hidden"));
+    expect(mapBtns.length).toBe(0);
+  });
+
+  // -------------------------------------------------------------------------
+  // Contract 4: lg: sticky sidebar offset (not xl:)
+  // -------------------------------------------------------------------------
+
+  it("Places tab sidebar sticky offset uses lg: prefix (NOT xl:) for top offset", () => {
+    const { container } = renderTripView();
+    // After Phase 3, sticky top offset becomes lg:top-[6.75rem] (was xl:top-[6.75rem]).
+    // Check that at least one element in the sidebar area uses lg: sticky classes.
+    const lgSticky =
+      container.querySelector("[class*='lg:sticky']") ??
+      container.querySelector("[class*='lg:top-']");
+    expect(lgSticky).not.toBeNull();
+  });
+
+  it("does NOT use xl:sticky or xl:top- on the sidebar column (regression guard)", () => {
+    const { container } = renderTripView();
+    // Pre-Phase-3 used xl:sticky xl:top-[6.75rem] xl:self-start — must be gone.
+    const xlSticky = container.querySelector("[class*='xl:sticky']");
+    const xlTop = container.querySelector("[class*='xl:top-']");
+    expect(xlSticky).toBeNull();
+    expect(xlTop).toBeNull();
   });
 });

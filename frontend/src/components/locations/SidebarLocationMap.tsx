@@ -34,6 +34,14 @@ interface SidebarLocationMapProps {
   onLocationDelete?: (locationId: string) => Promise<void> | void;
   /** Hides the popup's edit and delete affordances (shared trip viewer). */
   readOnly?: boolean;
+  /**
+   * Whether to render the in-card "Expand to fullscreen" button. Default
+   * `true` for desktop usage. Set `false` when the map is already being
+   * rendered inside a mobile bottom sheet (`PlacesSidebarMapTrigger`) —
+   * the sheet IS the fullscreen view, so a second "expand" affordance
+   * would be redundant and opens a nested Radix Dialog.
+   */
+  showExpand?: boolean;
 }
 
 export function SidebarLocationMap({
@@ -44,6 +52,7 @@ export function SidebarLocationMap({
   onLocationNoteSave,
   onLocationDelete,
   readOnly,
+  showExpand = true,
 }: SidebarLocationMapProps) {
   const [fullscreen, setFullscreen] = useState(false);
 
@@ -83,14 +92,16 @@ export function SidebarLocationMap({
               {mapLocations.length} pins
             </span>
           </div>
-          <button
-            type="button"
-            onClick={() => setFullscreen(true)}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label="Expand map"
-          >
-            <Expand size={14} />
-          </button>
+          {showExpand && (
+            <button
+              type="button"
+              onClick={() => setFullscreen(true)}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label="Expand map"
+            >
+              <Expand size={14} />
+            </button>
+          )}
         </div>
 
         {/* Map — fills remaining height */}

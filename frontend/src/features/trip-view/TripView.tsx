@@ -33,6 +33,7 @@ import {
   FileText,
   FileUp,
   Link2,
+  Map as MapIcon,
   MapPin,
   PenLine,
   Search,
@@ -52,7 +53,7 @@ import { AddLocationForm } from "@/components/locations/AddLocationForm";
 import { SmartLocationInput } from "@/components/locations/SmartLocationInput";
 import { EditLocationRow } from "@/components/locations/EditLocationRow";
 import { ImportGoogleListDialog } from "@/components/locations/ImportGoogleListDialog";
-import { SidebarLocationMap } from "@/components/locations/SidebarLocationMap";
+import { PlacesSidebarMapTrigger } from "@/features/trip-view/PlacesSidebarMapTrigger";
 import { TripGradient } from "@/components/trips/TripGradient";
 import { TripDateRangePicker } from "@/components/trips/TripDateRangePicker";
 import { Progress } from "@/components/ui/progress";
@@ -193,6 +194,11 @@ export function TripView({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [editingName, setEditingName] = useState(false);
   const nameCancelledRef = useRef(false);
+  // Controlled open state for the mobile Places-tab map sheet. The
+  // trigger button lives in the filter toolbar at the top of the tab;
+  // the sheet itself lives inside `PlacesSidebarMapTrigger` in the grid
+  // right column. Both sides share this state.
+  const [placesMapSheetOpen, setPlacesMapSheetOpen] = useState(false);
 
   const { itinerary, availableDays, itineraryLocationMap } = itineraryState;
 
@@ -533,9 +539,7 @@ export function TripView({
         >
           <div
             className={
-              locations.length > 0
-                ? "grid gap-6 xl:grid-cols-[minmax(0,1fr)_480px]"
-                : ""
+              locations.length > 0 ? "grid gap-6 lg:grid-cols-trip-places" : ""
             }
           >
             {/* Left column */}
@@ -612,6 +616,21 @@ export function TripView({
                       Search
                     </button>
                   )}
+
+                  {/* Mobile-only Map pill — opens the bottom sheet
+                   * (PlacesSidebarMapTrigger lives in the grid right
+                   * column and owns the sheet; this button shares state
+                   * with it via `placesMapSheetOpen`). Hidden on `lg+`
+                   * because the desktop sidebar is always visible. */}
+                  <button
+                    type="button"
+                    onClick={() => setPlacesMapSheetOpen(true)}
+                    className="touch-target inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-brand-muted lg:hidden"
+                    aria-label="Map"
+                  >
+                    <MapIcon size={14} />
+                    Map
+                  </button>
 
                   {/* City filter */}
                   {cities.size >= 2 && (
@@ -1089,11 +1108,17 @@ export function TripView({
               )}
             </div>
 
-            {/* Right column — Map sidebar */}
+            {/* Right column — Map sidebar (desktop) / bottom sheet (mobile).
+             *
+             * `PlacesSidebarMapTrigger` renders both wrappers and flips
+             * between them via `hidden lg:block` / `lg:hidden` classes.
+             * The outer `lg:sticky lg:top-[6.75rem]` wrapper here only
+             * matters at `lg+` (same breakpoint as the grid column), so
+             * on mobile it collapses to a sibling of the content column. */}
             {locations.length > 0 && (
-              <div className="hidden xl:flex xl:sticky xl:top-[6.75rem] xl:max-h-[calc(100vh-8rem)] xl:flex-col xl:overflow-hidden xl:pb-2">
-                <div className="min-h-0 flex-1">
-                  <SidebarLocationMap
+              <div className="lg:sticky lg:top-[6.75rem] lg:max-h-[calc(100vh-8rem)] lg:flex lg:flex-col lg:overflow-hidden lg:pb-2">
+                <div className="min-h-0 lg:flex-1">
+                  <PlacesSidebarMapTrigger
                     locations={filteredLocations}
                     focusLocationId={focusedLocation?.id ?? null}
                     focusSeq={focusedLocation?.seq ?? 0}
@@ -1101,6 +1126,9 @@ export function TripView({
                     onLocationNoteSave={isReadOnly ? undefined : onMapNoteSave}
                     onLocationDelete={isReadOnly ? undefined : onMapDelete}
                     readOnly={isReadOnly}
+                    open={placesMapSheetOpen}
+                    onOpenChange={setPlacesMapSheetOpen}
+                    renderMobileButton={false}
                   />
                 </div>
               </div>

@@ -15,9 +15,14 @@ import userEvent from "@testing-library/user-event";
 // Mocks — must be declared before any imports that pull in the SUT
 // ---------------------------------------------------------------------------
 
-// SidebarLocationMap — minimal stub so MapLibre doesn't blow up in jsdom.
-vi.mock("@/components/locations/SidebarLocationMap", () => ({
-  SidebarLocationMap: () => <div data-testid="sidebar-location-map-mock" />,
+// PlacesSidebarMapTrigger — mock the wrapper, not SidebarLocationMap
+// directly. Phase 3 introduces a dual-render wrapper with a mobile
+// Sheet that forceMounts the map, which would double-render the testid
+// if we mocked the inner component.
+vi.mock("@/features/trip-view/PlacesSidebarMapTrigger", () => ({
+  PlacesSidebarMapTrigger: () => (
+    <div data-testid="sidebar-location-map-mock" />
+  ),
 }));
 
 // ItineraryTab — stub so render is fast and tab-click tests work.

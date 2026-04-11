@@ -16,8 +16,13 @@ import TripDetailPage from "./page";
 // compact (sidebar) variant; the real fullscreen dialog variant never
 // receives the prop, and the mock mirrors that by rendering nothing. Other
 // existing tests don't query for these nodes, so behaviour is unchanged.
-vi.mock("@/components/locations/SidebarLocationMap", () => ({
-  SidebarLocationMap: ({
+// Mock the wrapper component rather than SidebarLocationMap directly.
+// Phase 3 introduced `PlacesSidebarMapTrigger` which renders SidebarLocationMap
+// in TWO wrappers (hidden lg:block desktop + lg:hidden mobile sheet with
+// forceMount), so mocking SidebarLocationMap directly would put two copies
+// of the testid in the DOM. Mocking the wrapper gives us exactly one.
+vi.mock("@/features/trip-view/PlacesSidebarMapTrigger", () => ({
+  PlacesSidebarMapTrigger: ({
     locations,
     onPinClick,
   }: {
@@ -27,8 +32,6 @@ vi.mock("@/components/locations/SidebarLocationMap", () => ({
     onPinClick?: (id: string) => void;
   }) => {
     if (!onPinClick) return null;
-    // Use aria-hidden + generic testid-only buttons with no accessible
-    // name so other tests' getByRole queries don't accidentally match.
     return (
       <div data-testid="sidebar-location-map-mock" aria-hidden="true">
         {locations.map((loc) => (
