@@ -386,6 +386,93 @@ describe("LocationCard", () => {
     );
   });
 
+  // ===========================================================================
+  // Phase 2 — Touch hardening contracts
+  // ===========================================================================
+
+  it("three-dot menu button has hover-none:opacity-100 class (always visible on touch)", () => {
+    render(
+      <LocationCard
+        id="1"
+        name="Louvre"
+        onEdit={() => {}}
+        onDelete={() => {}}
+      />
+    );
+    const menuBtn = screen.getByRole("button", { name: /location actions/i });
+    expect(menuBtn.className).toContain("hover-none:opacity-100");
+  });
+
+  it("three-dot menu button has hover-hover:opacity-0 class (hidden until hover on pointer devices)", () => {
+    render(
+      <LocationCard
+        id="1"
+        name="Louvre"
+        onEdit={() => {}}
+        onDelete={() => {}}
+      />
+    );
+    const menuBtn = screen.getByRole("button", { name: /location actions/i });
+    expect(menuBtn.className).toContain("hover-hover:opacity-0");
+  });
+
+  it("three-dot menu button has no bare opacity-0 class (regression: was unconditionally invisible)", () => {
+    render(
+      <LocationCard
+        id="1"
+        name="Louvre"
+        onEdit={() => {}}
+        onDelete={() => {}}
+      />
+    );
+    const menuBtn = screen.getByRole("button", { name: /location actions/i });
+    // The bare `opacity-0` class (not prefixed with a variant) must not appear.
+    // A variant-prefixed form like `hover-hover:opacity-0` is acceptable.
+    expect(menuBtn.className).not.toMatch(/(^|\s)opacity-0(\s|$)/);
+  });
+
+  it("camera button has hover-none:opacity-100 class (always visible on touch)", () => {
+    const noop = async () => {};
+    render(
+      <LocationCard
+        id="1"
+        name="Louvre"
+        onPhotoUpload={noop}
+        onPhotoReset={noop}
+      />
+    );
+    const cameraBtn = screen.getByRole("button", { name: /upload photo/i });
+    expect(cameraBtn.className).toContain("hover-none:opacity-100");
+  });
+
+  it("camera button has hover-hover:opacity-0 class (hidden until hover on pointer devices)", () => {
+    const noop = async () => {};
+    render(
+      <LocationCard
+        id="1"
+        name="Louvre"
+        onPhotoUpload={noop}
+        onPhotoReset={noop}
+      />
+    );
+    const cameraBtn = screen.getByRole("button", { name: /upload photo/i });
+    expect(cameraBtn.className).toContain("hover-hover:opacity-0");
+  });
+
+  it("camera button has no bare opacity-0 class (regression guard)", () => {
+    const noop = async () => {};
+    render(
+      <LocationCard
+        id="1"
+        name="Louvre"
+        onPhotoUpload={noop}
+        onPhotoReset={noop}
+      />
+    );
+    const cameraBtn = screen.getByRole("button", { name: /upload photo/i });
+    expect(cameraBtn.className).not.toMatch(/(^|\s)opacity-0(\s|$)/);
+  });
+
   // --- onCardClick nested-interactive-element guard ---
 
   it("fires onCardClick when the card body itself is clicked", () => {

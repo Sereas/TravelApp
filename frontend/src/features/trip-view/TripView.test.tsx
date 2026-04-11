@@ -513,3 +513,117 @@ describe("TripView — edge cases", () => {
     ).not.toThrow();
   });
 });
+
+// ===========================================================================
+// Phase 2 — Touch hardening contracts
+// ===========================================================================
+
+describe("TripView — Phase 2 touch hardening", () => {
+  // -------------------------------------------------------------------------
+  // Contract 2: LocationCard grid uses sm:grid-cols-2, NOT md:grid-cols-2
+  // -------------------------------------------------------------------------
+
+  it("LocationCard grid wrapper has sm:grid-cols-2 (two-column at 640px)", () => {
+    const { container } = renderTripView();
+    // The locations grid uses grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3
+    // after Phase 2. Previously it was md:grid-cols-2 (768px breakpoint).
+    const grid = container.querySelector(".sm\\:grid-cols-2");
+    expect(grid).not.toBeNull();
+  });
+
+  it("LocationCard grid wrapper does NOT use bare md:grid-cols-2 (regression guard)", () => {
+    const { container } = renderTripView();
+    // md:grid-cols-2 would mean the 2-column layout only activates at 768px,
+    // leaving landscape phones at 1 column. After Phase 2 this class is gone.
+    const mdGrid = container.querySelector(".md\\:grid-cols-2");
+    expect(mdGrid).toBeNull();
+  });
+
+  // -------------------------------------------------------------------------
+  // Contract 3: Filter pill buttons have touch-target class
+  // -------------------------------------------------------------------------
+
+  it("Search filter pill button has touch-target class", () => {
+    renderTripView();
+    const searchBtn = screen.getByRole("button", { name: /search/i });
+    expect(searchBtn.className).toContain("touch-target");
+  });
+
+  it("City filter pill button has touch-target class", () => {
+    renderTripView();
+    const cityBtn = screen.getByRole("button", { name: /city/i });
+    expect(cityBtn.className).toContain("touch-target");
+  });
+
+  it("Category filter pill button has touch-target class", () => {
+    renderTripView();
+    const catBtn = screen.getByRole("button", { name: /category/i });
+    expect(catBtn.className).toContain("touch-target");
+  });
+
+  it("Added-by filter pill button has touch-target class (edit mode only)", () => {
+    renderTripView({ readOnly: false });
+    const addedByBtn = screen.getByRole("button", { name: /added by/i });
+    expect(addedByBtn.className).toContain("touch-target");
+  });
+
+  // -------------------------------------------------------------------------
+  // Contract 9: Trip header row has flex-wrap
+  // -------------------------------------------------------------------------
+
+  it("trip header status row has flex-wrap class", () => {
+    const { container } = renderTripView();
+    // The row is: flex items-center justify-between gap-4 flex-wrap
+    // It wraps so the Planning pill + date picker can sit below the Share
+    // button on very narrow screens.
+    // We look for a flex container sibling to the PLANNING badge that also
+    // contains the Share or date-related elements.
+    const planningBadge = screen.getByText(/planning/i);
+    // Walk up to the wrapping flex row — it's the first ancestor with flex-wrap.
+    let el: HTMLElement | null = planningBadge.parentElement;
+    let found = false;
+    while (el) {
+      if (el.className.includes("flex-wrap")) {
+        found = true;
+        break;
+      }
+      el = el.parentElement;
+    }
+    expect(found).toBe(true);
+  });
+
+  // -------------------------------------------------------------------------
+  // Contract 10: Sticky tabs bar offset accounts for safe-area inset
+  // -------------------------------------------------------------------------
+
+  it("sticky tabs bar className accounts for safe-area top inset", () => {
+    const { container } = renderTripView();
+    // After Phase 2 the sticky tabs bar moves from `sticky top-14 z-30` to
+    // `sticky top-[calc(3.5rem+var(--safe-top))] z-30` (or a named token).
+    // The test looks for any element with a `top-` value that references
+    // the safe-area variable or a named header token.
+    //
+    // Strategy: find the element that is sticky AND z-30 (the tab bar).
+    const stickyBar = container.querySelector(".sticky.z-30");
+    expect(stickyBar).not.toBeNull();
+
+    const className = stickyBar!.className;
+    // Must reference safe-area top in some form.
+    const hassSafeOffset =
+      className.includes("safe-top") ||
+      className.includes("safe-t") ||
+      className.includes("--safe") ||
+      // Named token e.g. top-header would also be acceptable
+      className.includes("top-header");
+
+    expect(hassSafeOffset).toBe(true);
+  });
+
+  it("sticky tabs bar does NOT use bare top-14 (regression: misses safe-area offset)", () => {
+    const { container } = renderTripView();
+    const stickyBar = container.querySelector(".sticky.z-30");
+    expect(stickyBar).not.toBeNull();
+    // `top-14` alone is the pre-Phase-2 value — must be absent or replaced.
+    expect(stickyBar!.className).not.toMatch(/(^|\s)top-14(\s|$)/);
+  });
+});

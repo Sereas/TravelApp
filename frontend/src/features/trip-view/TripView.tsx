@@ -354,7 +354,7 @@ export function TripView({
           transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
         >
           {/* Status line: PLANNING badge + dates (left) ... progress + share (right) */}
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <span className="rounded-full bg-brand-muted px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-brand-strong">
                 Planning
@@ -456,7 +456,13 @@ export function TripView({
       </div>
 
       {/* Tabs — underline navigation */}
-      <div className="sticky top-14 z-30 -mx-4 bg-background/95 px-4 pt-3 backdrop-blur-sm sm:-mx-6 sm:px-6 md:-mx-8 md:px-8">
+      {/* Sticky tabs bar offset = header height (3.5rem) + iOS safe-area-top
+       * inset. Must stay in sync with `SiteHeader`'s `pt-safe-t`: when the
+       * header grows by the notch, the tabs bar has to push down by the
+       * same amount or it hides behind the notch. `var(--safe-top)` is
+       * declared in `globals.css` and defaults to 0px on non-notched
+       * browsers. */}
+      <div className="sticky top-[calc(3.5rem+var(--safe-top))] z-30 -mx-4 bg-background/95 px-4 pt-3 backdrop-blur-sm sm:-mx-6 sm:px-6 md:-mx-8 md:px-8">
         <nav
           className="flex gap-6 border-b border-border"
           role="tablist"
@@ -593,7 +599,7 @@ export function TripView({
                     <button
                       type="button"
                       className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm font-medium transition-colors",
+                        "touch-target inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm font-medium transition-colors",
                         locationNameSearch
                           ? "bg-brand-muted text-brand-strong"
                           : "text-foreground hover:bg-brand-muted"
@@ -617,7 +623,7 @@ export function TripView({
                         <button
                           type="button"
                           className={cn(
-                            "inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm font-medium transition-colors",
+                            "touch-target inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm font-medium transition-colors",
                             groupBy === "city" || cityFilter
                               ? "bg-brand-muted text-brand-strong"
                               : "text-foreground hover:bg-brand-muted"
@@ -715,7 +721,7 @@ export function TripView({
                         <button
                           type="button"
                           className={cn(
-                            "inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm font-medium transition-colors",
+                            "touch-target inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm font-medium transition-colors",
                             categoryFilter || groupBy === "category"
                               ? "bg-brand-muted text-brand-strong"
                               : "text-foreground hover:bg-brand-muted"
@@ -809,7 +815,7 @@ export function TripView({
                         <button
                           type="button"
                           className={cn(
-                            "inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm font-medium transition-colors",
+                            "touch-target inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm font-medium transition-colors",
                             personFilter || groupBy === "person"
                               ? "bg-brand-muted text-brand-strong"
                               : "text-foreground hover:bg-brand-muted"
@@ -1070,14 +1076,14 @@ export function TripView({
                         </div>
                         <div className="h-px flex-1 bg-border" />
                       </div>
-                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                         {locs.map(renderLocationCard)}
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {filteredLocations.map(renderLocationCard)}
                 </div>
               )}

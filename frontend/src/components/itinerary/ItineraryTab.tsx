@@ -177,7 +177,7 @@ const SidebarMap = React.memo(function SidebarMap({
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          className="absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-md bg-background/90 text-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-background"
+          className="touch-target absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-md bg-background/90 text-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-background"
           aria-label="Expand map"
         >
           <Expand size={13} />

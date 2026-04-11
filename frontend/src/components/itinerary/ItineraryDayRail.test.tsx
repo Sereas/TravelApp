@@ -116,6 +116,93 @@ describe("ItineraryDayRail", () => {
     expect(screen.queryByText("Ready to plan")).not.toBeInTheDocument();
   });
 
+  // ===========================================================================
+  // Phase 2 — Touch hardening contracts
+  // ===========================================================================
+
+  it("renders a right-edge fade gradient element for scroll affordance", () => {
+    const { container } = render(
+      <ItineraryDayRail
+        days={[
+          {
+            id: "day-1",
+            date: "2026-06-01",
+            sort_order: 0,
+            options: [],
+          },
+          {
+            id: "day-2",
+            date: "2026-06-02",
+            sort_order: 1,
+            options: [],
+          },
+          {
+            id: "day-3",
+            date: "2026-06-03",
+            sort_order: 2,
+            options: [],
+          },
+          {
+            id: "day-4",
+            date: "2026-06-04",
+            sort_order: 3,
+            options: [],
+          },
+        ]}
+        selectedOptionsByDay={{
+          "day-1": undefined,
+          "day-2": undefined,
+          "day-3": undefined,
+          "day-4": undefined,
+        }}
+      />
+    );
+
+    // After Phase 2 there must be an overlay gradient element that signals
+    // horizontal scrollability. It should have bg-gradient-to-l pointing left
+    // (fading from card color to transparent at the right edge).
+    const gradient = container.querySelector(".bg-gradient-to-l");
+    expect(gradient).not.toBeNull();
+  });
+
+  it("right-edge fade gradient is pointer-events-none (regression guard)", () => {
+    const { container } = render(
+      <ItineraryDayRail
+        days={[
+          { id: "day-1", date: "2026-06-01", sort_order: 0, options: [] },
+          { id: "day-2", date: "2026-06-02", sort_order: 1, options: [] },
+          { id: "day-3", date: "2026-06-03", sort_order: 2, options: [] },
+        ]}
+        selectedOptionsByDay={{
+          "day-1": undefined,
+          "day-2": undefined,
+          "day-3": undefined,
+        }}
+      />
+    );
+
+    const gradient = container.querySelector(".bg-gradient-to-l");
+    expect(gradient).not.toBeNull();
+    // The gradient overlay must not intercept touch/click events.
+    expect(gradient!.className).toContain("pointer-events-none");
+  });
+
+  it("right-edge fade gradient sits at the right side of the rail (has right-0 class)", () => {
+    const { container } = render(
+      <ItineraryDayRail
+        days={[
+          { id: "day-1", date: "2026-06-01", sort_order: 0, options: [] },
+          { id: "day-2", date: "2026-06-02", sort_order: 1, options: [] },
+        ]}
+        selectedOptionsByDay={{ "day-1": undefined, "day-2": undefined }}
+      />
+    );
+
+    const gradient = container.querySelector(".bg-gradient-to-l");
+    expect(gradient).not.toBeNull();
+    expect(gradient!.className).toContain("right-0");
+  });
+
   it("shows place count for planned days", () => {
     render(
       <ItineraryDayRail

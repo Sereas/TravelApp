@@ -251,13 +251,22 @@ export function LocationCard({
           )}
         </div>
 
-        {/* Camera icon for photo upload */}
+        {/* Camera icon for photo upload.
+         *
+         * Visibility: always visible on touch devices (no hover), hidden
+         * until card hover on mouse/trackpad devices. Pure CSS via the
+         * `hover-none:` / `hover-hover:` variants registered in
+         * tailwind.config.ts — no JS detection needed.
+         *
+         * Hit area: the visual is compact (h-7 w-7) but `.touch-target`
+         * expands the tap zone to 44×44 via a ::after pseudo (see
+         * globals.css). Desktop feels the same, mobile is tappable. */}
         {!readOnly && onPhotoUpload && (
           <div className="absolute left-2 top-2">
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 shrink-0 rounded-full bg-black/20 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/40 hover:text-white group-hover:opacity-100"
+              className="touch-target h-7 w-7 shrink-0 rounded-full bg-black/20 text-white backdrop-blur-sm transition-opacity hover:bg-black/40 hover:text-white hover-hover:opacity-0 hover-hover:group-hover:opacity-100 hover-none:opacity-100"
               aria-label="Upload photo"
               onClick={() => setPhotoDialogOpen(true)}
             >
@@ -266,7 +275,12 @@ export function LocationCard({
           </div>
         )}
 
-        {/* Three-dot menu overlay */}
+        {/* Three-dot menu overlay.
+         *
+         * Visibility: always visible on touch (hover-none), hidden-until-
+         * hover on mouse devices (hover-hover + group-hover). Also stays
+         * visible when the popover is open via data-[state=open]. See the
+         * camera-button comment above for the rationale. */}
         {useMenu && (
           <div className="absolute right-2 top-2">
             <Popover open={menuOpen} onOpenChange={setMenuOpen}>
@@ -274,7 +288,7 @@ export function LocationCard({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7 shrink-0 rounded-full bg-black/20 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/40 hover:text-white group-hover:opacity-100 data-[state=open]:opacity-100"
+                  className="touch-target h-7 w-7 shrink-0 rounded-full bg-black/20 text-white backdrop-blur-sm transition-opacity hover:bg-black/40 hover:text-white data-[state=open]:opacity-100 hover-hover:opacity-0 hover-hover:group-hover:opacity-100 hover-none:opacity-100"
                   aria-label="Location actions"
                 >
                   <MoreVertical size={16} />
