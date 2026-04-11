@@ -41,9 +41,15 @@ test.describe("route save — performance baseline @maps-perf", () => {
     // Schedule both locations to the first day.
     await itinerary.clickAddLocations();
     const dialog = page.getByRole("dialog");
-    await dialog.locator("button").filter({ hasText: "Perf Stop Alpha" }).click();
+    await dialog
+      .locator("button")
+      .filter({ hasText: "Perf Stop Alpha" })
+      .click();
     await page.waitForTimeout(200);
-    await dialog.locator("button").filter({ hasText: "Perf Stop Beta" }).click();
+    await dialog
+      .locator("button")
+      .filter({ hasText: "Perf Stop Beta" })
+      .click();
     await page.waitForTimeout(200);
     await dialog.getByRole("button", { name: /Add \d|Add locations/ }).click();
     await expect(dialog).toBeHidden({ timeout: 10_000 });

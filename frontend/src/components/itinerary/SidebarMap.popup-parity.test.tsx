@@ -1,26 +1,17 @@
 /// <reference types="vitest/globals" />
 /**
- * Phase 0 — EXPECTED-FAIL test: SidebarMap must thread mutation callbacks
- * through to ItineraryDayMap.
+ * Phase 3 — regression guard: SidebarMap threads mutation callbacks
+ * through to ItineraryDayMap → LocationPopupCard (rendered imperatively).
  *
- * BUG BEING TRACKED: The SidebarMap component (inside ItineraryTab) renders
- * two <ItineraryDayMap> instances — compact preview and expanded dialog — but
- * neither of them receives `onLocationNoteSave` or `onLocationDelete`. Those
- * callbacks are only wired on the ItineraryDayCard path.
- *
- * This test INTENTIONALLY FAILS today. Phase 3 will fix the wiring and flip
- * this to a regular `it(...)`.
+ * Previously tracked as an expected-fail in Phase 0 (it.fails).
+ * Phase 3 fixed the wiring; this is now a regular passing test.
  *
  * How it works:
  *   - Render ItineraryTab with itineraryMutations (which carries the handlers).
  *   - Mock `createRoot` to capture the ReactElement passed to `root.render()`.
- *   - After render, inspect the captured PopupCard elements for the expanded
- *     dialog's map to confirm they carry the callback props.
- *   - The assertion FAILS because SidebarMap currently passes no callbacks.
- *
- * `it.fails(...)` in Vitest reports such a test as PASS (expected failure).
- * When Phase 3 lands and the bug is fixed, change `it.fails` → `it` and the
- * suite will continue to pass as a regression guard.
+ *   - After render, inspect the captured PopupCard elements for the compact
+ *     preview map to confirm they carry the callback props.
+ *   - The assertion PASSES because SidebarMap now threads the callbacks through.
  */
 
 import { render, screen } from "@testing-library/react";
@@ -110,7 +101,7 @@ vi.mock("react-dom/client", () => ({
 // Import after mocks
 // ---------------------------------------------------------------------------
 import { ItineraryTab } from "./ItineraryTab";
-import { PopupCard } from "./ItineraryDayMap";
+import { LocationPopupCard } from "./day-map/LocationPopupCard";
 import type { ItineraryDay, ItineraryOption, Location } from "@/lib/api";
 
 // ---------------------------------------------------------------------------
@@ -229,7 +220,7 @@ function buildItineraryState() {
 }
 
 // ---------------------------------------------------------------------------
-// Test
+// Tests
 // ---------------------------------------------------------------------------
 
 describe("SidebarMap — callback parity with ItineraryDayMap", () => {
@@ -239,84 +230,115 @@ describe("SidebarMap — callback parity with ItineraryDayMap", () => {
   });
 
   /**
-   * EXPECTED FAIL — tracked bug.
+   * Phase 3 fix: SidebarMap now threads `handleLocationNoteSave` /
+   * `handleLocationDelete` from itineraryMutations through to ItineraryDayMap
+   * → LocationPopupCard (rendered imperatively via createRoot).
    *
-   * The SidebarMap component (defined inside ItineraryTab.tsx) renders
-   * ItineraryDayMap without threading `onLocationNoteSave` / `onLocationDelete`
-   * from itineraryMutations. Therefore any PopupCard rendered inside the
-   * sidebar / expanded-dialog map has no edit or delete affordances.
-   *
-   * Phase 3 fix: pass the callbacks from ItineraryTab's `itineraryMutations`
-   * prop down through SidebarMap → ItineraryDayMap → PopupCard.
-   *
-   * When Phase 3 lands, change `it.fails` → `it` here.
+   * We capture the ReactElement passed to popupRoot.render() and assert the
+   * LocationPopupCard received defined callback props.
    */
-  it.fails(
-    "test_itinerary_sidebar_map_threads_callbacks_to_day_map",
-    async () => {
-      const mutations = buildItineraryMutations();
-      const itineraryState = buildItineraryState();
+  it("test_itinerary_sidebar_map_threads_callbacks_to_day_map", async () => {
+    const mutations = buildItineraryMutations();
+    const itineraryState = buildItineraryState();
 
-      render(
-        <ReadOnlyProvider value={false}>
-          <ItineraryTab
-            trip={sampleTrip as Parameters<typeof ItineraryTab>[0]["trip"]}
-            tripId="trip-1"
-            locations={tripLocations}
-            itineraryState={
-              itineraryState as Parameters<
-                typeof ItineraryTab
-              >[0]["itineraryState"]
-            }
-            itineraryMutations={
-              mutations as Parameters<
-                typeof ItineraryTab
-              >[0]["itineraryMutations"]
-            }
-          />
-        </ReadOnlyProvider>
-      );
+    render(
+      <ReadOnlyProvider value={false}>
+        <ItineraryTab
+          trip={sampleTrip as Parameters<typeof ItineraryTab>[0]["trip"]}
+          tripId="trip-1"
+          locations={tripLocations}
+          itineraryState={
+            itineraryState as Parameters<
+              typeof ItineraryTab
+            >[0]["itineraryState"]
+          }
+          itineraryMutations={
+            mutations as Parameters<
+              typeof ItineraryTab
+            >[0]["itineraryMutations"]
+          }
+        />
+      </ReadOnlyProvider>
+    );
 
-      // Open the expanded dialog to ensure the full-size ItineraryDayMap
-      // inside SidebarMap is mounted.
-      const expandBtn = screen.getByRole("button", { name: /expand map/i });
-      await userEvent.click(expandBtn);
+    // The compact preview renders ItineraryDayMap with popups enabled.
+    // capturedRoots will contain:
+    //   - marker roots (one per location) — rendered with MapMarker
+    //   - popup roots (one per location) — rendered with LocationPopupCard
+    // We look for a root whose lastElement has type === LocationPopupCard.
+    const popupRoot = capturedRoots.find(
+      (r) =>
+        r.lastElement !== null &&
+        typeof r.lastElement === "object" &&
+        "type" in r.lastElement &&
+        (r.lastElement as { type: unknown }).type === LocationPopupCard
+    );
 
-      // Find a PopupCard root rendered by the expanded-dialog map.
-      // The compact preview also renders popups; we want either one —
-      // both should receive the callbacks (but currently neither does).
-      //
-      // PHASE 3 NOTE: PopupCard is only rendered imperatively when a marker
-      // click fires inside ItineraryDayMap. If capturedRoots is empty, this
-      // test fails at `expect(popupRoot).toBeDefined()` rather than at the
-      // intended prop-shape assertion below. When flipping it.fails → it in
-      // Phase 3, either (a) simulate a marker click via the mocked Marker
-      // click handler, or (b) extract PopupCard as a standalone component
-      // and assert on its props when SidebarMap threads callbacks through.
-      const popupRoot = capturedRoots.find(
-        (r) =>
-          r.lastElement !== null &&
-          typeof r.lastElement === "object" &&
-          "type" in r.lastElement &&
-          (r.lastElement as { type: unknown }).type === PopupCard
-      );
+    // At minimum one LocationPopupCard must have been rendered.
+    expect(popupRoot).toBeDefined();
 
-      // At minimum one PopupCard must have been rendered.
-      expect(popupRoot).toBeDefined();
+    // THE KEY ASSERTION: the LocationPopupCard must have received the callbacks
+    // (threaded through SidebarMap → ItineraryDayMap → createRoot popup render).
+    const props = (
+      popupRoot!.lastElement as {
+        props: {
+          onSaveNote?: unknown;
+          onDelete?: unknown;
+        };
+      }
+    ).props;
 
-      // THE FAILING ASSERTION: the PopupCard must have received the callbacks.
-      // Currently SidebarMap passes neither, so both props are undefined.
-      const props = (
-        popupRoot!.lastElement as {
-          props: {
-            onSaveNote?: unknown;
-            onDelete?: unknown;
-          };
-        }
-      ).props;
+    expect(typeof props.onSaveNote).toBe("function");
+    expect(typeof props.onDelete).toBe("function");
+  });
 
-      expect(typeof props.onSaveNote).toBe("function");
-      expect(typeof props.onDelete).toBe("function");
-    }
-  );
+  it("test_itinerary_sidebar_map_read_only_omits_callbacks", async () => {
+    // When readOnly=true, SidebarMap must pass undefined callbacks to
+    // ItineraryDayMap so the popup has no edit/delete affordances.
+    const mutations = buildItineraryMutations();
+    const itineraryState = buildItineraryState();
+
+    render(
+      <ReadOnlyProvider value={true}>
+        <ItineraryTab
+          trip={sampleTrip as Parameters<typeof ItineraryTab>[0]["trip"]}
+          tripId="trip-1"
+          locations={tripLocations}
+          itineraryState={
+            itineraryState as Parameters<
+              typeof ItineraryTab
+            >[0]["itineraryState"]
+          }
+          itineraryMutations={undefined}
+        />
+      </ReadOnlyProvider>
+    );
+
+    const popupRoot = capturedRoots.find(
+      (r) =>
+        r.lastElement !== null &&
+        typeof r.lastElement === "object" &&
+        "type" in r.lastElement &&
+        (r.lastElement as { type: unknown }).type === LocationPopupCard
+    );
+
+    // Must capture a popup root — otherwise the test is vacuously passing
+    // and a regression that stops popup rendering would go unnoticed.
+    // This mirrors the strong assertion in the owner-mode test above.
+    expect(popupRoot).toBeDefined();
+
+    const props = (
+      popupRoot!.lastElement as {
+        props: {
+          onSaveNote?: unknown;
+          onDelete?: unknown;
+        };
+      }
+    ).props;
+
+    // In read-only mode, callbacks must be undefined so PopupCard hides
+    // the edit/delete affordances.
+    expect(props.onSaveNote).toBeUndefined();
+    expect(props.onDelete).toBeUndefined();
+  });
 });

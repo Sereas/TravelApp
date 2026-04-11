@@ -356,6 +356,16 @@ export default function TripDetailPage() {
     setFocusedLocation({ id: locationId, seq: focusSeqRef.current });
   };
 
+  // Merge the page-level map-popup handlers into the itineraryMutations object
+  // so that ItineraryTab's SidebarMap can thread them through to ItineraryDayMap.
+  // `handleLocationNoteSave` / `handleLocationDelete` satisfy the two new fields
+  // added to `ItineraryMutations` in itinerary-state-types.ts.
+  const itineraryMutations = {
+    ...itineraryState,
+    handleLocationNoteSave: handleMapNoteSave,
+    handleLocationDelete: handleMapDelete,
+  };
+
   return (
     <>
       <TripView
@@ -366,7 +376,7 @@ export default function TripDetailPage() {
         canShare={true}
         onBack={() => router.push("/trips")}
         itineraryState={itineraryState}
-        itineraryMutations={itineraryState}
+        itineraryMutations={itineraryMutations}
         addingLocation={addingLocation}
         editingLocation={editingLocation}
         focusedLocation={focusedLocation}

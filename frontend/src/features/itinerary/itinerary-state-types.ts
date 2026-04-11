@@ -101,6 +101,16 @@ export interface ItineraryMutations {
     locationId: string,
     dayId: string
   ) => Promise<void>;
+  /** Save an updated note for a location via the map pin popup.
+   *  Optional: the base hook returns undefined; the owner page merges in a
+   *  concrete implementation before passing to TripView. */
+  handleLocationNoteSave?: (
+    locationId: string,
+    nextNote: string
+  ) => Promise<void>;
+  /** Delete a location via the map pin popup.
+   *  Optional for the same reason as handleLocationNoteSave. */
+  handleLocationDelete?: (locationId: string) => Promise<void>;
 }
 
 /**

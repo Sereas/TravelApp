@@ -222,5 +222,7 @@ export function makeItineraryMutations(): ItineraryMutations {
     handleRouteCreated: vi.fn().mockResolvedValue(undefined),
     handleRetryRouteMetrics: vi.fn().mockResolvedValue(undefined),
     handleScheduleLocationToDay: vi.fn().mockResolvedValue(undefined),
+    handleLocationNoteSave: vi.fn().mockResolvedValue(undefined),
+    handleLocationDelete: vi.fn().mockResolvedValue(undefined),
   };
 }

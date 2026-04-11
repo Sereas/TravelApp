@@ -84,7 +84,9 @@ vi.mock("react-dom/client", () => ({
 // ---------------------------------------------------------------------------
 
 function renderPopup(
-  props: Partial<React.ComponentProps<typeof PopupCard>> & { name?: string } = {}
+  props: Partial<React.ComponentProps<typeof PopupCard>> & {
+    name?: string;
+  } = {}
 ) {
   const defaults = {
     name: "Eiffel Tower",

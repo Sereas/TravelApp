@@ -974,5 +974,10 @@ export function useItineraryState({
     handleReorderOptionLocations,
     handleScheduleLocationToDay,
     syncLocationSummary,
+    // These are implemented at the page level (trips/[id]/page.tsx) where
+    // `setLocations` is available. The page merges them into the mutations
+    // object before passing to TripView → ItineraryTab → SidebarMap.
+    handleLocationNoteSave: undefined,
+    handleLocationDelete: undefined,
   };
 }

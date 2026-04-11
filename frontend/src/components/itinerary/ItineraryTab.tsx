@@ -149,12 +149,21 @@ interface SidebarMapProps {
   selectedDay: ItineraryDay | null | undefined;
   getSelectedOption: (day: ItineraryDay) => ItineraryOption | undefined;
   locations: Location[];
+  onLocationNoteSave?: (
+    locationId: string,
+    nextNote: string
+  ) => Promise<void> | void;
+  onLocationDelete?: (locationId: string) => Promise<void> | void;
+  readOnly?: boolean;
 }
 
 const SidebarMap = React.memo(function SidebarMap({
   selectedDay,
   getSelectedOption,
   locations,
+  onLocationNoteSave,
+  onLocationDelete,
+  readOnly,
 }: SidebarMapProps) {
   const [expanded, setExpanded] = useState(false);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
@@ -211,6 +220,9 @@ const SidebarMap = React.memo(function SidebarMap({
             locations={mapLocations}
             routes={mapRoutes}
             compact
+            onLocationNoteSave={readOnly ? undefined : onLocationNoteSave}
+            onLocationDelete={readOnly ? undefined : onLocationDelete}
+            readOnly={readOnly}
           />
         </div>
         <button
@@ -248,6 +260,9 @@ const SidebarMap = React.memo(function SidebarMap({
               locations={mapLocations}
               routes={mapRoutes}
               selectedRouteId={selectedRouteId}
+              onLocationNoteSave={readOnly ? undefined : onLocationNoteSave}
+              onLocationDelete={readOnly ? undefined : onLocationDelete}
+              readOnly={readOnly}
             />
           </div>
 
@@ -602,6 +617,17 @@ export function ItineraryTab({
                       <ItineraryDayMap
                         locations={mobileMapLocations}
                         routes={mobileMapRoutes}
+                        onLocationNoteSave={
+                          readOnly
+                            ? undefined
+                            : itineraryMutations?.handleLocationNoteSave
+                        }
+                        onLocationDelete={
+                          readOnly
+                            ? undefined
+                            : itineraryMutations?.handleLocationDelete
+                        }
+                        readOnly={readOnly}
                       />
                     </div>
                   </div>
@@ -713,6 +739,11 @@ export function ItineraryTab({
                   selectedDay={selectedDay}
                   getSelectedOption={getSelectedOption}
                   locations={locations}
+                  onLocationNoteSave={
+                    itineraryMutations?.handleLocationNoteSave
+                  }
+                  onLocationDelete={itineraryMutations?.handleLocationDelete}
+                  readOnly={readOnly}
                 />
                 <ItineraryInspectorPanel
                   day={selectedDay}
