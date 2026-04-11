@@ -194,39 +194,83 @@ $$;
 
 ALTER FUNCTION public.get_itinerary_routes(p_option_ids uuid[]) OWNER TO postgres;
 
-CREATE FUNCTION public.get_itinerary_tree(p_trip_id uuid) RETURNS TABLE(day_id uuid, day_date date, day_sort_order integer, day_created_at timestamp with time zone, option_id uuid, option_index integer, option_starting_city character varying, option_ending_city character varying, option_created_by character varying, option_created_at timestamp with time zone, ol_id uuid, location_id uuid, ol_sort_order integer, time_period text, loc_name text, loc_city text, loc_address text, loc_google_link text, loc_category text, loc_note text, loc_working_hours text, loc_requires_booking text)
+CREATE FUNCTION public.get_itinerary_tree(p_trip_id uuid) RETURNS TABLE(day_id uuid, day_date date, day_sort_order integer, day_created_at timestamp with time zone, day_active_option_id uuid, option_id uuid, option_index integer, option_starting_city character varying, option_ending_city character varying, option_created_by character varying, option_created_at timestamp with time zone, ol_id uuid, location_id uuid, ol_sort_order integer, time_period text, loc_name text, loc_city text, loc_address text, loc_google_link text, loc_category text, loc_note text, loc_working_hours text, loc_requires_booking text)
     LANGUAGE sql STABLE
     AS $$
-  SELECT d.day_id, d.date, d.sort_order, d.created_at,
-    o.option_id, o.option_index, o.starting_city, o.ending_city, o.created_by, o.created_at,
-    ol.id, ol.location_id, ol.sort_order, ol.time_period,
-    l.name, l.city, l.address, l.google_link, l.category, l.note, l.working_hours, l.requires_booking
-  FROM trip_days d
-  LEFT JOIN day_options o ON o.day_id = d.day_id
-  LEFT JOIN option_locations ol ON ol.option_id = o.option_id
-  LEFT JOIN locations l ON l.trip_id = d.trip_id AND l.location_id = ol.location_id
-  WHERE d.trip_id = p_trip_id
-  ORDER BY d.sort_order, o.option_index NULLS LAST, ol.sort_order NULLS LAST;
+    SELECT
+        d.day_id,
+        d.date             AS day_date,
+        d.sort_order       AS day_sort_order,
+        d.created_at       AS day_created_at,
+        d.active_option_id AS day_active_option_id,
+        o.option_id,
+        o.option_index,
+        o.starting_city    AS option_starting_city,
+        o.ending_city      AS option_ending_city,
+        o.created_by       AS option_created_by,
+        o.created_at       AS option_created_at,
+        ol.id              AS ol_id,
+        ol.location_id,
+        ol.sort_order      AS ol_sort_order,
+        ol.time_period,
+        l.name             AS loc_name,
+        l.city             AS loc_city,
+        l.address          AS loc_address,
+        l.google_link      AS loc_google_link,
+        l.category         AS loc_category,
+        l.note             AS loc_note,
+        l.working_hours    AS loc_working_hours,
+        l.requires_booking AS loc_requires_booking
+    FROM trip_days d
+    LEFT JOIN day_options o        ON o.day_id = d.day_id
+    LEFT JOIN option_locations ol  ON ol.option_id = o.option_id
+    LEFT JOIN locations l          ON l.trip_id = d.trip_id
+                                  AND l.location_id = ol.location_id
+    WHERE d.trip_id = p_trip_id
+    ORDER BY d.sort_order, o.option_index NULLS LAST, ol.sort_order NULLS LAST;
 $$;
 
 ALTER FUNCTION public.get_itinerary_tree(p_trip_id uuid) OWNER TO postgres;
 
-CREATE FUNCTION public.get_itinerary_tree(p_trip_id uuid, p_user_id uuid DEFAULT NULL::uuid) RETURNS TABLE(day_id uuid, day_date date, day_sort_order integer, day_created_at timestamp with time zone, option_id uuid, option_index integer, option_starting_city character varying, option_ending_city character varying, option_created_by character varying, option_created_at timestamp with time zone, ol_id uuid, location_id uuid, ol_sort_order integer, time_period text, loc_name text, loc_city text, loc_address text, loc_google_link text, loc_category text, loc_note text, loc_working_hours text, loc_requires_booking text, loc_photo_url text, loc_user_image_url text)
+CREATE FUNCTION public.get_itinerary_tree(p_trip_id uuid, p_user_id uuid DEFAULT NULL::uuid) RETURNS TABLE(day_id uuid, day_date date, day_sort_order integer, day_created_at timestamp with time zone, day_active_option_id uuid, option_id uuid, option_index integer, option_starting_city character varying, option_ending_city character varying, option_created_by character varying, option_created_at timestamp with time zone, ol_id uuid, location_id uuid, ol_sort_order integer, time_period text, loc_name text, loc_city text, loc_address text, loc_google_link text, loc_category text, loc_note text, loc_working_hours text, loc_requires_booking text, loc_photo_url text, loc_user_image_url text)
     LANGUAGE sql STABLE
     AS $$
-    SELECT d.day_id, d.date, d.sort_order, d.created_at,
-        o.option_id, o.option_index, o.starting_city, o.ending_city, o.created_by, o.created_at,
-        ol.id, ol.location_id, ol.sort_order, ol.time_period,
-        l.name, l.city, l.address, l.google_link, l.category, l.note, l.working_hours, l.requires_booking,
-        pp.photo_url, l.user_image_url
+    SELECT
+        d.day_id,
+        d.date             AS day_date,
+        d.sort_order       AS day_sort_order,
+        d.created_at       AS day_created_at,
+        d.active_option_id AS day_active_option_id,
+        o.option_id,
+        o.option_index,
+        o.starting_city    AS option_starting_city,
+        o.ending_city      AS option_ending_city,
+        o.created_by       AS option_created_by,
+        o.created_at       AS option_created_at,
+        ol.id              AS ol_id,
+        ol.location_id,
+        ol.sort_order      AS ol_sort_order,
+        ol.time_period,
+        l.name             AS loc_name,
+        l.city             AS loc_city,
+        l.address          AS loc_address,
+        l.google_link      AS loc_google_link,
+        l.category         AS loc_category,
+        l.note             AS loc_note,
+        l.working_hours    AS loc_working_hours,
+        l.requires_booking AS loc_requires_booking,
+        pp.photo_url       AS loc_photo_url,
+        l.user_image_url   AS loc_user_image_url
     FROM trip_days d
-    LEFT JOIN day_options o ON o.day_id = d.day_id
-    LEFT JOIN option_locations ol ON ol.option_id = o.option_id
-    LEFT JOIN locations l ON l.trip_id = d.trip_id AND l.location_id = ol.location_id
-    LEFT JOIN place_photos pp ON pp.google_place_id = l.google_place_id
+    LEFT JOIN day_options o        ON o.day_id = d.day_id
+    LEFT JOIN option_locations ol  ON ol.option_id = o.option_id
+    LEFT JOIN locations l          ON l.trip_id = d.trip_id
+                                  AND l.location_id = ol.location_id
+    LEFT JOIN place_photos pp      ON pp.google_place_id = l.google_place_id
     WHERE d.trip_id = p_trip_id
       AND (p_user_id IS NULL OR EXISTS (
-          SELECT 1 FROM trips t WHERE t.trip_id = p_trip_id AND t.user_id = p_user_id
+          SELECT 1 FROM trips t
+          WHERE t.trip_id = p_trip_id AND t.user_id = p_user_id
       ))
     ORDER BY d.sort_order, o.option_index NULLS LAST, ol.sort_order NULLS LAST;
 $$;
@@ -319,28 +363,29 @@ BEGIN
   FROM (
     SELECT
       d.day_id,
-      d.date           AS day_date,
-      d.sort_order     AS day_sort_order,
-      d.created_at     AS day_created_at,
+      d.date             AS day_date,
+      d.sort_order       AS day_sort_order,
+      d.created_at       AS day_created_at,
+      d.active_option_id AS day_active_option_id,
       o.option_id,
       o.option_index,
-      o.starting_city  AS option_starting_city,
-      o.ending_city    AS option_ending_city,
-      o.created_at     AS option_created_at,
-      ol.id            AS ol_id,
+      o.starting_city    AS option_starting_city,
+      o.ending_city      AS option_ending_city,
+      o.created_at       AS option_created_at,
+      ol.id              AS ol_id,
       ol.location_id,
-      ol.sort_order    AS ol_sort_order,
+      ol.sort_order      AS ol_sort_order,
       ol.time_period,
-      l.name           AS loc_name,
-      l.city           AS loc_city,
-      l.address        AS loc_address,
-      l.google_link    AS loc_google_link,
-      l.category       AS loc_category,
-      l.note           AS loc_note,
-      l.working_hours  AS loc_working_hours,
+      l.name             AS loc_name,
+      l.city             AS loc_city,
+      l.address          AS loc_address,
+      l.google_link      AS loc_google_link,
+      l.category         AS loc_category,
+      l.note             AS loc_note,
+      l.working_hours    AS loc_working_hours,
       l.requires_booking AS loc_requires_booking,
-      pp.photo_url     AS loc_photo_url,
-      l.user_image_url AS loc_user_image_url,
+      pp.photo_url       AS loc_photo_url,
+      l.user_image_url   AS loc_user_image_url,
       pp.attribution_name AS loc_attribution_name,
       pp.attribution_uri  AS loc_attribution_uri
     FROM trip_days d
@@ -367,6 +412,10 @@ CREATE FUNCTION public.move_option_to_day(p_option_id uuid, p_source_day_id uuid
     LANGUAGE plpgsql SECURITY DEFINER
     AS $$
 BEGIN
+    UPDATE trip_days
+    WHERE day_id = p_source_day_id
+      AND active_option_id = p_option_id;
+
     UPDATE day_options
     WHERE option_id = p_option_id;
 
@@ -804,7 +853,8 @@ CREATE TABLE public.trip_days (
     trip_id uuid NOT NULL,
     date date,
     sort_order integer NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    active_option_id uuid
 );
 
 ALTER TABLE public.trip_days OWNER TO postgres;
@@ -946,6 +996,9 @@ ALTER TABLE ONLY public.route_stops
 
 ALTER TABLE ONLY public.route_stops
     ADD CONSTRAINT route_stops_route_id_fkey FOREIGN KEY (route_id) REFERENCES public.option_routes(route_id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.trip_days
+    ADD CONSTRAINT trip_days_active_option_id_fkey FOREIGN KEY (active_option_id) REFERENCES public.day_options(option_id) ON DELETE SET NULL;
 
 ALTER TABLE ONLY public.trip_days
     ADD CONSTRAINT trip_days_trip_id_fkey FOREIGN KEY (trip_id) REFERENCES public.trips(trip_id) ON DELETE CASCADE;
@@ -1135,9 +1188,11 @@ GRANT ALL ON FUNCTION public.delete_location_cascade(p_trip_id uuid, p_location_
 GRANT ALL ON FUNCTION public.get_itinerary_routes(p_option_ids uuid[]) TO authenticated;
 GRANT ALL ON FUNCTION public.get_itinerary_routes(p_option_ids uuid[]) TO service_role;
 
+REVOKE ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid) TO service_role;
 
+REVOKE ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid, p_user_id uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid, p_user_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid, p_user_id uuid) TO service_role;
 
