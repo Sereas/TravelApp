@@ -1229,14 +1229,25 @@ GRANT ALL ON FUNCTION public.set_updated_at() TO service_role;
 GRANT ALL ON FUNCTION public.shift_day_dates(p_trip_id uuid, p_offset_days integer) TO authenticated;
 GRANT ALL ON FUNCTION public.shift_day_dates(p_trip_id uuid, p_offset_days integer) TO service_role;
 
+GRANT ALL ON TABLE public.trip_days TO authenticated;
+GRANT ALL ON TABLE public.trip_days TO service_role;
+
+REVOKE ALL ON FUNCTION public.update_day_with_option_check(p_day_id uuid, p_trip_id uuid, p_date date, p_set_date boolean, p_sort_order integer, p_set_sort_order boolean, p_active_option_id uuid, p_set_active_option boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.update_day_with_option_check(p_day_id uuid, p_trip_id uuid, p_date date, p_set_date boolean, p_sort_order integer, p_set_sort_order boolean, p_active_option_id uuid, p_set_active_option boolean) TO authenticated;
+GRANT ALL ON FUNCTION public.update_day_with_option_check(p_day_id uuid, p_trip_id uuid, p_date date, p_set_date boolean, p_sort_order integer, p_set_sort_order boolean, p_active_option_id uuid, p_set_active_option boolean) TO service_role;
+
+GRANT ALL ON TABLE public.day_options TO authenticated;
+GRANT ALL ON TABLE public.day_options TO service_role;
+
+REVOKE ALL ON FUNCTION public.update_option_with_conflict_check(p_option_id uuid, p_day_id uuid, p_option_index integer, p_set_option_index boolean, p_starting_city character varying, p_set_starting_city boolean, p_ending_city character varying, p_set_ending_city boolean, p_created_by character varying, p_set_created_by boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.update_option_with_conflict_check(p_option_id uuid, p_day_id uuid, p_option_index integer, p_set_option_index boolean, p_starting_city character varying, p_set_starting_city boolean, p_ending_city character varying, p_set_ending_city boolean, p_created_by character varying, p_set_created_by boolean) TO authenticated;
+GRANT ALL ON FUNCTION public.update_option_with_conflict_check(p_option_id uuid, p_day_id uuid, p_option_index integer, p_set_option_index boolean, p_starting_city character varying, p_set_starting_city boolean, p_ending_city character varying, p_set_ending_city boolean, p_created_by character varying, p_set_created_by boolean) TO service_role;
+
 GRANT ALL ON FUNCTION public.update_route_with_stops(p_route_id uuid, p_option_id uuid, p_transport_mode text, p_label text, p_option_location_ids uuid[]) TO authenticated;
 GRANT ALL ON FUNCTION public.update_route_with_stops(p_route_id uuid, p_option_id uuid, p_transport_mode text, p_label text, p_option_location_ids uuid[]) TO service_role;
 
 GRANT ALL ON FUNCTION public.verify_resource_chain(p_trip_id uuid, p_user_id uuid, p_day_id uuid, p_option_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.verify_resource_chain(p_trip_id uuid, p_user_id uuid, p_day_id uuid, p_option_id uuid) TO service_role;
-
-GRANT ALL ON TABLE public.day_options TO authenticated;
-GRANT ALL ON TABLE public.day_options TO service_role;
 
 GRANT ALL ON TABLE public.locations TO authenticated;
 GRANT ALL ON TABLE public.locations TO service_role;
