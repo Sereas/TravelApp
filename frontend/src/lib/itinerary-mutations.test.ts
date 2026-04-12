@@ -51,7 +51,10 @@ function makeLocation(id: string): ItineraryOptionLocation {
   };
 }
 
-function makeOption(id: string, locations: ItineraryOptionLocation[] = []): ItineraryOption {
+function makeOption(
+  id: string,
+  locations: ItineraryOptionLocation[] = []
+): ItineraryOption {
   return {
     id,
     option_index: 1,
@@ -110,7 +113,10 @@ describe("mutateDay", () => {
     const day2 = makeDay("day-2");
     const itinerary = makeItinerary([day1, day2]);
 
-    const result = mutateDay(itinerary, "day-1", (d) => ({ ...d, date: "2026-01-01" }));
+    const result = mutateDay(itinerary, "day-1", (d) => ({
+      ...d,
+      date: "2026-01-01",
+    }));
 
     expect(result.days[1]).toBe(day2);
   });
@@ -130,7 +136,10 @@ describe("mutateDay", () => {
 
   it("handles empty days array", () => {
     const itinerary = makeItinerary([]);
-    const result = mutateDay(itinerary, "day-1", (d) => ({ ...d, date: "2026-01-01" }));
+    const result = mutateDay(itinerary, "day-1", (d) => ({
+      ...d,
+      date: "2026-01-01",
+    }));
     expect(result.days).toHaveLength(0);
   });
 });
@@ -231,10 +240,16 @@ describe("mutateOptionLocation", () => {
     const day = makeDay("day-1", [opt]);
     const itinerary = makeItinerary([day]);
 
-    const result = mutateOptionLocation(itinerary, "day-1", "opt-1", "ol-1", (l) => ({
-      ...l,
-      time_period: "evening",
-    }));
+    const result = mutateOptionLocation(
+      itinerary,
+      "day-1",
+      "opt-1",
+      "ol-1",
+      (l) => ({
+        ...l,
+        time_period: "evening",
+      })
+    );
 
     expect(result.days[0].options[0].locations[0].time_period).toBe("evening");
   });
@@ -250,7 +265,9 @@ describe("mutateOptionLocation", () => {
       time_period: "evening",
     }));
 
-    expect(itinerary.days[0].options[0].locations[0].time_period).toBe("morning");
+    expect(itinerary.days[0].options[0].locations[0].time_period).toBe(
+      "morning"
+    );
   });
 
   it("preserves reference for unchanged locations", () => {
@@ -260,10 +277,16 @@ describe("mutateOptionLocation", () => {
     const day = makeDay("day-1", [opt]);
     const itinerary = makeItinerary([day]);
 
-    const result = mutateOptionLocation(itinerary, "day-1", "opt-1", "ol-1", (l) => ({
-      ...l,
-      time_period: "evening",
-    }));
+    const result = mutateOptionLocation(
+      itinerary,
+      "day-1",
+      "opt-1",
+      "ol-1",
+      (l) => ({
+        ...l,
+        time_period: "evening",
+      })
+    );
 
     expect(result.days[0].options[0].locations[1]).toBe(ol2);
   });
@@ -274,10 +297,16 @@ describe("mutateOptionLocation", () => {
     const day = makeDay("day-1", [opt]);
     const itinerary = makeItinerary([day]);
 
-    const result = mutateOptionLocation(itinerary, "day-1", "opt-1", "nonexistent", (l) => ({
-      ...l,
-      time_period: "evening",
-    }));
+    const result = mutateOptionLocation(
+      itinerary,
+      "day-1",
+      "opt-1",
+      "nonexistent",
+      (l) => ({
+        ...l,
+        time_period: "evening",
+      })
+    );
 
     expect(result.days[0].options[0].locations[0].time_period).toBe("morning");
   });
@@ -351,7 +380,12 @@ describe("removeOptionLocation", () => {
     const day = makeDay("day-1", [opt]);
     const itinerary = makeItinerary([day]);
 
-    const result = removeOptionLocation(itinerary, "day-1", "opt-1", "nonexistent");
+    const result = removeOptionLocation(
+      itinerary,
+      "day-1",
+      "opt-1",
+      "nonexistent"
+    );
 
     expect(result.days[0].options[0].locations).toHaveLength(1);
   });
@@ -362,7 +396,12 @@ describe("removeOptionLocation", () => {
     const day = makeDay("day-1", [opt]);
     const itinerary = makeItinerary([day]);
 
-    const result = removeOptionLocation(itinerary, "nonexistent", "opt-1", "ol-1");
+    const result = removeOptionLocation(
+      itinerary,
+      "nonexistent",
+      "opt-1",
+      "ol-1"
+    );
 
     expect(result.days[0].options[0].locations).toHaveLength(1);
   });

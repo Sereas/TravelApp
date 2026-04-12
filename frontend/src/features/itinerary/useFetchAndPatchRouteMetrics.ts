@@ -93,7 +93,13 @@ export function useFetchAndPatchRouteMetrics(
           if (!isMountedRef.current) return;
           setItinerary((prev) =>
             prev
-              ? patchRouteInItinerary(prev, dayId, optionId, routeId, withSegments)
+              ? patchRouteInItinerary(
+                  prev,
+                  dayId,
+                  optionId,
+                  routeId,
+                  withSegments
+                )
               : prev
           );
         } catch (err) {

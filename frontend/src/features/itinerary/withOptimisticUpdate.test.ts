@@ -29,10 +29,14 @@ describe("withOptimisticUpdate", () => {
     const optimistic = makeOptimistic("optimistic");
 
     let capturedState: ItineraryResponse | null = original;
-    const setter = vi.fn((updater: (prev: ItineraryResponse | null) => ItineraryResponse | null) => {
-      capturedState = updater(capturedState);
-      calls.push("setter");
-    });
+    const setter = vi.fn(
+      (
+        updater: (prev: ItineraryResponse | null) => ItineraryResponse | null
+      ) => {
+        capturedState = updater(capturedState);
+        calls.push("setter");
+      }
+    );
 
     const serverCall = vi.fn(async () => {
       calls.push("serverCall");

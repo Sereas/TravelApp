@@ -324,7 +324,9 @@ export function useItineraryState({
         refetch: fetchItinerary,
         onError: (err) =>
           setItineraryActionError(
-            err instanceof Error ? err.message : "Failed to update option details"
+            err instanceof Error
+              ? err.message
+              : "Failed to update option details"
           ),
       });
     },
@@ -422,8 +424,7 @@ export function useItineraryState({
               day.active_option_id === optionId ? null : day.active_option_id,
             options: day.options.filter((option) => option.id !== optionId),
           })),
-        serverCall: () =>
-          api.itinerary.deleteOption(tripId, dayId, optionId),
+        serverCall: () => api.itinerary.deleteOption(tripId, dayId, optionId),
         refetch: fetchItinerary,
         onError: (err) =>
           setItineraryActionError(
@@ -468,7 +469,10 @@ export function useItineraryState({
                 : locationSummaryPlaceholder(locationId),
             };
           });
-          return { ...option, locations: [...option.locations, ...newLocations] };
+          return {
+            ...option,
+            locations: [...option.locations, ...newLocations],
+          };
         });
       });
 

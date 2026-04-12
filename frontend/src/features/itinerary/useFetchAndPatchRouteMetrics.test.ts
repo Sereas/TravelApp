@@ -241,9 +241,13 @@ describe("useFetchAndPatchRouteMetrics", () => {
     const itinerary = makeItinerary();
     let currentItinerary: ItineraryResponse | null = itinerary;
 
-    const setItinerary = vi.fn((updater: (prev: ItineraryResponse | null) => ItineraryResponse | null) => {
-      currentItinerary = updater(currentItinerary);
-    });
+    const setItinerary = vi.fn(
+      (
+        updater: (prev: ItineraryResponse | null) => ItineraryResponse | null
+      ) => {
+        currentItinerary = updater(currentItinerary);
+      }
+    );
     const setCalculatingRouteId = vi.fn();
     const setRouteMetricsError = vi.fn();
     const isMountedRef = { current: true };

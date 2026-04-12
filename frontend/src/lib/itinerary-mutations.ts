@@ -138,7 +138,9 @@ export function locationSummaryFromLocation(loc: Location): LocationSummary {
  * Build a placeholder `LocationSummary` for an optimistic entry where the full
  * location data isn't available yet.
  */
-export function locationSummaryPlaceholder(locationId: string): LocationSummary {
+export function locationSummaryPlaceholder(
+  locationId: string
+): LocationSummary {
   return {
     id: locationId,
     name: "Loading...",
