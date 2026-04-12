@@ -25,7 +25,6 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.db.supabase import get_supabase_client

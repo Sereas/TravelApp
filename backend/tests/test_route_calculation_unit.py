@@ -9,8 +9,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-import pytest
-
 from backend.app.services.route_calculation import (
     STATUS_CONFIG_ERROR,
     STATUS_INPUT_ERROR,
@@ -21,7 +19,6 @@ from backend.app.services.route_calculation import (
     classify_provider_error,
     should_recompute_on_view,
 )
-
 
 # ─────────────────────────────────────────────
 # _input_fingerprint tests
@@ -227,7 +224,7 @@ def test_classify_provider_error_maps_rate_limit_to_retryable():
 def test_classify_provider_error_maps_server_errors_to_retryable():
     """HTTP 5xx server errors map to STATUS_RETRYABLE_ERROR."""
     for code in (500, 502, 503, 504):
-        status, error_type, _ = classify_provider_error(code, "server error", "walk")
+        status, _error_type, _ = classify_provider_error(code, "server error", "walk")
         assert status == STATUS_RETRYABLE_ERROR, f"HTTP {code} should be retryable"
 
 
@@ -241,14 +238,14 @@ def test_classify_provider_error_maps_invalid_request_to_input_error():
 
 def test_classify_provider_error_maps_404_to_input_error():
     """HTTP 404 from provider maps to STATUS_INPUT_ERROR."""
-    status, error_type, cooldown = classify_provider_error(404, "not found", "walk")
+    status, _error_type, cooldown = classify_provider_error(404, "not found", "walk")
     assert status == STATUS_INPUT_ERROR
     assert cooldown == 0
 
 
 def test_classify_provider_error_maps_422_to_input_error():
     """HTTP 422 maps to STATUS_INPUT_ERROR."""
-    status, error_type, cooldown = classify_provider_error(422, "unprocessable", "walk")
+    status, _error_type, cooldown = classify_provider_error(422, "unprocessable", "walk")
     assert status == STATUS_INPUT_ERROR
     assert cooldown == 0
 
@@ -264,7 +261,7 @@ def test_classify_provider_error_maps_auth_errors_to_config_error():
 
 def test_classify_provider_error_no_route_message_maps_to_no_route():
     """'no route' in message maps to STATUS_NO_ROUTE regardless of http_status."""
-    status, error_type, cooldown = classify_provider_error(200, "no route found", "walk")
+    status, error_type, _cooldown = classify_provider_error(200, "no route found", "walk")
     assert status == STATUS_NO_ROUTE
     assert error_type == "no_route"
 
@@ -278,13 +275,13 @@ def test_classify_provider_error_no_route_transit_has_shorter_cooldown():
 
 def test_classify_provider_error_unknown_http_status_is_retryable():
     """An unmapped HTTP status (e.g. 418) is treated as retryable."""
-    status, error_type, cooldown = classify_provider_error(418, "i am a teapot", "walk")
+    status, _error_type, cooldown = classify_provider_error(418, "i am a teapot", "walk")
     assert status == STATUS_RETRYABLE_ERROR
     assert cooldown > 0
 
 
 def test_classify_provider_error_none_http_status_is_retryable():
     """No HTTP status at all (network error) is treated as retryable."""
-    status, error_type, cooldown = classify_provider_error(None, "connection refused", "walk")
+    status, _error_type, cooldown = classify_provider_error(None, "connection refused", "walk")
     assert status == STATUS_RETRYABLE_ERROR
     assert cooldown > 0

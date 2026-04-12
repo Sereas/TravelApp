@@ -509,7 +509,7 @@ def test_update_option_index_conflict_returns_409(
     Setup: day has option_index=1 (opt1) and option_index=2 (opt2).
     PATCH opt1 to option_index=2 -> 409.
     """
-    trip_id, day_id, opt1_id, opt2_id, mock_sb = _setup_two_options_in_day(
+    trip_id, day_id, opt1_id, _opt2_id, mock_sb = _setup_two_options_in_day(
         mock_supabase_trips_and_days, mock_user_id
     )
 

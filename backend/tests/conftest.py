@@ -1442,7 +1442,9 @@ def mock_supabase_trips_and_days():
                                         "hint": None, "details": None})
                     return type("RpcChain", (), {"execute": lambda _: _raise_day_not_found()})()
                 # Validate active_option_id if p_set_active_option and value is not None
-                if params.get("p_set_active_option") and params.get("p_active_option_id") is not None:
+                has_active = params.get("p_set_active_option")
+                has_aoid = params.get("p_active_option_id") is not None
+                if has_active and has_aoid:
                     aoid = str(params["p_active_option_id"])
                     valid = any(
                         str(o.get("option_id")) == aoid and str(o.get("day_id")) == did
@@ -1452,7 +1454,8 @@ def mock_supabase_trips_and_days():
                         def _raise_invalid_option():
                             raise APIError({"message": "INVALID_ACTIVE_OPTION_ID",
                                             "code": "P0002", "hint": None, "details": None})
-                        return type("RpcChain", (), {"execute": lambda _: _raise_invalid_option()})()
+                        chain = {"execute": lambda _: _raise_invalid_option()}
+                        return type("RpcChain", (), chain)()
                 # Apply updates
                 if params.get("p_set_date"):
                     day["date"] = params.get("p_date")
@@ -1564,30 +1567,27 @@ class _CountingTableProxy:
         self._table = table
         self._op = "select"  # default; overridden by insert/update/delete/upsert
 
-    def select(self, *a, **kw):
-        self._op = "select"
-        self._inner = self._inner.select(*a, **kw) if hasattr(self._inner, "select") else self._inner
+    def _delegate(self, op, *a, **kw):
+        self._op = op
+        fn = getattr(self._inner, op, None)
+        if fn:
+            self._inner = fn(*a, **kw)
         return self
+
+    def select(self, *a, **kw):
+        return self._delegate("select", *a, **kw)
 
     def insert(self, *a, **kw):
-        self._op = "insert"
-        self._inner = self._inner.insert(*a, **kw) if hasattr(self._inner, "insert") else self._inner
-        return self
+        return self._delegate("insert", *a, **kw)
 
     def update(self, *a, **kw):
-        self._op = "update"
-        self._inner = self._inner.update(*a, **kw) if hasattr(self._inner, "update") else self._inner
-        return self
+        return self._delegate("update", *a, **kw)
 
     def delete(self, *a, **kw):
-        self._op = "delete"
-        self._inner = self._inner.delete(*a, **kw) if hasattr(self._inner, "delete") else self._inner
-        return self
+        return self._delegate("delete", *a, **kw)
 
     def upsert(self, *a, **kw):
-        self._op = "upsert"
-        self._inner = self._inner.upsert(*a, **kw) if hasattr(self._inner, "upsert") else self._inner
-        return self
+        return self._delegate("upsert", *a, **kw)
 
     def eq(self, *a, **kw):
         self._inner = self._inner.eq(*a, **kw) if hasattr(self._inner, "eq") else self._inner

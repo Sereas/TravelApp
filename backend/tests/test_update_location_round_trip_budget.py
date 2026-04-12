@@ -16,9 +16,8 @@ Baseline ceiling ≤ 6; Phase 5 will tighten to ≤ 3.
 
 from __future__ import annotations
 
-from uuid import UUID, uuid4
+from uuid import uuid4
 
-import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.db.supabase import get_supabase_client
@@ -27,8 +26,7 @@ from backend.app.dependencies import (
     get_google_places_client_optional,
 )
 from backend.app.main import app
-from backend.tests.conftest import CountingSupabaseMock, _ExecuteCounter
-
+from backend.tests.conftest import _ExecuteCounter
 
 # ---------------------------------------------------------------------------
 # Minimal mock tables (same shape as test_locations_update.py mocks but

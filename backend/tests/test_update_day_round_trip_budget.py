@@ -25,7 +25,6 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.db.supabase import get_supabase_client
@@ -73,7 +72,7 @@ def test_update_day_round_trip_budget_no_active_option(
     Baseline ceiling ≤ 6.  Phase 5 will tighten to ≤ 2.
     """
     days_store, trips_store, MockFactory, counter = mock_supabase_counting
-    trip_id, day_id, option_id = _seed(days_store, trips_store, mock_user_id)
+    trip_id, day_id, _option_id = _seed(days_store, trips_store, mock_user_id)
     mock_sb = MockFactory({trip_id: str(mock_user_id)}, mock_user_id)
 
     async def override_user():

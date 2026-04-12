@@ -1546,7 +1546,8 @@ def test_update_day_with_invalid_active_option_id_returns_422(
         )
         assert r.status_code == 422, f"Expected 422, got {r.status_code}: {r.text}"
         body = r.json()
-        assert "active_option_id" in body.get("detail", "").lower() or "option" in body.get("detail", "").lower()
+        detail = body.get("detail", "").lower()
+        assert "active_option_id" in detail or "option" in detail
     finally:
         app.dependency_overrides.clear()
 

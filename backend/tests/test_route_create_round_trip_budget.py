@@ -17,13 +17,11 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.db.supabase import get_supabase_client
 from backend.app.dependencies import get_current_user_id, get_google_routes_client
 from backend.app.main import app
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -31,7 +29,10 @@ from backend.app.main import app
 
 
 def _seed_trip_day_option(days_store, trips_store, user_id):
-    """Insert one trip + day into the mock stores.  Returns (trip_id, day_id, option_id placeholder)."""
+    """Insert one trip + day into the mock stores.
+
+    Returns (trip_id, day_id, option_id placeholder).
+    """
     trip_id = str(uuid4())
     day_id = str(uuid4())
     option_id = str(uuid4())
@@ -80,7 +81,6 @@ class _RouteRpcMixin:
         params = params or {}
         if name == "create_route_with_stops":
             # Count it as an RPC call and return a stub route row
-            from backend.tests.conftest import _CountingRpcProxy
 
             route_id = str(uuid4())
             row = {
@@ -183,7 +183,9 @@ def test_route_create_round_trip_budget(
                 "option_location_ids": [ol_id_1, ol_id_2],
             },
         )
-        assert response.status_code == 201, f"Unexpected status: {response.status_code} {response.text}"
+        assert response.status_code == 201, (
+            f"Unexpected status: {response.status_code} {response.text}"
+        )
 
         total = counter.total_calls
         # Phase 0 baseline — Phase 4 will tighten to ≤ 2
