@@ -134,9 +134,11 @@ export function AddLocationForm({
   const [previewed, setPreviewed] = useState(false);
 
   const [googlePlaceId, setGooglePlaceId] = useState<string | null>(null);
-  const [googleRaw, setGoogleRaw] = useState<Record<string, unknown> | null>(
+  const [photoResourceName, setPhotoResourceName] = useState<string | null>(
     null
   );
+  const [previewLat, setPreviewLat] = useState<number | null>(null);
+  const [previewLng, setPreviewLng] = useState<number | null>(null);
   const [duplicateName, setDuplicateName] = useState<string | null>(null);
   const [scheduleDayId, setScheduleDayId] = useState("");
 
@@ -159,7 +161,9 @@ export function AddLocationForm({
       });
       setPreviewed(true);
       setGooglePlaceId(preview.google_place_id);
-      setGoogleRaw(preview.google_raw);
+      setPhotoResourceName(preview.photo_resource_name);
+      setPreviewLat(preview.latitude);
+      setPreviewLng(preview.longitude);
 
       const existing = existingLocations.find(
         (loc) => loc.google_place_id === preview.google_place_id
@@ -221,7 +225,9 @@ export function AddLocationForm({
         google_link: googleLink || null,
         google_place_id: googlePlaceId,
         google_source_type: googlePlaceId ? "manual_url" : null,
-        google_raw: googleRaw,
+        latitude: previewLat,
+        longitude: previewLng,
+        photo_resource_name: photoResourceName,
         note: note || null,
         city: city || null,
         working_hours: workingHours || null,

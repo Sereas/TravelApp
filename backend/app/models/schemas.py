@@ -1,6 +1,6 @@
 """Request/response schemas for trips and locations APIs (including itinerary)."""
 
-import json
+import re
 from datetime import date as date_type
 from datetime import datetime
 from typing import Literal
@@ -8,6 +8,9 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from backend.app.utils.url_validation import URLValidationError, validate_google_maps_url
+
+# Google Places photo resource names follow: places/<place_id>/photos/<photo_id>
+_PHOTO_RESOURCE_RE = re.compile(r"^places/[A-Za-z0-9_\-]+/photos/[A-Za-z0-9_\-]+$")
 
 
 class CreateTripBody(BaseModel):
@@ -75,9 +78,6 @@ _LOCATION_CITY_MAX = 255
 _LOCATION_WORKING_HOURS_MAX = 500
 
 
-_GOOGLE_RAW_MAX_BYTES = 50_000
-
-
 class _LocationFieldsMixin(BaseModel):
     """Shared validators for location write schemas."""
 
@@ -115,11 +115,11 @@ class _LocationFieldsMixin(BaseModel):
                 raise ValueError("google_link must be an http/https URL")
         return v
 
-    @field_validator("google_raw", check_fields=False)
+    @field_validator("photo_resource_name", check_fields=False)
     @classmethod
-    def validate_google_raw_size(cls, v: dict | None) -> dict | None:
-        if v is not None and len(json.dumps(v).encode()) >= _GOOGLE_RAW_MAX_BYTES:
-            raise ValueError(f"google_raw exceeds {_GOOGLE_RAW_MAX_BYTES // 1000}KB size limit")
+    def validate_photo_resource_name(cls, v: str | None) -> str | None:
+        if v is not None and not _PHOTO_RESOURCE_RE.match(v):
+            raise ValueError("photo_resource_name must match places/<id>/photos/<id>")
         return v
 
 
@@ -144,7 +144,9 @@ class AddLocationBody(_LocationFieldsMixin):
     category: str | None = None
     google_place_id: str | None = None
     google_source_type: str | None = None
-    google_raw: dict | None = None
+    latitude: float | None = Field(None, ge=-90.0, le=90.0)
+    longitude: float | None = Field(None, ge=-180.0, le=180.0)
+    photo_resource_name: str | None = None
 
 
 class LocationResponse(BaseModel):
@@ -156,7 +158,6 @@ class LocationResponse(BaseModel):
     google_link: str | None = None
     google_place_id: str | None = None
     google_source_type: str | None = None
-    google_raw: dict | None = None
     note: str | None = None
     added_by_user_id: str | None = None
     added_by_email: str | None = None
@@ -198,7 +199,6 @@ class UpdateLocationBody(_LocationFieldsMixin):
     category: str | None = None
     google_place_id: str | None = None
     google_source_type: str | None = None
-    google_raw: dict | None = None
 
 
 # -------- Itinerary schemas (trip_days, day_options, option_locations) --------
@@ -488,7 +488,7 @@ class LocationPreviewResponse(BaseModel):
     working_hours: list[str] = Field(default_factory=list)
     website: str | None = None
     phone: str | None = None
-    google_raw: dict
+    photo_resource_name: str | None = None
 
 
 # -------- Route schemas (option_routes, route_stops) --------
@@ -611,7 +611,7 @@ class ShareTripResponse(BaseModel):
 
 
 class SharedLocationSummary(BaseModel):
-    """Location info for public shared view (no added_by_email, no google_raw)."""
+    """Location info for public shared view (no added_by_email)."""
 
     id: str
     name: str

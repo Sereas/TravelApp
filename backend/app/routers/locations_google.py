@@ -205,5 +205,5 @@ async def preview_location_from_google_link(
         working_hours=clean_hours,
         website=resolved.website,
         phone=resolved.formatted_phone_number,
-        google_raw=resolved.raw,
+        photo_resource_name=resolved.first_photo_resource,
     )

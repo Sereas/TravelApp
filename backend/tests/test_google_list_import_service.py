@@ -36,8 +36,7 @@ class _FakeResolved:
     formatted_address: str | None
     latitude: float
     longitude: float
-    raw: dict
-    photos: list
+    first_photo_resource: str | None
     types: list
     opening_hours_text: list
 
@@ -49,8 +48,7 @@ def _fake_resolved(name: str, place_id: str) -> _FakeResolved:
         formatted_address=f"{name} Addr",
         latitude=48.0 + len(name),
         longitude=2.0 + len(name),
-        raw={"id": place_id},
-        photos=[],
+        first_photo_resource=None,
         types=["restaurant"],
         opening_hours_text=[],
     )

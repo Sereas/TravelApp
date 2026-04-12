@@ -12,7 +12,7 @@ export const previewLocationFromLink = (body: { google_link: string }) =>
     working_hours: string[];
     website: string | null;
     phone: string | null;
-    google_raw: Record<string, unknown>;
+    photo_resource_name: string | null;
   }>("/api/v1/locations/google/preview", {
     method: "POST",
     body: JSON.stringify(body),

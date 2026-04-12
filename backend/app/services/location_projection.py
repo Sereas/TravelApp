@@ -11,7 +11,7 @@ from uuid import UUID
 from backend.app.models.schemas import LocationSummary
 
 # ---------------------------------------------------------------------------
-# Single canonical column list (no google_raw — CLAUDE.md rule #5)
+# Single canonical column list for LocationSummary projections
 # ---------------------------------------------------------------------------
 
 LOCATION_SUMMARY_COLUMNS: tuple[str, ...] = (

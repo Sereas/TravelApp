@@ -240,12 +240,14 @@ export interface LocationWriteBody {
   google_link?: string | null;
   google_place_id?: string | null;
   google_source_type?: string | null;
-  google_raw?: Record<string, unknown> | null;
   note?: string | null;
   city?: string | null;
   working_hours?: string | null;
   requires_booking?: string | null;
   category?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  photo_resource_name?: string | null;
 }
 
 /**

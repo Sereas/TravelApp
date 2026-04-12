@@ -22,6 +22,16 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger("google_places")
 # Validating this prevents path traversal when interpolating into API URLs.
 _PLACE_ID_RE = re.compile(r"^[A-Za-z0-9_\-]+$")
 
+# Validate photo resource names (e.g. "places/ChIJ.../photos/Aaw_FcI...")
+_PHOTO_RESOURCE_RE = re.compile(r"^places/[A-Za-z0-9_\-]+/photos/[A-Za-z0-9_\-]+$")
+
+# Allowed hosts for Google photo URIs (SSRF protection)
+_ALLOWED_PHOTO_HOSTS = frozenset({
+    "lh3.googleusercontent.com",
+    "streetviewpixels-pa.googleapis.com",
+    "maps.googleapis.com",
+})
+
 
 class GooglePlacesDisabledError(RuntimeError):
     """Raised when Google Places integration is not configured."""
@@ -33,7 +43,7 @@ class GoogleListParseError(RuntimeError):
 
 @dataclass
 class PlaceResolution:
-    """Normalized subset of Place Details plus raw payload."""
+    """Normalized subset of Place Details."""
 
     place_id: str
     name: str
@@ -44,8 +54,7 @@ class PlaceResolution:
     website: str | None
     formatted_phone_number: str | None
     opening_hours_text: list[str]
-    photos: list[dict[str, Any]]
-    raw: dict[str, Any]
+    first_photo_resource: str | None
 
 
 class GooglePlacesClient:
@@ -87,6 +96,9 @@ class GooglePlacesClient:
         photo_uri = resp.json().get("photoUri")
         if not photo_uri:
             raise RuntimeError(f"No photoUri in response for {photo_resource_name}")
+        parsed = urlparse(photo_uri)
+        if parsed.scheme != "https" or parsed.hostname not in _ALLOWED_PHOTO_HOSTS:
+            raise RuntimeError(f"Unexpected photoUri host: {parsed.hostname!r}")
         img_resp = self._http.get(photo_uri)
         img_resp.raise_for_status()
         return img_resp.content
@@ -117,7 +129,7 @@ class GooglePlacesClient:
         duration_ms = round((time.perf_counter() - start) * 1000, 1)
         data = resp.json()
         logger.debug("places_get_by_id", duration_ms=duration_ms, place_id=place_id)
-        return self._place_to_resolution(data, raw=data)
+        return self._place_to_resolution(data)
 
     @staticmethod
     def _extract_place_id_from_url(url: str) -> str | None:
@@ -309,10 +321,15 @@ class GooglePlacesClient:
             trunc = trunc[:-1]
         return trunc.decode("utf-8", errors="ignore")
 
-    def _place_to_resolution(self, place: dict, *, raw: dict) -> PlaceResolution:
+    def _place_to_resolution(self, place: dict) -> PlaceResolution:
         location = place.get("location") or {}
         opening = (place.get("regularOpeningHours") or {}).get("weekdayDescriptions", []) or []
         display_name = place.get("displayName") or {}
+        photos = place.get("photos") or []
+        first_photo = photos[0].get("name") if photos else None
+        if first_photo and not _PHOTO_RESOURCE_RE.match(first_photo):
+            logger.warning("unexpected_photo_resource_format", value=first_photo)
+            first_photo = None
         return PlaceResolution(
             place_id=str(place.get("id") or ""),
             name=str(display_name.get("text") or ""),
@@ -323,8 +340,7 @@ class GooglePlacesClient:
             website=place.get("websiteUri"),
             formatted_phone_number=place.get("nationalPhoneNumber"),
             opening_hours_text=[str(t) for t in opening],
-            photos=place.get("photos") or [],
-            raw=raw,
+            first_photo_resource=first_photo,
         )
 
     def _search_place_nearby(self, latitude: float, longitude: float) -> PlaceResolution:
@@ -368,7 +384,7 @@ class GooglePlacesClient:
                 results=len(places),
             )
             if places:
-                return self._place_to_resolution(places[0], raw=data)
+                return self._place_to_resolution(places[0])
         raise RuntimeError("Places nearby search returned no candidates near coordinates")
 
     def _search_place_by_text(
@@ -424,4 +440,4 @@ class GooglePlacesClient:
         )
         if not places:
             raise RuntimeError("Places search returned no candidates")
-        return self._place_to_resolution(places[0] or {}, raw=data)
+        return self._place_to_resolution(places[0] or {})

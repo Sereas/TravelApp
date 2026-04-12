@@ -48,8 +48,7 @@ def _make_resolution(place_id: str, name: str) -> PlaceResolution:
         website=None,
         formatted_phone_number=None,
         opening_hours_text=[],
-        photos=[],
-        raw={"places": [{"id": place_id}]},
+        first_photo_resource=None,
     )
 
 

@@ -27,8 +27,7 @@ def _make_resolution(
         website=None,
         formatted_phone_number=None,
         opening_hours_text=[],
-        photos=[],
-        raw={},
+        first_photo_resource=None,
     )
 
 
@@ -147,8 +146,7 @@ def test_preview_location_from_google_link_returns_200(client: TestClient, monke
                 "Monday: Closed",
                 "Tuesday: 9:00 AM - 6:00 PM",
             ],
-            photos=[],
-            raw={"result": {"place_id": "ChIJCzYy5IS16lQRQrfeQ5K5Oxw"}, "status": "OK"},
+            first_photo_resource="places/ChIJCzYy5IS16lQR/photos/AXCi2Q6abc",
         )
 
     class FakeClient:
@@ -166,7 +164,7 @@ def test_preview_location_from_google_link_returns_200(client: TestClient, monke
         assert data["name"] == "Louvre Museum"
         assert data["address"].startswith("Rue de Rivoli")
         assert data["google_place_id"] == "ChIJCzYy5IS16lQRQrfeQ5K5Oxw"
-        assert data["google_raw"]["status"] == "OK"
+        assert data["photo_resource_name"] == "places/ChIJCzYy5IS16lQR/photos/AXCi2Q6abc"
         # Category suggestion from types
         assert data["suggested_category"] == "Museum"
     finally:
@@ -227,8 +225,7 @@ def test_preview_returns_place_name_as_city_when_place_is_a_town(client: TestCli
                 website=None,
                 formatted_phone_number=None,
                 opening_hours_text=[],
-                photos=[],
-                raw={"id": "places/ChIJ_etretat"},
+                first_photo_resource=None,
             )
 
     app.dependency_overrides[get_google_places_client] = lambda: FakeClient()

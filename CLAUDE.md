@@ -248,12 +248,9 @@ These rules are non-negotiable for every new endpoint or DB interaction.
 4. **Never call `supabase.auth.admin.get_user_by_id()` in any request handler.**
    User email is stored in the `locations.added_by_email` column at INSERT time from the JWT payload.
 
-5. **Never include `google_raw` in list or batch endpoint responses.**
-   `google_raw` is returned only in the single `POST /trips/{id}/locations` response.
+5. **All new read RPCs must be marked `STABLE`.**
 
-6. **All new read RPCs must be marked `STABLE`.**
-
-7. **No `SELECT *`.** Every query must list explicit columns.
+6. **No `SELECT *`.** Every query must list explicit columns.
 
 ### Per-Endpoint Checklist (Required Before Writing Any New Endpoint)
 
@@ -261,7 +258,6 @@ These rules are non-negotiable for every new endpoint or DB interaction.
 - [ ] Does it verify ownership? Use `_ensure_resource_chain`, not individual helpers.
 - [ ] Does it read from multiple tables? Consider a single SQL JOIN function.
 - [ ] Does it write to multiple tables? Wrap in a PL/pgSQL RPC (transaction).
-- [ ] Does it return `google_raw`? Remove it if this is a list or batch endpoint.
 - [ ] Is there a `for` loop with `.execute()` inside it? Replace with batch operation.
 - [ ] Does it look up a user's email? Read `added_by_email` from the DB row.
 
@@ -273,7 +269,6 @@ These rules are non-negotiable for every new endpoint or DB interaction.
 | `_ensure_trip_owned(); _ensure_day_in_trip(); _ensure_option_in_day()` | `_ensure_resource_chain(...)` |
 | Sequential multi-table writes without a transaction | Single PL/pgSQL RPC |
 | `supabase.auth.admin.get_user_by_id(uid)` in request handlers | `loc["added_by_email"]` from DB |
-| `google_raw` in list endpoint `SELECT` | Use `_LOCATIONS_SELECT` (not WITH_RAW) |
 | `.select("*")` | Explicit column list |
 
 ## CRITICAL: Multi-Agent Team Architecture

@@ -124,7 +124,6 @@ def _build_row(
         "google_link": google_link,
         "google_place_id": resolved.place_id,
         "google_source_type": "google_list_import",
-        "google_raw": resolved.raw,
         "added_by_user_id": user_id,
         "added_by_email": user_email,
         "city": city,
@@ -241,7 +240,7 @@ async def import_google_list_iter(
         r["google_place_id"] for r in existing_rows if r.get("google_place_id")
     }
 
-    rows_to_insert: list[tuple[dict, list]] = []
+    rows_to_insert: list[tuple[dict, str | None]] = []
     seen_place_ids: set[str] = set()
     skipped_names: list[str] = []
 
@@ -279,7 +278,7 @@ async def import_google_list_iter(
             used_nearby=used_nearby,
             place_note=place.note,
         )
-        rows_to_insert.append((row, resolved.photos))
+        rows_to_insert.append((row, resolved.first_photo_resource))
         yield EnrichingItem(
             index=i,
             name=resolved.name or display_name,
@@ -305,14 +304,20 @@ async def import_google_list_iter(
 
         inserted_locs = insert_result.data
 
-        # Warm photo cache (best-effort)
-        for (row, photos), _inserted in zip(rows_to_insert, inserted_locs, strict=True):
-            gp_id = row.get("google_place_id")
-            if gp_id and photos:
-                with contextlib.suppress(Exception):
-                    await asyncio.to_thread(
-                        ensure_place_photo, supabase, places_client, gp_id, photos
-                    )
+        # Warm photo cache (best-effort, concurrent)
+        async def _warm_photo(gp_id: str, resource: str) -> None:
+            with contextlib.suppress(Exception):
+                await asyncio.to_thread(
+                    ensure_place_photo, supabase, places_client, gp_id, resource
+                )
+
+        photo_tasks = [
+            _warm_photo(row["google_place_id"], photo_resource)
+            for (row, photo_resource), _ in zip(rows_to_insert, inserted_locs, strict=True)
+            if row.get("google_place_id") and photo_resource
+        ]
+        if photo_tasks:
+            await asyncio.gather(*photo_tasks, return_exceptions=True)
 
     logger.info(
         "google_list_imported",

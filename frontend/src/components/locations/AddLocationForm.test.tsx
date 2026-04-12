@@ -107,7 +107,9 @@ describe("AddLocationForm", () => {
         google_link: null,
         google_place_id: null,
         google_source_type: null,
-        google_raw: null,
+        latitude: null,
+        longitude: null,
+        photo_resource_name: null,
         note: "Book ahead",
         city: "Paris",
         working_hours: "9-18",
@@ -153,7 +155,9 @@ describe("AddLocationForm", () => {
         google_link: null,
         google_place_id: null,
         google_source_type: null,
-        google_raw: null,
+        latitude: null,
+        longitude: null,
+        photo_resource_name: null,
         note: null,
         city: null,
         working_hours: null,
@@ -226,7 +230,7 @@ describe("AddLocationForm", () => {
       working_hours: [],
       website: null,
       phone: null,
-      google_raw: {},
+      photo_resource_name: null,
     });
 
     const existingLocations = [
@@ -431,7 +435,7 @@ describe("AddLocationForm", () => {
       working_hours: ["Tuesday: 9-18"],
       website: null,
       phone: null,
-      google_raw: { status: "OK" },
+      photo_resource_name: "places/ChIJCzYy5IS/photos/AXCi2Q6abc",
     });
 
     render(
@@ -467,7 +471,7 @@ describe("AddLocationForm", () => {
       working_hours: ["Mon: 2:00 PM-4:00 AM"],
       website: null,
       phone: null,
-      google_raw: {},
+      photo_resource_name: null,
     });
 
     render(
@@ -574,7 +578,7 @@ describe("AddLocationForm", () => {
       working_hours: [],
       website: null,
       phone: null,
-      google_raw: {},
+      photo_resource_name: null,
     });
 
     render(
@@ -611,7 +615,7 @@ describe("AddLocationForm", () => {
       working_hours: ["Tuesday: 9-18"],
       website: "https://www.louvre.fr/en",
       phone: "+33 1 40 20 50 50",
-      google_raw: { status: "OK" },
+      photo_resource_name: "places/ChIJCzYy5IS/photos/AXCi2Q6abc",
     });
 
     render(

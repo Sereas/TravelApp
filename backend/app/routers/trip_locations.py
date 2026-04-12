@@ -6,7 +6,16 @@ import time
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from starlette.responses import StreamingResponse
 
 from backend.app.clients.google_places import GooglePlacesClient
@@ -51,56 +60,11 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger("locations")
 
 router = APIRouter(prefix="/trips", tags=["trips-locations"])
 
-# List/update selects — excludes google_raw to keep list responses small.
-# google_raw can be 5-15 KB per location; never needed in list views.
 _LOCATIONS_SELECT = (
     "location_id, trip_id, name, address, google_link, google_place_id, "
     "google_source_type, added_by_email, note, added_by_user_id, city, "
     "working_hours, requires_booking, category, latitude, longitude, user_image_url"
 )
-# Used only for the single-item POST response where the client may need raw data.
-_LOCATIONS_SELECT_WITH_RAW = _LOCATIONS_SELECT + ", google_raw"
-
-
-def _extract_first_place(raw: dict | None) -> dict:
-    """Return the first place object from a Google Places API response.
-
-    Handles both response shapes:
-    - searchText/searchNearby: ``{"places": [{...}]}``
-    - get_place_by_id:        ``{"id": "...", "photos": [...], ...}``
-    """
-    if not isinstance(raw, dict):
-        return {}
-    places = raw.get("places")
-    if isinstance(places, list) and places:
-        return places[0]
-    # Direct place object (has "id" at top level, no "places" wrapper)
-    if raw.get("id"):
-        return raw
-    return {}
-
-
-def _extract_photos_from_raw(raw: dict | None) -> list:
-    """Extract the photos array from a Google Places API response."""
-    return _extract_first_place(raw).get("photos") or []
-
-
-def _extract_lat_lng_from_google_raw(raw: dict | None) -> tuple[float | None, float | None]:
-    """Best-effort extraction of latitude/longitude from stored Google raw JSON."""
-    if not isinstance(raw, dict):
-        return None, None
-    place = _extract_first_place(raw)
-    if place:
-        location = place.get("location") or {}
-        lat, lng = location.get("latitude"), location.get("longitude")
-        if lat is not None and lng is not None:
-            return lat, lng
-    result = raw.get("result")
-    if isinstance(result, dict):
-        geom = result.get("geometry") or {}
-        loc = geom.get("location") or {}
-        return loc.get("lat"), loc.get("lng")
-    return None, None
 
 
 def _loc_to_response(loc: dict) -> LocationResponse:
@@ -114,7 +78,6 @@ def _loc_to_response(loc: dict) -> LocationResponse:
         google_link=loc.get("google_link"),
         google_place_id=loc.get("google_place_id"),
         google_source_type=loc.get("google_source_type"),
-        google_raw=loc.get("google_raw"),
         note=loc.get("note"),
         added_by_user_id=uid_str,
         added_by_email=loc.get("added_by_email"),
@@ -139,6 +102,7 @@ def _loc_to_response(loc: dict) -> LocationResponse:
 async def add_location(
     trip_id: UUID,
     body: AddLocationBody,
+    background_tasks: BackgroundTasks,
     user_id: UUID = Depends(get_current_user_id),
     user_email: str | None = Depends(get_current_user_email),
     supabase=Depends(get_supabase_client),
@@ -147,6 +111,9 @@ async def add_location(
     """
     Add a location to a trip. Requires valid JWT.
     Trip must exist and be owned by the authenticated user; else 404.
+
+    Photo fetching runs in the background — the response returns immediately
+    with image_url=null.  The photo appears on the next list/tree fetch.
     """
     _ensure_resource_chain(supabase, trip_id, user_id)
 
@@ -176,7 +143,6 @@ async def add_location(
         "google_link": body.google_link,
         "google_place_id": body.google_place_id,
         "google_source_type": body.google_source_type,
-        "google_raw": body.google_raw,
         "note": body.note,
         "added_by_user_id": str(user_id),
         "added_by_email": user_email,
@@ -185,12 +151,10 @@ async def add_location(
         "requires_booking": body.requires_booking,
         "category": body.category,
     }
-    # If this location came from a Google preview, persist coordinates into dedicated columns.
-    lat, lng = _extract_lat_lng_from_google_raw(body.google_raw)
-    if lat is not None:
-        row["latitude"] = lat
-    if lng is not None:
-        row["longitude"] = lng
+    if body.latitude is not None:
+        row["latitude"] = body.latitude
+    if body.longitude is not None:
+        row["longitude"] = body.longitude
     result = supabase.table("locations").insert(row).execute()
     if not result.data or len(result.data) == 0:
         logger.error("location_insert_failed", trip_id=str(trip_id), error_category="db")
@@ -199,37 +163,24 @@ async def add_location(
             detail="Failed to create location; please try again",
         )
     loc = result.data[0]
-    # Fetch full row with all columns (including google_raw — single POST response only)
+    # Re-fetch with canonical column list
     loc_id = loc.get("location_id")
     if loc_id:
         fetch = (
             supabase.table("locations")
-            .select(_LOCATIONS_SELECT_WITH_RAW)
+            .select(_LOCATIONS_SELECT)
             .eq("location_id", str(loc_id))
             .eq("trip_id", str(trip_id))
             .execute()
         )
         if fetch.data and len(fetch.data) > 0:
             loc = fetch.data[0]
-    # Fetch photo if this location has a google_place_id and photos in raw data
+    # Queue background photo fetch — response returns immediately without image_url
     gp_id = loc.get("google_place_id")
-    if gp_id and places_client:
-        raw = loc.get("google_raw") or body.google_raw or {}
-        photos = _extract_photos_from_raw(raw)
-        if photos:
-            url = ensure_place_photo(supabase, places_client, gp_id, photos)
-            if url:
-                loc["image_url"] = url
-                # Fetch attribution from the cached row
-                attr_row = (
-                    supabase.table("place_photos")
-                    .select("attribution_name, attribution_uri")
-                    .eq("google_place_id", gp_id)
-                    .execute()
-                )
-                if attr_row.data:
-                    loc["attribution_name"] = attr_row.data[0].get("attribution_name")
-                    loc["attribution_uri"] = attr_row.data[0].get("attribution_uri")
+    if gp_id and body.photo_resource_name and places_client:
+        background_tasks.add_task(
+            ensure_place_photo, supabase, places_client, gp_id, body.photo_resource_name,
+        )
     logger.info(
         "location_added",
         location_id=str(loc["location_id"]),
@@ -253,7 +204,6 @@ async def list_locations(
     List all locations for a trip. Requires valid JWT.
     Trip must exist and be owned by the authenticated user; else 404.
     Returns 200 with array of locations; empty array if trip has no locations.
-    google_raw is NOT included in list responses (payload size).
     """
     t0 = time.perf_counter()
     _ensure_resource_chain(supabase, trip_id, user_id)
@@ -288,6 +238,7 @@ async def list_locations(
 async def batch_add_locations(
     trip_id: UUID,
     body: list[AddLocationBody],
+    background_tasks: BackgroundTasks,
     user_id: UUID = Depends(get_current_user_id),
     user_email: str | None = Depends(get_current_user_email),
     supabase=Depends(get_supabase_client),
@@ -297,6 +248,8 @@ async def batch_add_locations(
     Add multiple locations to a trip in one request. Requires valid JWT.
     Trip must exist and be owned by the authenticated user; else 404.
     Body must be a non-empty array; each item must have a non-empty name.
+
+    Photo fetching runs in the background — the response returns immediately.
     """
     if not body:
         raise HTTPException(
@@ -313,7 +266,6 @@ async def batch_add_locations(
             "google_link": item.google_link,
             "google_place_id": item.google_place_id,
             "google_source_type": item.google_source_type,
-            "google_raw": item.google_raw,
             "note": item.note,
             "added_by_user_id": str(user_id),
             "added_by_email": user_email,
@@ -322,11 +274,10 @@ async def batch_add_locations(
             "requires_booking": item.requires_booking,
             "category": item.category,
         }
-        lat, lng = _extract_lat_lng_from_google_raw(item.google_raw)
-        if lat is not None:
-            row["latitude"] = lat
-        if lng is not None:
-            row["longitude"] = lng
+        if item.latitude is not None:
+            row["latitude"] = item.latitude
+        if item.longitude is not None:
+            row["longitude"] = item.longitude
         rows.append(row)
     result = supabase.table("locations").insert(rows).execute()
     if not result.data or len(result.data) != len(body):
@@ -341,7 +292,6 @@ async def batch_add_locations(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create one or more locations; please try again",
         )
-    # Fetch full rows (without google_raw — batch responses stay lean)
     loc_ids = [str(loc["location_id"]) for loc in result.data if loc.get("location_id")]
     if loc_ids:
         fetch = (
@@ -355,37 +305,14 @@ async def batch_add_locations(
     else:
         fetched_by_id = {}
     final_locs = [fetched_by_id.get(str(loc.get("location_id")), loc) for loc in result.data]
-    # Warm place_photos cache for new locations with google_place_id + photos
-    # 1. Collect unique google_place_ids that have photos in the request body
-    place_id_to_photos: dict[str, list] = {}
-    for item in body:
-        if item.google_place_id and item.google_raw:
-            photos = _extract_photos_from_raw(item.google_raw)
-            if photos:
-                place_id_to_photos.setdefault(item.google_place_id, photos)
-    if place_id_to_photos:
-        # 2. Check which are already cached (single query)
-        cached = (
-            supabase.table("place_photos")
-            .select("google_place_id, photo_url, attribution_name, attribution_uri")
-            .in_("google_place_id", list(place_id_to_photos.keys()))
-            .execute()
-        )
-        cached_map: dict[str, dict] = {row["google_place_id"]: row for row in (cached.data or [])}
-        # 3. Fetch and cache photos for misses
-        if places_client:
-            for gp_id, photos in place_id_to_photos.items():
-                if gp_id not in cached_map:
-                    url = ensure_place_photo(supabase, places_client, gp_id, photos)
-                    if url:
-                        cached_map[gp_id] = {"photo_url": url}
-        # 4. Attach image_url to response rows
-        for loc in final_locs:
-            gp_id = loc.get("google_place_id")
-            if gp_id and gp_id in cached_map:
-                loc["image_url"] = cached_map[gp_id].get("photo_url")
-                loc["attribution_name"] = cached_map[gp_id].get("attribution_name")
-                loc["attribution_uri"] = cached_map[gp_id].get("attribution_uri")
+    # Queue background photo fetches for locations with photo_resource_name
+    if places_client:
+        for item in body:
+            if item.google_place_id and item.photo_resource_name:
+                background_tasks.add_task(
+                    ensure_place_photo,
+                    supabase, places_client, item.google_place_id, item.photo_resource_name,
+                )
     out = [_loc_to_response(full) for full in final_locs]
     logger.info("locations_batch_added", trip_id=str(trip_id), count=len(body))
     return out
@@ -650,7 +577,6 @@ async def update_location(
     body: UpdateLocationBody,
     user_id: UUID = Depends(get_current_user_id),
     supabase=Depends(get_supabase_client),
-    places_client: GooglePlacesClient | None = Depends(get_google_places_client_optional),
 ):
     """
     Update a location's user-facing fields for a trip. Requires valid JWT.
@@ -676,7 +602,6 @@ async def update_location(
         "google_link",
         "google_place_id",
         "google_source_type",
-        "google_raw",
         "note",
         "city",
         "working_hours",
@@ -709,10 +634,6 @@ async def update_location(
     loc = update_result.data[0]
 
     # Enrich with photo URL (RT 3 — only when the row has a google_place_id).
-    # Warm the photo cache when google_place_id or google_raw was patched and
-    # no cached photo exists yet.  We don't need the OLD google_place_id:
-    # if the gp_id didn't actually change, the cache will already have a row
-    # (RT 3 returns data → we use it, no warming needed).
     gp_id = loc.get("google_place_id")
     if gp_id:
         photo_row = (
@@ -725,16 +646,6 @@ async def update_location(
             loc["image_url"] = photo_row.data[0]["photo_url"]
             loc["attribution_name"] = photo_row.data[0].get("attribution_name")
             loc["attribution_uri"] = photo_row.data[0].get("attribution_uri")
-        elif (
-            "google_place_id" in body.model_fields_set or "google_raw" in body.model_fields_set
-        ) and places_client:
-            # google_place_id or raw was patched and no cached photo yet — warm the cache.
-            raw = body.google_raw or {}
-            photos = _extract_photos_from_raw(raw)
-            if photos:
-                url = ensure_place_photo(supabase, places_client, gp_id, photos)
-                if url:
-                    loc["image_url"] = url
     logger.info(
         "location_updated",
         location_id=str(location_id),

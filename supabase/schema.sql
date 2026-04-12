@@ -724,7 +724,6 @@ CREATE TABLE public.locations (
     category character varying(50),
     google_place_id text,
     google_source_type text,
-    google_raw jsonb,
     added_by_email text,
     user_image_url text,
     CONSTRAINT locations_category_check CHECK (((category IS NULL) OR ((category)::text = ANY ((ARRAY['Accommodation'::character varying, 'Bar'::character varying, 'Beach'::character varying, 'Café'::character varying, 'Church'::character varying, 'City'::character varying, 'Event'::character varying, 'Excursion'::character varying, 'Hiking'::character varying, 'Historic site'::character varying, 'Market'::character varying, 'Museum'::character varying, 'Nature'::character varying, 'Nightlife'::character varying, 'Park'::character varying, 'Parking'::character varying, 'Restaurant'::character varying, 'Shopping'::character varying, 'Spa / Wellness'::character varying, 'Transport'::character varying, 'Viewpoint'::character varying, 'Walking around'::character varying, 'Other'::character varying])::text[])))),

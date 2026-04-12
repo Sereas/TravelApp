@@ -60,6 +60,8 @@ export default function TripDetailPage() {
     seq: number;
   } | null>(null);
   const focusSeqRef = useRef(0);
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
   // Transient highlight flash when a sidebar map pin is clicked.
   const { highlightedLocationId, handlePinClick } = usePinHighlight();
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
@@ -294,6 +296,24 @@ export default function TripDetailPage() {
     setAddingLocation(null);
     if (scheduleDayId) {
       handleScheduleLocationToDay(location.id, scheduleDayId);
+    }
+    // Background photo fetch: poll once after 4s to pick up the cached photo
+    if (location.google_place_id && !location.image_url) {
+      const locId = location.id;
+      const timer = setTimeout(() => {
+        if (!mountedRef.current) return;
+        api.locations.list(tripId).then((fresh) => {
+          if (!mountedRef.current) return;
+          const refreshed = fresh.find((l) => l.id === locId);
+          if (refreshed?.image_url) {
+            setLocations((prev) =>
+              prev.map((l) => l.id === locId ? { ...l, image_url: refreshed.image_url } : l)
+            );
+            syncLocationSummary(locId, () => ({ image_url: refreshed.image_url }));
+          }
+        }).catch(() => {/* swallow — cosmetic refresh only */});
+      }, 4000);
+      return () => clearTimeout(timer);
     }
   }
 
