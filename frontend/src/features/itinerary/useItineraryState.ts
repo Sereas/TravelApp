@@ -666,14 +666,12 @@ export function useItineraryState({
         setItinerary((prev) => {
           if (!prev) return prev;
           return mutateDay(prev, dayId, (currentDay) => {
-            const mainOption = currentDay.options.find(
-              (option) => option.option_index === 1
-            );
-            if (!mainOption) return currentDay;
+            const targetOption = _getSelectedOption(currentDay);
+            if (!targetOption) return currentDay;
             return {
               ...currentDay,
               options: currentDay.options.map((option) =>
-                option.id !== mainOption.id
+                option.id !== targetOption.id
                   ? option
                   : {
                       ...option,
@@ -696,11 +694,9 @@ export function useItineraryState({
 
       try {
         let optionId: string;
-        const mainOption = day.options.find(
-          (option) => option.option_index === 1
-        );
-        if (mainOption) {
-          optionId = mainOption.id;
+        const targetOption = _getSelectedOption(day);
+        if (targetOption) {
+          optionId = targetOption.id;
         } else {
           const created = await api.itinerary.createOption(tripId, dayId);
           optionId = created.id;
