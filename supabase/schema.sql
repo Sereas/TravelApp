@@ -25,6 +25,135 @@ $$;
 
 ALTER FUNCTION public.batch_insert_option_locations(p_option_id uuid, p_location_ids uuid[], p_sort_orders integer[], p_time_periods text[]) OWNER TO postgres;
 
+CREATE TABLE public.segment_cache (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    origin_place_id text,
+    destination_place_id text,
+    origin_lat double precision,
+    origin_lng double precision,
+    destination_lat double precision,
+    destination_lng double precision,
+    transport_mode text NOT NULL,
+    cache_key text NOT NULL,
+    distance_meters integer,
+    duration_seconds integer,
+    encoded_polyline text,
+    provider text DEFAULT 'google'::text NOT NULL,
+    raw_provider_response jsonb,
+    status text DEFAULT 'success'::text NOT NULL,
+    error_message text,
+    calculated_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    input_fingerprint text,
+    error_type text,
+    error_code text,
+    provider_http_status integer,
+    last_attempt_at timestamp with time zone,
+    next_retry_at timestamp with time zone,
+    cache_expires_at timestamp with time zone,
+    retry_count integer DEFAULT 0 NOT NULL,
+    CONSTRAINT segment_cache_status_check CHECK ((status = ANY (ARRAY['success'::text, 'retryable_error'::text, 'config_error'::text, 'input_error'::text, 'no_route'::text]))),
+    CONSTRAINT segment_cache_transport_mode_check CHECK ((transport_mode = ANY (ARRAY['walk'::text, 'drive'::text, 'transit'::text])))
+);
+
+ALTER TABLE public.segment_cache OWNER TO postgres;
+
+COMMENT ON TABLE public.segment_cache IS 'Reusable cache of route segment results (Google Routes API); keyed by origin/dest place_id + transport_mode';
+
+COMMENT ON COLUMN public.segment_cache.input_fingerprint IS 'Hash of origin/dest place_id + lat/lng + mode; cache invalid when fingerprint changes';
+
+COMMENT ON COLUMN public.segment_cache.next_retry_at IS 'Earliest time to retry on user view (no auto-retry)';
+
+COMMENT ON COLUMN public.segment_cache.cache_expires_at IS 'For success rows: TRANSIT TTL; NULL = indefinite (WALK/DRIVE)';
+
+CREATE FUNCTION public.batch_upsert_segment_cache(p_rows jsonb) RETURNS SETOF public.segment_cache
+    LANGUAGE plpgsql SECURITY DEFINER
+    AS $$
+BEGIN
+  RETURN QUERY
+  INSERT INTO segment_cache (
+    cache_key,
+    transport_mode,
+    origin_place_id,
+    destination_place_id,
+    origin_lat,
+    origin_lng,
+    destination_lat,
+    destination_lng,
+    distance_meters,
+    duration_seconds,
+    encoded_polyline,
+    provider,
+    raw_provider_response,
+    status,
+    error_message,
+    error_type,
+    error_code,
+    provider_http_status,
+    input_fingerprint,
+    last_attempt_at,
+    next_retry_at,
+    cache_expires_at,
+    retry_count,
+    calculated_at
+  )
+  SELECT
+    (r->>'cache_key')::text,
+    (r->>'transport_mode')::text,
+    (r->>'origin_place_id')::text,
+    (r->>'destination_place_id')::text,
+    (r->>'origin_lat')::double precision,
+    (r->>'origin_lng')::double precision,
+    (r->>'destination_lat')::double precision,
+    (r->>'destination_lng')::double precision,
+    (r->>'distance_meters')::integer,
+    (r->>'duration_seconds')::integer,
+    (r->>'encoded_polyline')::text,
+    COALESCE((r->>'provider')::text, 'google'),
+    (r->'raw_provider_response')::jsonb,
+    (r->>'status')::text,
+    (r->>'error_message')::text,
+    (r->>'error_type')::text,
+    (r->>'error_code')::text,
+    (r->>'provider_http_status')::integer,
+    (r->>'input_fingerprint')::text,
+    (r->>'last_attempt_at')::timestamptz,
+    (r->>'next_retry_at')::timestamptz,
+    (r->>'cache_expires_at')::timestamptz,
+    COALESCE((r->>'retry_count')::integer, 0),
+    COALESCE((r->>'calculated_at')::timestamptz, now())
+  FROM jsonb_array_elements(p_rows) AS r
+  ON CONFLICT (cache_key) DO UPDATE SET
+    transport_mode        = EXCLUDED.transport_mode,
+    origin_place_id       = EXCLUDED.origin_place_id,
+    destination_place_id  = EXCLUDED.destination_place_id,
+    origin_lat            = EXCLUDED.origin_lat,
+    origin_lng            = EXCLUDED.origin_lng,
+    destination_lat       = EXCLUDED.destination_lat,
+    destination_lng       = EXCLUDED.destination_lng,
+    distance_meters       = EXCLUDED.distance_meters,
+    duration_seconds      = EXCLUDED.duration_seconds,
+    encoded_polyline      = EXCLUDED.encoded_polyline,
+    provider              = EXCLUDED.provider,
+    raw_provider_response = EXCLUDED.raw_provider_response,
+    status                = EXCLUDED.status,
+    error_message         = EXCLUDED.error_message,
+    error_type            = EXCLUDED.error_type,
+    error_code            = EXCLUDED.error_code,
+    provider_http_status  = EXCLUDED.provider_http_status,
+    input_fingerprint     = EXCLUDED.input_fingerprint,
+    last_attempt_at       = EXCLUDED.last_attempt_at,
+    next_retry_at         = EXCLUDED.next_retry_at,
+    cache_expires_at      = EXCLUDED.cache_expires_at,
+    retry_count           = EXCLUDED.retry_count,
+    calculated_at         = EXCLUDED.calculated_at
+  RETURNING *;
+END;
+$$;
+
+ALTER FUNCTION public.batch_upsert_segment_cache(p_rows jsonb) OWNER TO postgres;
+
 CREATE FUNCTION public.create_route_with_stops(p_option_id uuid, p_transport_mode character varying, p_label character varying, p_option_location_ids uuid[]) RETURNS json
     LANGUAGE plpgsql SECURITY DEFINER
     AS $$
@@ -194,7 +323,7 @@ $$;
 
 ALTER FUNCTION public.get_itinerary_routes(p_option_ids uuid[]) OWNER TO postgres;
 
-CREATE FUNCTION public.get_itinerary_tree(p_trip_id uuid) RETURNS TABLE(day_id uuid, day_date date, day_sort_order integer, day_created_at timestamp with time zone, day_active_option_id uuid, option_id uuid, option_index integer, option_starting_city character varying, option_ending_city character varying, option_created_by character varying, option_created_at timestamp with time zone, ol_id uuid, location_id uuid, ol_sort_order integer, time_period text, loc_name text, loc_city text, loc_address text, loc_google_link text, loc_category text, loc_note text, loc_working_hours text, loc_requires_booking text)
+CREATE FUNCTION public.get_itinerary_tree(p_trip_id uuid) RETURNS TABLE(day_id uuid, day_date date, day_sort_order integer, day_created_at timestamp with time zone, day_active_option_id uuid, option_id uuid, option_index integer, option_starting_city character varying, option_ending_city character varying, option_created_by character varying, option_created_at timestamp with time zone, ol_id uuid, location_id uuid, ol_sort_order integer, time_period text, loc_name text, loc_city text, loc_address text, loc_google_link text, loc_category text, loc_note text, loc_working_hours text, loc_requires_booking text, loc_latitude double precision, loc_longitude double precision)
     LANGUAGE sql STABLE
     AS $$
     SELECT
@@ -220,7 +349,9 @@ CREATE FUNCTION public.get_itinerary_tree(p_trip_id uuid) RETURNS TABLE(day_id u
         l.category         AS loc_category,
         l.note             AS loc_note,
         l.working_hours    AS loc_working_hours,
-        l.requires_booking AS loc_requires_booking
+        l.requires_booking AS loc_requires_booking,
+        l.latitude         AS loc_latitude,
+        l.longitude        AS loc_longitude
     FROM trip_days d
     LEFT JOIN day_options o        ON o.day_id = d.day_id
     LEFT JOIN option_locations ol  ON ol.option_id = o.option_id
@@ -232,7 +363,7 @@ $$;
 
 ALTER FUNCTION public.get_itinerary_tree(p_trip_id uuid) OWNER TO postgres;
 
-CREATE FUNCTION public.get_itinerary_tree(p_trip_id uuid, p_user_id uuid DEFAULT NULL::uuid) RETURNS TABLE(day_id uuid, day_date date, day_sort_order integer, day_created_at timestamp with time zone, day_active_option_id uuid, option_id uuid, option_index integer, option_starting_city character varying, option_ending_city character varying, option_created_by character varying, option_created_at timestamp with time zone, ol_id uuid, location_id uuid, ol_sort_order integer, time_period text, loc_name text, loc_city text, loc_address text, loc_google_link text, loc_category text, loc_note text, loc_working_hours text, loc_requires_booking text, loc_photo_url text, loc_user_image_url text)
+CREATE FUNCTION public.get_itinerary_tree(p_trip_id uuid, p_user_id uuid DEFAULT NULL::uuid) RETURNS TABLE(day_id uuid, day_date date, day_sort_order integer, day_created_at timestamp with time zone, day_active_option_id uuid, option_id uuid, option_index integer, option_starting_city character varying, option_ending_city character varying, option_created_by character varying, option_created_at timestamp with time zone, ol_id uuid, location_id uuid, ol_sort_order integer, time_period text, loc_name text, loc_city text, loc_address text, loc_google_link text, loc_category text, loc_note text, loc_working_hours text, loc_requires_booking text, loc_photo_url text, loc_user_image_url text, loc_attribution_name text, loc_attribution_uri text, loc_latitude double precision, loc_longitude double precision)
     LANGUAGE sql STABLE
     AS $$
     SELECT
@@ -260,7 +391,11 @@ CREATE FUNCTION public.get_itinerary_tree(p_trip_id uuid, p_user_id uuid DEFAULT
         l.working_hours    AS loc_working_hours,
         l.requires_booking AS loc_requires_booking,
         pp.photo_url       AS loc_photo_url,
-        l.user_image_url   AS loc_user_image_url
+        l.user_image_url   AS loc_user_image_url,
+        pp.attribution_name AS loc_attribution_name,
+        pp.attribution_uri  AS loc_attribution_uri,
+        l.latitude         AS loc_latitude,
+        l.longitude        AS loc_longitude
     FROM trip_days d
     LEFT JOIN day_options o        ON o.day_id = d.day_id
     LEFT JOIN option_locations ol  ON ol.option_id = o.option_id
@@ -387,7 +522,9 @@ BEGIN
       pp.photo_url       AS loc_photo_url,
       l.user_image_url   AS loc_user_image_url,
       pp.attribution_name AS loc_attribution_name,
-      pp.attribution_uri  AS loc_attribution_uri
+      pp.attribution_uri  AS loc_attribution_uri,
+      l.latitude         AS loc_latitude,
+      l.longitude        AS loc_longitude
     FROM trip_days d
     LEFT JOIN day_options o        ON o.day_id = d.day_id
     LEFT JOIN option_locations ol  ON ol.option_id = o.option_id
@@ -456,6 +593,35 @@ END;
 $$;
 
 ALTER FUNCTION public.move_option_to_day(p_option_id uuid, p_source_day_id uuid, p_target_day_id uuid) OWNER TO postgres;
+
+CREATE FUNCTION public.persist_route_segments(p_route_id uuid, p_segment_rows jsonb, p_total_duration integer, p_total_distance integer) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    AS $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM option_routes WHERE route_id = p_route_id) THEN
+    RAISE EXCEPTION 'ROUTE_NOT_FOUND' USING ERRCODE = 'P0002';
+  END IF;
+
+  DELETE FROM route_segments WHERE route_id = p_route_id;
+
+  INSERT INTO route_segments (route_id, segment_order, from_location_id, to_location_id, segment_cache_id)
+  SELECT
+    p_route_id,
+    (r->>'segment_order')::integer,
+    (r->>'from_location_id')::uuid,
+    (r->>'to_location_id')::uuid,
+    (r->>'segment_cache_id')::uuid
+  FROM jsonb_array_elements(p_segment_rows) AS r;
+
+  UPDATE option_routes
+  SET
+    duration_seconds = p_total_duration,
+    distance_meters  = p_total_distance
+  WHERE route_id = p_route_id;
+END;
+$$;
+
+ALTER FUNCTION public.persist_route_segments(p_route_id uuid, p_segment_rows jsonb, p_total_duration integer, p_total_distance integer) OWNER TO postgres;
 
 CREATE FUNCTION public.reconcile_clear_dates(p_trip_id uuid, p_day_ids uuid[]) RETURNS void
     LANGUAGE plpgsql
@@ -619,6 +785,98 @@ $$;
 
 ALTER FUNCTION public.shift_day_dates(p_trip_id uuid, p_offset_days integer) OWNER TO postgres;
 
+CREATE TABLE public.trip_days (
+    day_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    trip_id uuid NOT NULL,
+    date date,
+    sort_order integer NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    active_option_id uuid
+);
+
+ALTER TABLE public.trip_days OWNER TO postgres;
+
+CREATE FUNCTION public.update_day_with_option_check(p_day_id uuid, p_trip_id uuid, p_date date, p_set_date boolean, p_sort_order integer, p_set_sort_order boolean, p_active_option_id uuid, p_set_active_option boolean) RETURNS SETOF public.trip_days
+    LANGUAGE plpgsql SECURITY DEFINER
+    AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM trip_days WHERE day_id = p_day_id AND trip_id = p_trip_id
+  ) THEN
+    RAISE EXCEPTION 'DAY_NOT_FOUND' USING ERRCODE = 'P0002';
+  END IF;
+
+  IF p_set_active_option AND p_active_option_id IS NOT NULL THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM day_options
+      WHERE option_id = p_active_option_id AND day_id = p_day_id
+    ) THEN
+      RAISE EXCEPTION 'INVALID_ACTIVE_OPTION_ID' USING ERRCODE = 'P0002';
+    END IF;
+  END IF;
+
+  RETURN QUERY
+  UPDATE trip_days
+  SET
+    date             = CASE WHEN p_set_date          THEN p_date             ELSE date             END,
+    sort_order       = CASE WHEN p_set_sort_order     THEN p_sort_order       ELSE sort_order       END,
+    active_option_id = CASE WHEN p_set_active_option  THEN p_active_option_id ELSE active_option_id END
+  WHERE day_id = p_day_id
+    AND trip_id = p_trip_id
+  RETURNING *;
+END;
+$$;
+
+ALTER FUNCTION public.update_day_with_option_check(p_day_id uuid, p_trip_id uuid, p_date date, p_set_date boolean, p_sort_order integer, p_set_sort_order boolean, p_active_option_id uuid, p_set_active_option boolean) OWNER TO postgres;
+
+CREATE TABLE public.day_options (
+    option_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    day_id uuid NOT NULL,
+    option_index integer NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    starting_city character varying(255),
+    ending_city character varying(255),
+    created_by character varying(255)
+);
+
+ALTER TABLE public.day_options OWNER TO postgres;
+
+CREATE FUNCTION public.update_option_with_conflict_check(p_option_id uuid, p_day_id uuid, p_option_index integer, p_set_option_index boolean, p_starting_city character varying, p_set_starting_city boolean, p_ending_city character varying, p_set_ending_city boolean, p_created_by character varying, p_set_created_by boolean) RETURNS SETOF public.day_options
+    LANGUAGE plpgsql SECURITY DEFINER
+    AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM day_options WHERE option_id = p_option_id AND day_id = p_day_id
+  ) THEN
+    RAISE EXCEPTION 'OPTION_NOT_FOUND' USING ERRCODE = 'P0002';
+  END IF;
+
+  IF p_set_option_index AND p_option_index IS NOT NULL THEN
+    IF EXISTS (
+      SELECT 1 FROM day_options
+      WHERE day_id = p_day_id
+        AND option_index = p_option_index
+        AND option_id <> p_option_id
+    ) THEN
+      RAISE EXCEPTION 'OPTION_INDEX_CONFLICT' USING ERRCODE = 'P0001';
+    END IF;
+  END IF;
+
+  RETURN QUERY
+  UPDATE day_options
+  SET
+    option_index   = CASE WHEN p_set_option_index    THEN p_option_index    ELSE option_index   END,
+    starting_city  = CASE WHEN p_set_starting_city   THEN p_starting_city   ELSE starting_city  END,
+    ending_city    = CASE WHEN p_set_ending_city      THEN p_ending_city     ELSE ending_city    END,
+    created_by     = CASE WHEN p_set_created_by       THEN p_created_by      ELSE created_by     END
+  WHERE option_id = p_option_id
+    AND day_id = p_day_id
+  RETURNING *;
+END;
+$$;
+
+ALTER FUNCTION public.update_option_with_conflict_check(p_option_id uuid, p_day_id uuid, p_option_index integer, p_set_option_index boolean, p_starting_city character varying, p_set_starting_city boolean, p_ending_city character varying, p_set_ending_city boolean, p_created_by character varying, p_set_created_by boolean) OWNER TO postgres;
+
 CREATE FUNCTION public.update_route_with_stops(p_route_id uuid, p_option_id uuid, p_transport_mode text DEFAULT NULL::text, p_label text DEFAULT NULL::text, p_option_location_ids uuid[] DEFAULT NULL::uuid[]) RETURNS TABLE(route_id uuid, option_id uuid, label text, transport_mode text, duration_seconds integer, distance_meters integer, sort_order integer)
     LANGUAGE plpgsql SECURITY DEFINER
     AS $$
@@ -694,18 +952,6 @@ CREATE FUNCTION public.verify_resource_chain(p_trip_id uuid, p_user_id uuid, p_d
 $$;
 
 ALTER FUNCTION public.verify_resource_chain(p_trip_id uuid, p_user_id uuid, p_day_id uuid, p_option_id uuid) OWNER TO postgres;
-
-CREATE TABLE public.day_options (
-    option_id uuid DEFAULT gen_random_uuid() NOT NULL,
-    day_id uuid NOT NULL,
-    option_index integer NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    starting_city character varying(255),
-    ending_city character varying(255),
-    created_by character varying(255)
-);
-
-ALTER TABLE public.day_options OWNER TO postgres;
 
 CREATE TABLE public.locations (
     location_id uuid DEFAULT gen_random_uuid() NOT NULL,
@@ -804,59 +1050,6 @@ CREATE TABLE public.route_stops (
 );
 
 ALTER TABLE public.route_stops OWNER TO postgres;
-
-CREATE TABLE public.segment_cache (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    origin_place_id text,
-    destination_place_id text,
-    origin_lat double precision,
-    origin_lng double precision,
-    destination_lat double precision,
-    destination_lng double precision,
-    transport_mode text NOT NULL,
-    cache_key text NOT NULL,
-    distance_meters integer,
-    duration_seconds integer,
-    encoded_polyline text,
-    provider text DEFAULT 'google'::text NOT NULL,
-    raw_provider_response jsonb,
-    status text DEFAULT 'success'::text NOT NULL,
-    error_message text,
-    calculated_at timestamp with time zone DEFAULT now() NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    input_fingerprint text,
-    error_type text,
-    error_code text,
-    provider_http_status integer,
-    last_attempt_at timestamp with time zone,
-    next_retry_at timestamp with time zone,
-    cache_expires_at timestamp with time zone,
-    retry_count integer DEFAULT 0 NOT NULL,
-    CONSTRAINT segment_cache_status_check CHECK ((status = ANY (ARRAY['success'::text, 'retryable_error'::text, 'config_error'::text, 'input_error'::text, 'no_route'::text]))),
-    CONSTRAINT segment_cache_transport_mode_check CHECK ((transport_mode = ANY (ARRAY['walk'::text, 'drive'::text, 'transit'::text])))
-);
-
-ALTER TABLE public.segment_cache OWNER TO postgres;
-
-COMMENT ON TABLE public.segment_cache IS 'Reusable cache of route segment results (Google Routes API); keyed by origin/dest place_id + transport_mode';
-
-COMMENT ON COLUMN public.segment_cache.input_fingerprint IS 'Hash of origin/dest place_id + lat/lng + mode; cache invalid when fingerprint changes';
-
-COMMENT ON COLUMN public.segment_cache.next_retry_at IS 'Earliest time to retry on user view (no auto-retry)';
-
-COMMENT ON COLUMN public.segment_cache.cache_expires_at IS 'For success rows: TRANSIT TTL; NULL = indefinite (WALK/DRIVE)';
-
-CREATE TABLE public.trip_days (
-    day_id uuid DEFAULT gen_random_uuid() NOT NULL,
-    trip_id uuid NOT NULL,
-    date date,
-    sort_order integer NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    active_option_id uuid
-);
-
-ALTER TABLE public.trip_days OWNER TO postgres;
 
 CREATE TABLE public.trip_shares (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
@@ -1172,6 +1365,13 @@ GRANT ALL ON TABLE public.option_locations TO service_role;
 GRANT ALL ON FUNCTION public.batch_insert_option_locations(p_option_id uuid, p_location_ids uuid[], p_sort_orders integer[], p_time_periods text[]) TO authenticated;
 GRANT ALL ON FUNCTION public.batch_insert_option_locations(p_option_id uuid, p_location_ids uuid[], p_sort_orders integer[], p_time_periods text[]) TO service_role;
 
+GRANT ALL ON TABLE public.segment_cache TO authenticated;
+GRANT ALL ON TABLE public.segment_cache TO service_role;
+
+REVOKE ALL ON FUNCTION public.batch_upsert_segment_cache(p_rows jsonb) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.batch_upsert_segment_cache(p_rows jsonb) TO authenticated;
+GRANT ALL ON FUNCTION public.batch_upsert_segment_cache(p_rows jsonb) TO service_role;
+
 GRANT ALL ON FUNCTION public.create_route_with_stops(p_option_id uuid, p_transport_mode character varying, p_label character varying, p_option_location_ids uuid[]) TO authenticated;
 GRANT ALL ON FUNCTION public.create_route_with_stops(p_option_id uuid, p_transport_mode character varying, p_label character varying, p_option_location_ids uuid[]) TO service_role;
 
@@ -1188,22 +1388,29 @@ GRANT ALL ON FUNCTION public.get_itinerary_routes(p_option_ids uuid[]) TO authen
 GRANT ALL ON FUNCTION public.get_itinerary_routes(p_option_ids uuid[]) TO service_role;
 
 REVOKE ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid) TO anon;
 GRANT ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid) TO service_role;
 
 REVOKE ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid, p_user_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid, p_user_id uuid) TO anon;
 GRANT ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid, p_user_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid, p_user_id uuid) TO service_role;
 
 GRANT ALL ON FUNCTION public.get_option_routes(p_option_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.get_option_routes(p_option_id uuid) TO service_role;
 
+REVOKE ALL ON FUNCTION public.get_shared_trip_data(p_share_token text) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.get_shared_trip_data(p_share_token text) TO anon;
 GRANT ALL ON FUNCTION public.get_shared_trip_data(p_share_token text) TO authenticated;
 GRANT ALL ON FUNCTION public.get_shared_trip_data(p_share_token text) TO service_role;
 
 GRANT ALL ON FUNCTION public.move_option_to_day(p_option_id uuid, p_source_day_id uuid, p_target_day_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.move_option_to_day(p_option_id uuid, p_source_day_id uuid, p_target_day_id uuid) TO service_role;
+
+REVOKE ALL ON FUNCTION public.persist_route_segments(p_route_id uuid, p_segment_rows jsonb, p_total_duration integer, p_total_distance integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.persist_route_segments(p_route_id uuid, p_segment_rows jsonb, p_total_duration integer, p_total_distance integer) TO authenticated;
+GRANT ALL ON FUNCTION public.persist_route_segments(p_route_id uuid, p_segment_rows jsonb, p_total_duration integer, p_total_distance integer) TO service_role;
 
 GRANT ALL ON FUNCTION public.reconcile_clear_dates(p_trip_id uuid, p_day_ids uuid[]) TO authenticated;
 GRANT ALL ON FUNCTION public.reconcile_clear_dates(p_trip_id uuid, p_day_ids uuid[]) TO service_role;
