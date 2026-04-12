@@ -1253,12 +1253,6 @@ GRANT ALL ON TABLE public.route_segments TO service_role;
 GRANT ALL ON TABLE public.route_stops TO authenticated;
 GRANT ALL ON TABLE public.route_stops TO service_role;
 
-GRANT ALL ON TABLE public.segment_cache TO authenticated;
-GRANT ALL ON TABLE public.segment_cache TO service_role;
-
-GRANT ALL ON TABLE public.trip_days TO authenticated;
-GRANT ALL ON TABLE public.trip_days TO service_role;
-
 GRANT ALL ON TABLE public.trip_shares TO authenticated;
 GRANT ALL ON TABLE public.trip_shares TO service_role;
 
