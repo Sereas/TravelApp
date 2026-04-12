@@ -326,15 +326,21 @@ async def _compute_one_segment_async(
     Returns (cache_key, row_dict).  Never raises — errors are encoded in the row.
     """
     cache_key_val = _cache_key(
-        origin_place_id, dest_place_id,
-        origin_lat, origin_lng,
-        dest_lat, dest_lng,
+        origin_place_id,
+        dest_place_id,
+        origin_lat,
+        origin_lng,
+        dest_lat,
+        dest_lng,
         transport_mode,
     )
     fingerprint = _input_fingerprint(
-        origin_place_id, dest_place_id,
-        origin_lat, origin_lng,
-        dest_lat, dest_lng,
+        origin_place_id,
+        dest_place_id,
+        origin_lat,
+        origin_lng,
+        dest_lat,
+        dest_lng,
         transport_mode,
     )
     now = _now_utc()
@@ -343,16 +349,23 @@ async def _compute_one_segment_async(
         try:
             leg = await asyncio.to_thread(
                 google_client.compute_leg,
-                origin_lat, origin_lng,
-                dest_lat, dest_lng,
+                origin_lat,
+                origin_lng,
+                dest_lat,
+                dest_lng,
                 transport_mode,
             )
             row = _build_segment_cache_row(
-                origin_place_id, dest_place_id,
-                origin_lat, origin_lng,
-                dest_lat, dest_lng,
-                transport_mode, now,
-                cache_key_val, fingerprint,
+                origin_place_id,
+                dest_place_id,
+                origin_lat,
+                origin_lng,
+                dest_lat,
+                dest_lng,
+                transport_mode,
+                now,
+                cache_key_val,
+                fingerprint,
                 existing_retry_count=0,
                 leg=leg,
             )
@@ -364,11 +377,16 @@ async def _compute_one_segment_async(
                 error_category="external_api",
             )
             row = _build_segment_cache_row(
-                origin_place_id, dest_place_id,
-                origin_lat, origin_lng,
-                dest_lat, dest_lng,
-                transport_mode, now,
-                cache_key_val, fingerprint,
+                origin_place_id,
+                dest_place_id,
+                origin_lat,
+                origin_lng,
+                dest_lat,
+                dest_lng,
+                transport_mode,
+                now,
+                cache_key_val,
+                fingerprint,
                 existing_retry_count=existing_retry_count,
                 error_exc=exc,
             )
@@ -571,9 +589,9 @@ async def _get_route_segments_impl(
     # ---------------------------------------------------------------------------
 
     # Per-segment inputs keyed by segment index
-    seg_inputs: list[dict] = []          # params for each segment (all N-1 segments)
+    seg_inputs: list[dict] = []  # params for each segment (all N-1 segments)
     cache_hit_rows: dict[int, dict] = {}  # seg_index → existing cache row (no Google needed)
-    needs_google: list[int] = []          # seg indices that need a Google call
+    needs_google: list[int] = []  # seg indices that need a Google call
     # Cache every row fetched in Step 1 (hit OR miss triggering recompute) so
     # Step 2 can read retry_count without issuing per-segment SELECTs. Avoids
     # the N+1 round-trips against `segment_cache` previously caused by a second
@@ -597,8 +615,7 @@ async def _get_route_segments_impl(
         to_lng = float(to_lng_raw or 0.0)
 
         missing_coords = (
-            from_lat_raw is None or from_lng_raw is None
-            or to_lat_raw is None or to_lng_raw is None
+            from_lat_raw is None or from_lng_raw is None or to_lat_raw is None or to_lng_raw is None
         )
 
         seg_inputs.append(
@@ -621,9 +638,7 @@ async def _get_route_segments_impl(
         fingerprint = _input_fingerprint(
             from_place, to_place, from_lat, from_lng, to_lat, to_lng, mode
         )
-        cache_key_val = _cache_key(
-            from_place, to_place, from_lat, from_lng, to_lat, to_lng, mode
-        )
+        cache_key_val = _cache_key(from_place, to_place, from_lat, from_lng, to_lat, to_lng, mode)
 
         # Check cache by segment order from existing route_segments
         existing_for_order = next(
@@ -669,8 +684,12 @@ async def _get_route_segments_impl(
             tasks.append(
                 _compute_one_segment_async(
                     google_client,
-                    s["from_place"], s["from_lat"], s["from_lng"],
-                    s["to_place"], s["to_lat"], s["to_lng"],
+                    s["from_place"],
+                    s["from_lat"],
+                    s["from_lng"],
+                    s["to_place"],
+                    s["to_lat"],
+                    s["to_lng"],
                     mode,
                     existing_retry,
                     semaphore,
@@ -691,22 +710,34 @@ async def _get_route_segments_impl(
                 s = seg_inputs[seg_i]
                 now = _now_utc()
                 ck = _cache_key(
-                    s["from_place"], s["to_place"],
-                    s["from_lat"], s["from_lng"],
-                    s["to_lat"], s["to_lng"],
+                    s["from_place"],
+                    s["to_place"],
+                    s["from_lat"],
+                    s["from_lng"],
+                    s["to_lat"],
+                    s["to_lng"],
                     mode,
                 )
                 fp = _input_fingerprint(
-                    s["from_place"], s["to_place"],
-                    s["from_lat"], s["from_lng"],
-                    s["to_lat"], s["to_lng"],
+                    s["from_place"],
+                    s["to_place"],
+                    s["from_lat"],
+                    s["from_lng"],
+                    s["to_lat"],
+                    s["to_lng"],
                     mode,
                 )
                 err_row = _build_segment_cache_row(
-                    s["from_place"], s["to_place"],
-                    s["from_lat"], s["from_lng"],
-                    s["to_lat"], s["to_lng"],
-                    mode, now, ck, fp,
+                    s["from_place"],
+                    s["to_place"],
+                    s["from_lat"],
+                    s["from_lng"],
+                    s["to_lat"],
+                    s["to_lng"],
+                    mode,
+                    now,
+                    ck,
+                    fp,
                     existing_retry_count=0,
                     error_exc=r,
                 )
@@ -720,15 +751,21 @@ async def _get_route_segments_impl(
         for i in needs_google:
             s = seg_inputs[i]
             ck = _cache_key(
-                s["from_place"], s["to_place"],
-                s["from_lat"], s["from_lng"],
-                s["to_lat"], s["to_lng"],
+                s["from_place"],
+                s["to_place"],
+                s["from_lat"],
+                s["from_lng"],
+                s["to_lat"],
+                s["to_lng"],
                 mode,
             )
             fp = _input_fingerprint(
-                s["from_place"], s["to_place"],
-                s["from_lat"], s["from_lng"],
-                s["to_lat"], s["to_lng"],
+                s["from_place"],
+                s["to_place"],
+                s["from_lat"],
+                s["from_lng"],
+                s["to_lat"],
+                s["to_lng"],
                 mode,
             )
             row = {
@@ -760,11 +797,9 @@ async def _get_route_segments_impl(
     computed_rows_by_cache_key: dict[str, dict] = {}
     if google_results:
         rows_to_upsert = [row for (_ck, row) in google_results.values()]
-        upserted = supabase.rpc(
-            "batch_upsert_segment_cache", {"p_rows": rows_to_upsert}
-        ).execute()
+        upserted = supabase.rpc("batch_upsert_segment_cache", {"p_rows": rows_to_upsert}).execute()
         # Index returned rows by cache_key so we can look up IDs
-        for returned_row in (upserted.data or []):
+        for returned_row in upserted.data or []:
             ck = returned_row.get("cache_key") or ""
             computed_rows_by_cache_key[ck] = returned_row
         # Fall back to our built rows for any that didn't return (shouldn't happen)
@@ -864,16 +899,12 @@ async def _get_route_segments_impl(
             return True  # new computation, always persist
         if len(existing_segments) != len(persist_segment_rows):
             return True  # structural change
-        existing_by_order = {
-            int(s["segment_order"]): s for s in existing_segments
-        }
+        existing_by_order = {int(s["segment_order"]): s for s in existing_segments}
         for row in persist_segment_rows:
             existing_row = existing_by_order.get(int(row["segment_order"]))
             if existing_row is None:
                 return True
-            if str(existing_row.get("segment_cache_id")) != str(
-                row["segment_cache_id"]
-            ):
+            if str(existing_row.get("segment_cache_id")) != str(row["segment_cache_id"]):
                 return True
         if int(route.get("duration_seconds") or 0) != int(total_duration):
             return True

@@ -1432,14 +1432,25 @@ def mock_supabase_trips_and_days():
                 tid = str(params.get("p_trip_id", ""))
                 # Find the day
                 day = next(
-                    (d for d in self._days_store
-                     if str(d.get("day_id")) == did and str(d.get("trip_id")) == tid),
+                    (
+                        d
+                        for d in self._days_store
+                        if str(d.get("day_id")) == did and str(d.get("trip_id")) == tid
+                    ),
                     None,
                 )
                 if day is None:
+
                     def _raise_day_not_found():
-                        raise APIError({"message": "DAY_NOT_FOUND", "code": "P0002",
-                                        "hint": None, "details": None})
+                        raise APIError(
+                            {
+                                "message": "DAY_NOT_FOUND",
+                                "code": "P0002",
+                                "hint": None,
+                                "details": None,
+                            }
+                        )
+
                     return type("RpcChain", (), {"execute": lambda _: _raise_day_not_found()})()
                 # Validate active_option_id if p_set_active_option and value is not None
                 has_active = params.get("p_set_active_option")
@@ -1451,9 +1462,17 @@ def mock_supabase_trips_and_days():
                         for o in self._options_store
                     )
                     if not valid:
+
                         def _raise_invalid_option():
-                            raise APIError({"message": "INVALID_ACTIVE_OPTION_ID",
-                                            "code": "P0002", "hint": None, "details": None})
+                            raise APIError(
+                                {
+                                    "message": "INVALID_ACTIVE_OPTION_ID",
+                                    "code": "P0002",
+                                    "hint": None,
+                                    "details": None,
+                                }
+                            )
+
                         chain = {"execute": lambda _: _raise_invalid_option()}
                         return type("RpcChain", (), chain)()
                 # Apply updates
@@ -1473,14 +1492,25 @@ def mock_supabase_trips_and_days():
                 did = str(params.get("p_day_id", ""))
                 # Find the option
                 option = next(
-                    (o for o in self._options_store
-                     if str(o.get("option_id")) == oid and str(o.get("day_id")) == did),
+                    (
+                        o
+                        for o in self._options_store
+                        if str(o.get("option_id")) == oid and str(o.get("day_id")) == did
+                    ),
                     None,
                 )
                 if option is None:
+
                     def _raise_option_not_found():
-                        raise APIError({"message": "OPTION_NOT_FOUND", "code": "P0002",
-                                        "hint": None, "details": None})
+                        raise APIError(
+                            {
+                                "message": "OPTION_NOT_FOUND",
+                                "code": "P0002",
+                                "hint": None,
+                                "details": None,
+                            }
+                        )
+
                     return type("RpcChain", (), {"execute": lambda _: _raise_option_not_found()})()
                 # Check option_index conflict
                 if params.get("p_set_option_index") and params.get("p_option_index") is not None:
@@ -1492,9 +1522,17 @@ def mock_supabase_trips_and_days():
                         for o in self._options_store
                     )
                     if conflict:
+
                         def _raise_conflict():
-                            raise APIError({"message": "OPTION_INDEX_CONFLICT",
-                                            "code": "P0001", "hint": None, "details": None})
+                            raise APIError(
+                                {
+                                    "message": "OPTION_INDEX_CONFLICT",
+                                    "code": "P0001",
+                                    "hint": None,
+                                    "details": None,
+                                }
+                            )
+
                         return type("RpcChain", (), {"execute": lambda _: _raise_conflict()})()
                     option["option_index"] = new_idx
                 if params.get("p_set_starting_city"):

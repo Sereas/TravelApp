@@ -157,12 +157,18 @@ class _InstrumentedMock:
             return self._counted(_LocationsTable(self._locations), "locations")
         if name == "place_photos":
             return self._counted(_PlacePhotosTable(), "place_photos")
+
         # Any other table (e.g. segment_cache) returns empty
         class _Empty:
-            def select(self, *a): return self
-            def eq(self, *a): return self
+            def select(self, *a):
+                return self
+
+            def eq(self, *a):
+                return self
+
             def execute(self):
                 return type("Result", (), {"data": []})()
+
         return self._counted(_Empty(), name)
 
     def rpc(self, name: str, params=None):
@@ -284,11 +290,7 @@ def test_update_location_round_trip_budget_with_google_place_id(
     location_id = str(uuid4())
 
     trips = {trip_id: _make_trip(trip_id, mock_user_id)}
-    locations = {
-        location_id: _make_location(
-            location_id, trip_id, google_place_id="ChIJtest1234"
-        )
-    }
+    locations = {location_id: _make_location(location_id, trip_id, google_place_id="ChIJtest1234")}
     mock_sb = _InstrumentedMock(trips, locations, counter)
 
     async def override_user():

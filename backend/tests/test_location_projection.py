@@ -50,9 +50,7 @@ def _make_supabase_with_locations(locations: list[dict], photos: list[dict] | No
                 ]
                 return type("R", (), {"data": filtered})()
             if self._trip_id is not None:
-                filtered = [
-                    r for r in self._rows if str(r.get("trip_id")) == self._trip_id
-                ]
+                filtered = [r for r in self._rows if str(r.get("trip_id")) == self._trip_id]
                 return type("R", (), {"data": filtered})()
             return type("R", (), {"data": self._rows})()
 
@@ -119,10 +117,20 @@ def test_select_locations_by_location_ids():
     loc_id_a = str(uuid4())
     loc_id_b = str(uuid4())
     locations = [
-        {"location_id": loc_id_a, "trip_id": trip_id, "name": "A",
-         "latitude": 1.0, "longitude": 2.0},
-        {"location_id": loc_id_b, "trip_id": trip_id, "name": "B",
-         "latitude": 3.0, "longitude": 4.0},
+        {
+            "location_id": loc_id_a,
+            "trip_id": trip_id,
+            "name": "A",
+            "latitude": 1.0,
+            "longitude": 2.0,
+        },
+        {
+            "location_id": loc_id_b,
+            "trip_id": trip_id,
+            "name": "B",
+            "latitude": 3.0,
+            "longitude": 4.0,
+        },
     ]
     sb = _make_supabase_with_locations(locations)
     result = select_locations(sb, location_ids=[loc_id_a])
@@ -179,10 +187,7 @@ def test_enrich_locations_with_photos_injects_image_url():
 
 def test_enrich_locations_single_query_no_n_plus_one():
     """Must issue exactly ONE query regardless of how many locations have a google_place_id."""
-    locs = {
-        str(uuid4()): {"google_place_id": f"gp_{i}", "name": f"Loc {i}"}
-        for i in range(5)
-    }
+    locs = {str(uuid4()): {"google_place_id": f"gp_{i}", "name": f"Loc {i}"} for i in range(5)}
     execute_count = 0
 
     class _Table:

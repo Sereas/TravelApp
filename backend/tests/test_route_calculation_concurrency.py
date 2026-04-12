@@ -85,10 +85,7 @@ def _make_route_row() -> dict:
 def _make_stop_rows() -> list[dict]:
     """4 stops (option_location_ids) → 3 segments."""
     ol_ids = [str(uuid4()) for _ in range(4)]
-    return [
-        {"option_location_id": ol_ids[i], "stop_order": i}
-        for i in range(4)
-    ], ol_ids
+    return [{"option_location_id": ol_ids[i], "stop_order": i} for i in range(4)], ol_ids
 
 
 def _make_ol_rows(ol_ids: list[str]) -> list[dict]:
@@ -110,15 +107,21 @@ def _make_location_rows() -> list[dict]:
 def _cache_row_for_segment(i: int, mode: str = "walk") -> dict:
     """Pre-built valid success cache row for segment i → i+1."""
     key = _cache_key(
-        _PLACE_IDS[i], _PLACE_IDS[i + 1],
-        _LATS[i], _LNGS[i],
-        _LATS[i + 1], _LNGS[i + 1],
+        _PLACE_IDS[i],
+        _PLACE_IDS[i + 1],
+        _LATS[i],
+        _LNGS[i],
+        _LATS[i + 1],
+        _LNGS[i + 1],
         mode,
     )
     fp = _input_fingerprint(
-        _PLACE_IDS[i], _PLACE_IDS[i + 1],
-        _LATS[i], _LNGS[i],
-        _LATS[i + 1], _LNGS[i + 1],
+        _PLACE_IDS[i],
+        _PLACE_IDS[i + 1],
+        _LATS[i],
+        _LNGS[i],
+        _LATS[i + 1],
+        _LNGS[i + 1],
         mode,
     )
     return {
@@ -165,9 +168,7 @@ class _SupabaseMock:
         self._existing_segments = existing_segments or []
         # Build cache_rows_by_id so _CacheTable.in_("id", ...) lookups also work
         # for the skip-persist test path (existing_segments reference ids).
-        self._cache_rows_by_id = {
-            row["id"]: row for row in self._cache_rows_by_key.values()
-        }
+        self._cache_rows_by_id = {row["id"]: row for row in self._cache_rows_by_key.values()}
         self._route_row = route_row_override or _make_route_row()
         # Track RPC call counts
         self.batch_upsert_calls: list[Any] = []
@@ -185,22 +186,24 @@ class _SupabaseMock:
             rows_in = params.get("p_rows", [])
             out = []
             for r in rows_in:
-                out.append({
-                    "id": str(uuid4()),
-                    "cache_key": r.get("cache_key"),
-                    "status": r.get("status", STATUS_SUCCESS),
-                    "input_fingerprint": r.get("input_fingerprint"),
-                    "distance_meters": r.get("distance_meters"),
-                    "duration_seconds": r.get("duration_seconds"),
-                    "encoded_polyline": r.get("encoded_polyline"),
-                    "error_type": r.get("error_type"),
-                    "error_code": r.get("error_code"),
-                    "error_message": r.get("error_message"),
-                    "provider_http_status": r.get("provider_http_status"),
-                    "next_retry_at": r.get("next_retry_at"),
-                    "cache_expires_at": r.get("cache_expires_at"),
-                    "retry_count": r.get("retry_count", 0),
-                })
+                out.append(
+                    {
+                        "id": str(uuid4()),
+                        "cache_key": r.get("cache_key"),
+                        "status": r.get("status", STATUS_SUCCESS),
+                        "input_fingerprint": r.get("input_fingerprint"),
+                        "distance_meters": r.get("distance_meters"),
+                        "duration_seconds": r.get("duration_seconds"),
+                        "encoded_polyline": r.get("encoded_polyline"),
+                        "error_type": r.get("error_type"),
+                        "error_code": r.get("error_code"),
+                        "error_message": r.get("error_message"),
+                        "provider_http_status": r.get("provider_http_status"),
+                        "next_retry_at": r.get("next_retry_at"),
+                        "cache_expires_at": r.get("cache_expires_at"),
+                        "retry_count": r.get("retry_count", 0),
+                    }
+                )
             return _ChainResult(out)
         if name == "persist_route_segments":
             self.persist_calls.append(params)
@@ -251,9 +254,7 @@ class _RouteTable:
     def select(self, *args):
         # args is a tuple of 1 string like "col_a, col_b, col_c, ..."
         if args and isinstance(args[0], str):
-            self._selected_cols = [
-                c.strip() for c in args[0].split(",") if c.strip()
-            ]
+            self._selected_cols = [c.strip() for c in args[0].split(",") if c.strip()]
         else:
             self._selected_cols = None  # no filter
         return self
@@ -372,9 +373,7 @@ class _CacheTable:
             row = self._rows_by_key.get(self._key_filter)
             return type("R", (), {"data": [row] if row else []})()
         if self._id_list is not None:
-            matched = [
-                self._rows_by_id[i] for i in self._id_list if i in self._rows_by_id
-            ]
+            matched = [self._rows_by_id[i] for i in self._id_list if i in self._rows_by_id]
             return type("R", (), {"data": matched})()
         return type("R", (), {"data": []})()
 
@@ -605,13 +604,11 @@ async def test_cache_hit_skips_google_call():
     # batch_upsert must contain exactly 1 row (the newly-computed segment),
     # not 3 — cached segments should not be re-upserted on every view.
     assert len(sb.batch_upsert_calls) == 1, (
-        f"Expected batch_upsert_segment_cache called once, "
-        f"got {len(sb.batch_upsert_calls)}."
+        f"Expected batch_upsert_segment_cache called once, got {len(sb.batch_upsert_calls)}."
     )
     upserted_rows = sb.batch_upsert_calls[0]["p_rows"]
     assert len(upserted_rows) == 1, (
-        f"Expected batch_upsert to contain 1 row (the uncached segment), "
-        f"got {len(upserted_rows)}."
+        f"Expected batch_upsert to contain 1 row (the uncached segment), got {len(upserted_rows)}."
     )
 
 
@@ -698,8 +695,7 @@ async def test_force_refresh_recomputes_all():
 
     # Pre-seed ALL 3 segments as valid success cache rows
     cache_by_key = {
-        _cache_row_for_segment(i)["cache_key"]: _cache_row_for_segment(i)
-        for i in range(3)
+        _cache_row_for_segment(i)["cache_key"]: _cache_row_for_segment(i) for i in range(3)
     }
 
     sb = _SupabaseMock(stop_rows, ol_rows, cache_rows_by_key=cache_by_key)
@@ -716,8 +712,7 @@ async def test_force_refresh_recomputes_all():
     )
 
     assert google_client.compute_leg.call_count == 3, (
-        f"Expected 3 Google calls (force_refresh=True), "
-        f"got {google_client.compute_leg.call_count}."
+        f"Expected 3 Google calls (force_refresh=True), got {google_client.compute_leg.call_count}."
     )
 
 
@@ -755,20 +750,21 @@ async def test_concurrency_capped_by_semaphore():
         return await tracked_compute_leg(*args)
 
     # Override the constant to 2 to verify the cap is actually enforced
-    with patch.object(rc, "GOOGLE_ROUTES_MAX_CONCURRENT_LEGS", 2), patch(
-        "asyncio.to_thread", patched_to_thread
+    with (
+        patch.object(rc, "GOOGLE_ROUTES_MAX_CONCURRENT_LEGS", 2),
+        patch("asyncio.to_thread", patched_to_thread),
     ):
-            google_client = MagicMock()
-            # compute_leg will be called via asyncio.to_thread which we patch
-            google_client.compute_leg.side_effect = lambda *a, **kw: _make_leg()
+        google_client = MagicMock()
+        # compute_leg will be called via asyncio.to_thread which we patch
+        google_client.compute_leg.side_effect = lambda *a, **kw: _make_leg()
 
-            await rc.get_route_with_fresh_segments(
-                sb,
-                ROUTE_ID,
-                transport_mode="walk",
-                force_refresh=False,
-                google_routes_client=google_client,
-            )
+        await rc.get_route_with_fresh_segments(
+            sb,
+            ROUTE_ID,
+            transport_mode="walk",
+            force_refresh=False,
+            google_routes_client=google_client,
+        )
 
     assert max_in_flight <= 2, (
         f"Expected max concurrency ≤ 2 (semaphore cap), got {max_in_flight}. "

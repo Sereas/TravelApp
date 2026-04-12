@@ -151,12 +151,15 @@ async def test_import_yields_scraping_started_first():
     async def _empty_extract(url):
         return []
 
-    with patch(
-        "backend.app.services.google_list_import.GoogleListScraper"
-    ) as MockScraper:
+    with patch("backend.app.services.google_list_import.GoogleListScraper") as MockScraper:
         MockScraper.return_value.extract_places = _empty_extract
         gen = import_google_list_iter(
-            sb, pc, trip_id=trip_id, user_id=user_id, user_email=None, url="https://maps.google.com/x"
+            sb,
+            pc,
+            trip_id=trip_id,
+            user_id=user_id,
+            user_email=None,
+            url="https://maps.google.com/x",
         )
         first = await gen.__anext__()
     assert isinstance(first, ScrapingStarted)
@@ -181,13 +184,16 @@ async def test_import_happy_path_event_sequence():
     async def _fake_extract(url):
         return places
 
-    with patch(
-        "backend.app.services.google_list_import.GoogleListScraper"
-    ) as MockScraper:
+    with patch("backend.app.services.google_list_import.GoogleListScraper") as MockScraper:
         MockScraper.return_value.extract_places = _fake_extract
         events = await _collect(
             import_google_list_iter(
-                sb, pc, trip_id=trip_id, user_id=user_id, user_email="u@test.com", url="https://maps.google.com/x"
+                sb,
+                pc,
+                trip_id=trip_id,
+                user_id=user_id,
+                user_email="u@test.com",
+                url="https://maps.google.com/x",
             )
         )
 
@@ -220,13 +226,16 @@ async def test_import_deduplicates_existing_place_ids():
     async def _fake_extract(url):
         return places
 
-    with patch(
-        "backend.app.services.google_list_import.GoogleListScraper"
-    ) as MockScraper:
+    with patch("backend.app.services.google_list_import.GoogleListScraper") as MockScraper:
         MockScraper.return_value.extract_places = _fake_extract
         events = await _collect(
             import_google_list_iter(
-                sb, pc, trip_id=trip_id, user_id=user_id, user_email=None, url="https://maps.google.com/x"
+                sb,
+                pc,
+                trip_id=trip_id,
+                user_id=user_id,
+                user_email=None,
+                url="https://maps.google.com/x",
             )
         )
 
@@ -248,13 +257,16 @@ async def test_import_yields_import_error_on_scrape_failure():
     async def _fail_extract(url):
         raise GoogleListParseError("CAPTCHA blocked")
 
-    with patch(
-        "backend.app.services.google_list_import.GoogleListScraper"
-    ) as MockScraper:
+    with patch("backend.app.services.google_list_import.GoogleListScraper") as MockScraper:
         MockScraper.return_value.extract_places = _fail_extract
         events = await _collect(
             import_google_list_iter(
-                sb, pc, trip_id=trip_id, user_id=str(uuid4()), user_email=None, url="https://maps.google.com/x"
+                sb,
+                pc,
+                trip_id=trip_id,
+                user_id=str(uuid4()),
+                user_email=None,
+                url="https://maps.google.com/x",
             )
         )
 
@@ -268,9 +280,7 @@ async def test_import_single_batch_insert():
     trip_id = str(uuid4())
     user_id = str(uuid4())
     places = [_FakePlace(f"Place {i}", float(i), float(i)) for i in range(4)]
-    resolutions = {
-        f"Place {i}": _fake_resolved(f"Place {i}", f"gp_{i}") for i in range(4)
-    }
+    resolutions = {f"Place {i}": _fake_resolved(f"Place {i}", f"gp_{i}") for i in range(4)}
     insert_call_count = 0
 
     class _CountingLocTable:
@@ -302,11 +312,15 @@ async def test_import_single_batch_insert():
             if name == "locations":
                 return _CountingLocTable()
             return MagicMock(
-                select=MagicMock(return_value=MagicMock(
-                    in_=MagicMock(return_value=MagicMock(
-                        execute=MagicMock(return_value=type("R", (), {"data": []})())
-                    ))
-                ))
+                select=MagicMock(
+                    return_value=MagicMock(
+                        in_=MagicMock(
+                            return_value=MagicMock(
+                                execute=MagicMock(return_value=type("R", (), {"data": []})())
+                            )
+                        )
+                    )
+                )
             )
 
     pc = _make_places_client(resolutions)
@@ -314,13 +328,16 @@ async def test_import_single_batch_insert():
     async def _fake_extract(url):
         return places
 
-    with patch(
-        "backend.app.services.google_list_import.GoogleListScraper"
-    ) as MockScraper:
+    with patch("backend.app.services.google_list_import.GoogleListScraper") as MockScraper:
         MockScraper.return_value.extract_places = _fake_extract
         await _collect(
             import_google_list_iter(
-                _SB(), pc, trip_id=trip_id, user_id=user_id, user_email=None, url="https://maps.google.com/x"
+                _SB(),
+                pc,
+                trip_id=trip_id,
+                user_id=user_id,
+                user_email=None,
+                url="https://maps.google.com/x",
             )
         )
 

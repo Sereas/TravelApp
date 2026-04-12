@@ -79,12 +79,7 @@ class ImportError:
 
 # Union type for type checkers / documentation
 ImportEvent = (
-    ScrapingStarted
-    | ScrapingDone
-    | EnrichingItem
-    | SavingStarted
-    | ImportComplete
-    | ImportError
+    ScrapingStarted | ScrapingDone | EnrichingItem | SavingStarted | ImportComplete | ImportError
 )
 
 
@@ -231,10 +226,7 @@ async def import_google_list_iter(
 
     # Fetch existing place_ids for dedup (single DB query)
     existing_rows = (
-        supabase.table("locations")
-        .select("google_place_id")
-        .eq("trip_id", trip_id)
-        .execute()
+        supabase.table("locations").select("google_place_id").eq("trip_id", trip_id).execute()
     ).data or []
     existing_place_ids: set[str] = {
         r["google_place_id"] for r in existing_rows if r.get("google_place_id")

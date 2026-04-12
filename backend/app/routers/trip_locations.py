@@ -179,7 +179,11 @@ async def add_location(
     gp_id = loc.get("google_place_id")
     if gp_id and body.photo_resource_name and places_client:
         background_tasks.add_task(
-            ensure_place_photo, supabase, places_client, gp_id, body.photo_resource_name,
+            ensure_place_photo,
+            supabase,
+            places_client,
+            gp_id,
+            body.photo_resource_name,
         )
     logger.info(
         "location_added",
@@ -311,7 +315,10 @@ async def batch_add_locations(
             if item.google_place_id and item.photo_resource_name:
                 background_tasks.add_task(
                     ensure_place_photo,
-                    supabase, places_client, item.google_place_id, item.photo_resource_name,
+                    supabase,
+                    places_client,
+                    item.google_place_id,
+                    item.photo_resource_name,
                 )
     out = [_loc_to_response(full) for full in final_locs]
     logger.info("locations_batch_added", trip_id=str(trip_id), count=len(body))

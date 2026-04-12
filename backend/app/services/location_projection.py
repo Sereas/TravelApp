@@ -57,9 +57,7 @@ def select_locations(
     both = trip_id is not None and location_ids is not None
     neither = trip_id is None and location_ids is None
     if both or neither:
-        raise ValueError(
-            "select_locations requires exactly one of trip_id or location_ids"
-        )
+        raise ValueError("select_locations requires exactly one of trip_id or location_ids")
 
     if trip_id is not None:
         result = (
@@ -84,18 +82,14 @@ def select_locations(
 # ---------------------------------------------------------------------------
 
 
-def enrich_locations_with_photos(
-    supabase, locations_by_id: dict[str, dict]
-) -> None:
+def enrich_locations_with_photos(supabase, locations_by_id: dict[str, dict]) -> None:
     """Mutate each row in-place to add image_url / attribution_name / attribution_uri.
 
     Issues a SINGLE IN() query against place_photos regardless of list length.
     Rows without google_place_id get image_url=None.
     """
     place_ids = [
-        loc["google_place_id"]
-        for loc in locations_by_id.values()
-        if loc.get("google_place_id")
+        loc["google_place_id"] for loc in locations_by_id.values() if loc.get("google_place_id")
     ]
     if not place_ids:
         # Still stamp Nones so callers don't get KeyErrors
@@ -111,9 +105,7 @@ def enrich_locations_with_photos(
         .in_("google_place_id", place_ids)
         .execute()
     )
-    photo_map: dict[str, dict] = {
-        row["google_place_id"]: row for row in (photos.data or [])
-    }
+    photo_map: dict[str, dict] = {row["google_place_id"]: row for row in (photos.data or [])}
     for loc in locations_by_id.values():
         photo_row = photo_map.get(loc.get("google_place_id") or "")
         loc["image_url"] = photo_row["photo_url"] if photo_row else None

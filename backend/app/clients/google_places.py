@@ -26,11 +26,13 @@ _PLACE_ID_RE = re.compile(r"^[A-Za-z0-9_\-]+$")
 _PHOTO_RESOURCE_RE = re.compile(r"^places/[A-Za-z0-9_\-]+/photos/[A-Za-z0-9_\-]+$")
 
 # Allowed hosts for Google photo URIs (SSRF protection)
-_ALLOWED_PHOTO_HOSTS = frozenset({
-    "lh3.googleusercontent.com",
-    "streetviewpixels-pa.googleapis.com",
-    "maps.googleapis.com",
-})
+_ALLOWED_PHOTO_HOSTS = frozenset(
+    {
+        "lh3.googleusercontent.com",
+        "streetviewpixels-pa.googleapis.com",
+        "maps.googleapis.com",
+    }
+)
 
 
 class GooglePlacesDisabledError(RuntimeError):
