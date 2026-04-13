@@ -315,7 +315,7 @@ describe("PopupCard", () => {
 
   it("shows a BOOK badge when requires_booking is 'yes'", () => {
     renderPopupCard({ requires_booking: "yes" });
-    expect(screen.getByLabelText(/^book$/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/booking needed/i)).toBeInTheDocument();
   });
 
   it("does not show any booking badge when requires_booking is 'no'", () => {

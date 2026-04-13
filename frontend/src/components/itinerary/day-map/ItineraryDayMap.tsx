@@ -22,6 +22,9 @@ export interface ItineraryDayMapLocation {
   user_image_url?: string | null;
   requires_booking?: string | null;
   city?: string | null;
+  working_hours?: string | null;
+  useful_link?: string | null;
+  google_link?: string | null;
   note?: string | null;
 }
 
@@ -253,6 +256,10 @@ export function ItineraryDayMap({
             user_image_url={loc.user_image_url}
             requires_booking={loc.requires_booking}
             city={loc.city}
+
+            working_hours={loc.working_hours}
+            useful_link={loc.useful_link}
+            google_link={loc.google_link}
             note={loc.note}
             readOnly={readOnlyRef.current}
             onSaveNote={
@@ -273,7 +280,7 @@ export function ItineraryDayMap({
           offset: [0, -46] as Offset,
           closeButton: true,
           closeOnClick: false,
-          maxWidth: "240px",
+          maxWidth: "300px",
         }).setDOMContent(popupContentEl);
 
         popup.on("open", () => {
@@ -301,7 +308,7 @@ export function ItineraryDayMap({
           map.flyTo({
             center: [lng, lat],
             zoom: targetZoom,
-            offset: [0, 60],
+            offset: [0, 140],
             duration: 500,
           });
         });
@@ -755,6 +762,9 @@ export function ItineraryDayMap({
           user_image_url={loc.user_image_url}
           requires_booking={loc.requires_booking}
           city={loc.city}
+          working_hours={loc.working_hours}
+          useful_link={loc.useful_link}
+          google_link={loc.google_link}
           note={loc.note}
           readOnly={readOnlyRef.current}
           onSaveNote={

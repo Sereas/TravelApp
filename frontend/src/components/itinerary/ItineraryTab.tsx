@@ -102,6 +102,8 @@ function buildDayMapLocations(
       user_image_url: ol.location.user_image_url ?? null,
       requires_booking: ol.location.requires_booking ?? null,
       city: ol.location.city ?? null,
+      working_hours: ol.location.working_hours ?? null,
+      useful_link: ol.location.useful_link ?? null,
       note: ol.location.note ?? null,
     }));
 }
@@ -215,9 +217,7 @@ const SidebarMap = React.memo(function SidebarMap({
             locations={mapLocations}
             routes={mapRoutes}
             compact
-            onLocationNoteSave={readOnly ? undefined : onLocationNoteSave}
-            onLocationDelete={readOnly ? undefined : onLocationDelete}
-            readOnly={readOnly}
+            disablePopups
           />
         </div>
         <button

@@ -73,6 +73,9 @@ export function SidebarLocationMap({
           user_image_url: l.user_image_url,
           requires_booking: l.requires_booking,
           city: l.city,
+          working_hours: l.working_hours,
+          useful_link: l.useful_link,
+          google_link: l.google_link,
           note: l.note,
         })),
     [locations]

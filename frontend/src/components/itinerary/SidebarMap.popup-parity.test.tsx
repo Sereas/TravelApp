@@ -1,17 +1,15 @@
 /// <reference types="vitest/globals" />
 /**
- * Phase 3 — regression guard: SidebarMap threads mutation callbacks
- * through to ItineraryDayMap → LocationPopupCard (rendered imperatively).
+ * Regression guard: the itinerary tab's *expanded* dialog map threads
+ * mutation callbacks through to ItineraryDayMap → LocationPopupCard.
  *
- * Previously tracked as an expected-fail in Phase 0 (it.fails).
- * Phase 3 fixed the wiring; this is now a regular passing test.
+ * The compact sidebar preview uses `disablePopups` (no popup cards), so
+ * callback threading is only verified on the expanded dialog variant.
  *
  * How it works:
- *   - Render ItineraryTab with itineraryMutations (which carries the handlers).
+ *   - Render ItineraryTab, click "Expand map" to open the dialog.
  *   - Mock `createRoot` to capture the ReactElement passed to `root.render()`.
- *   - After render, inspect the captured PopupCard elements for the compact
- *     preview map to confirm they carry the callback props.
- *   - The assertion PASSES because SidebarMap now threads the callbacks through.
+ *   - Inspect the captured PopupCard elements for callback props.
  */
 
 import { render, screen } from "@testing-library/react";
@@ -119,6 +117,7 @@ const tripLocations: Location[] = [
     added_by_email: "alice@example.com",
     city: "Paris",
     working_hours: null,
+    useful_link: null,
     requires_booking: null,
     category: "Viewpoint",
     google_place_id: null,
@@ -152,6 +151,7 @@ const sampleOption: ItineraryOption = {
         category: "Viewpoint",
         note: null,
         working_hours: null,
+        useful_link: null,
         requires_booking: null,
         latitude: 48.8584,
         longitude: 2.2945,
@@ -231,14 +231,6 @@ describe("SidebarMap — callback parity with ItineraryDayMap", () => {
     capturedRoots.length = 0;
   });
 
-  /**
-   * Phase 3 fix: SidebarMap now threads `handleLocationNoteSave` /
-   * `handleLocationDelete` from itineraryMutations through to ItineraryDayMap
-   * → LocationPopupCard (rendered imperatively via createRoot).
-   *
-   * We capture the ReactElement passed to popupRoot.render() and assert the
-   * LocationPopupCard received defined callback props.
-   */
   it("test_itinerary_sidebar_map_threads_callbacks_to_day_map", async () => {
     const mutations = buildItineraryMutations();
     const itineraryState = buildItineraryState();
@@ -263,11 +255,10 @@ describe("SidebarMap — callback parity with ItineraryDayMap", () => {
       </ReadOnlyProvider>
     );
 
-    // The compact preview renders ItineraryDayMap with popups enabled.
-    // capturedRoots will contain:
-    //   - marker roots (one per location) — rendered with MapMarker
-    //   - popup roots (one per location) — rendered with LocationPopupCard
-    // We look for a root whose lastElement has type === LocationPopupCard.
+    // Compact sidebar has disablePopups — no popup roots yet.
+    // Open the expanded dialog to get popup roots.
+    await userEvent.click(screen.getByLabelText("Expand map"));
+
     const popupRoot = capturedRoots.find(
       (r) =>
         r.lastElement !== null &&
@@ -276,11 +267,8 @@ describe("SidebarMap — callback parity with ItineraryDayMap", () => {
         (r.lastElement as { type: unknown }).type === LocationPopupCard
     );
 
-    // At minimum one LocationPopupCard must have been rendered.
     expect(popupRoot).toBeDefined();
 
-    // THE KEY ASSERTION: the LocationPopupCard must have received the callbacks
-    // (threaded through SidebarMap → ItineraryDayMap → createRoot popup render).
     const props = (
       popupRoot!.lastElement as {
         props: {
@@ -295,8 +283,6 @@ describe("SidebarMap — callback parity with ItineraryDayMap", () => {
   });
 
   it("test_itinerary_sidebar_map_read_only_omits_callbacks", async () => {
-    // When readOnly=true, SidebarMap must pass undefined callbacks to
-    // ItineraryDayMap so the popup has no edit/delete affordances.
     const mutations = buildItineraryMutations();
     const itineraryState = buildItineraryState();
 
@@ -316,6 +302,8 @@ describe("SidebarMap — callback parity with ItineraryDayMap", () => {
       </ReadOnlyProvider>
     );
 
+    await userEvent.click(screen.getByLabelText("Expand map"));
+
     const popupRoot = capturedRoots.find(
       (r) =>
         r.lastElement !== null &&
@@ -324,9 +312,6 @@ describe("SidebarMap — callback parity with ItineraryDayMap", () => {
         (r.lastElement as { type: unknown }).type === LocationPopupCard
     );
 
-    // Must capture a popup root — otherwise the test is vacuously passing
-    // and a regression that stops popup rendering would go unnoticed.
-    // This mirrors the strong assertion in the owner-mode test above.
     expect(popupRoot).toBeDefined();
 
     const props = (
@@ -338,8 +323,6 @@ describe("SidebarMap — callback parity with ItineraryDayMap", () => {
       }
     ).props;
 
-    // In read-only mode, callbacks must be undefined so PopupCard hides
-    // the edit/delete affordances.
     expect(props.onSaveNote).toBeUndefined();
     expect(props.onDelete).toBeUndefined();
   });

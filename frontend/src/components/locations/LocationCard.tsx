@@ -1,26 +1,31 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
+import type { Location } from "@/lib/api/types";
 import {
   CalendarCheck,
   CalendarPlus,
   Camera,
-  ChevronDown,
-  ChevronUp,
   Clock,
+  ExternalLink,
+  Info,
+  Link2,
   MapPin,
   MessageSquare,
-  MoreVertical,
   Pencil,
+
   Ticket,
   Trash2,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useReadOnly } from "@/lib/read-only-context";
 import {
   CATEGORY_META,
+  CATEGORY_OPTIONS,
   type CategoryKey,
   type DayChoice,
+  REQUIRES_BOOKING_OPTIONS,
 } from "@/lib/location-constants";
 import { CategoryIcon } from "./CategoryIcon";
 import {
@@ -30,6 +35,7 @@ import {
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { PhotoUploadDialog } from "./PhotoUploadDialog";
+import { api } from "@/lib/api";
 
 export interface LocationCardProps {
   id: string;
@@ -41,6 +47,7 @@ export interface LocationCardProps {
   category?: string | null;
   requires_booking?: string | null;
   working_hours?: string | null;
+  useful_link?: string | null;
   added_by_email?: string | null;
   image_url?: string | null;
   user_image_url?: string | null;
@@ -48,27 +55,26 @@ export interface LocationCardProps {
   attribution_uri?: string | null;
   onPhotoUpload?: (file: File) => Promise<void>;
   onPhotoReset?: () => Promise<void>;
-  /** When true, shows a visual indicator that this location is scheduled in the itinerary. */
   inItinerary?: boolean;
-  /** Which day(s) this location appears on in the itinerary (e.g. "May 15", "Day 1, Day 3"). */
   itineraryDayLabel?: string | null;
-  /** Available days for scheduling. When provided, shows a "Schedule" action. */
   availableDays?: DayChoice[];
-  /** Called when user picks a day to schedule this location to. */
   onScheduleToDay?: (dayId: string) => void;
-  /** Legacy: inline Edit/Delete. Prefer onEdit + deleteTrigger for menu. */
+  /** Legacy: inline Edit/Delete. Prefer deleteTrigger for menu. */
   actions?: React.ReactNode;
-  onEdit?: () => void;
   onDelete?: () => void;
-  /** ConfirmDialog (with trigger) for Delete; when provided, Delete in menu opens this. */
   deleteTrigger?: React.ReactNode;
-  /** Called when the card body is clicked (e.g. to focus on map). */
   onCardClick?: () => void;
-  /** When true, plays a one-shot ring-flash animation. Used to draw the
-   *  user's eye to the card after clicking its pin on the sidebar map. */
   isHighlighted?: boolean;
   className?: string;
+  /** Trip ID — required for inline editing saves. */
+  tripId?: string;
+  /** Called after a successful inline save. */
+  onLocationUpdated?: (updated: Location) => void;
 }
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function BookingBadge({ status }: { status: string }) {
   if (status === "no") return null;
@@ -102,15 +108,256 @@ function formatHoursLines(hours: string): string[] {
     .filter(Boolean);
 }
 
-const NOTE_LONG_THRESHOLD = 100;
-
-function notePreview(text: string): string {
-  if (text.length <= NOTE_LONG_THRESHOLD) return text;
-  const cut = text.slice(0, NOTE_LONG_THRESHOLD).trim();
-  const lastSpace = cut.lastIndexOf(" ");
-  const preview = lastSpace > 60 ? cut.slice(0, lastSpace) : cut;
-  return preview + "\u2026";
+function domainFromUrl(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
 }
+
+/** Returns true when the user has drag-selected text — used to avoid entering
+ *  inline-edit mode when the intent was text selection, not a click. */
+function hasTextSelection(): boolean {
+  const sel = window.getSelection();
+  return !!sel && sel.toString().length > 0;
+}
+
+// ---------------------------------------------------------------------------
+// Inline edit hook — single field at a time
+// ---------------------------------------------------------------------------
+
+type EditableField =
+  | "note"
+  | "address"
+  | "working_hours"
+  | "useful_link"
+  | "name"
+  | "city"
+  | "category"
+  | "requires_booking";
+
+function useInlineEdit(
+  tripId: string | undefined,
+  locationId: string,
+  onLocationUpdated: ((updated: Location) => void) | undefined
+) {
+  const [editingField, setEditingField] = useState<EditableField | null>(null);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [optimistic, setOptimistic] = useState<Partial<Record<EditableField, string | null>>>({});
+  const originalRef = useRef("");
+
+  const startEdit = useCallback(
+    (field: EditableField, currentValue: string) => {
+      setEditingField(field);
+      setDraft(currentValue);
+      originalRef.current = currentValue;
+      setError(null);
+    },
+    []
+  );
+
+  const cancelEdit = useCallback(() => {
+    setEditingField(null);
+    setDraft("");
+    setError(null);
+  }, []);
+
+  /** Return optimistic override if pending, otherwise the prop value. */
+  const getValue = useCallback(
+    (field: EditableField, propValue: string | null | undefined) => {
+      return field in optimistic ? optimistic[field] : propValue;
+    },
+    [optimistic]
+  );
+
+  const saveEdit = useCallback(async () => {
+    if (!tripId || !editingField) return;
+    const trimmed = draft.trim();
+    if (trimmed === originalRef.current) {
+      cancelEdit();
+      return;
+    }
+    const field = editingField;
+    const value = trimmed || null;
+    // Optimistic: close edit and show new value immediately
+    setOptimistic(prev => ({ ...prev, [field]: value }));
+    setEditingField(null);
+    setDraft("");
+    setError(null);
+    try {
+      const updated = await api.locations.update(tripId, locationId, { [field]: value });
+      onLocationUpdated?.(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setOptimistic(prev => { const next = { ...prev }; delete next[field]; return next; });
+    }
+  }, [tripId, locationId, editingField, draft, cancelEdit, onLocationUpdated]);
+
+  /** Optimistic save for select/dropdown fields. */
+  const saveSelect = useCallback(async (field: EditableField, value: string | null) => {
+    if (!tripId) return;
+    setOptimistic(prev => ({ ...prev, [field]: value }));
+    setError(null);
+    try {
+      const updated = await api.locations.update(tripId, locationId, { [field]: value });
+      onLocationUpdated?.(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setOptimistic(prev => { const next = { ...prev }; delete next[field]; return next; });
+    }
+  }, [tripId, locationId, onLocationUpdated]);
+
+  return { editingField, draft, setDraft, saving, error, startEdit, cancelEdit, saveEdit, saveSelect, getValue };
+}
+
+// ---------------------------------------------------------------------------
+// Inline editable text field
+// ---------------------------------------------------------------------------
+
+function InlineEditableField({
+  field,
+  value,
+  label,
+  icon: Icon,
+  placeholder,
+  editState,
+  readOnly,
+  multiline,
+  inputType = "text",
+}: {
+  field: EditableField;
+  value: string | null | undefined;
+  label: string;
+  icon?: React.ElementType;
+  placeholder?: string;
+  editState: ReturnType<typeof useInlineEdit>;
+  readOnly: boolean;
+  multiline?: boolean;
+  inputType?: "text" | "url";
+}) {
+  const isEditing = editState.editingField === field;
+  const canEdit = !readOnly && editState.editingField === null;
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      editState.cancelEdit();
+    } else if (e.key === "Enter" && (!multiline || !e.shiftKey)) {
+      e.preventDefault();
+      e.stopPropagation();
+      void editState.saveEdit();
+    }
+  };
+
+  // Place cursor at end of text when entering edit mode
+  const setEndRef = useCallback((el: HTMLInputElement | HTMLTextAreaElement | null) => {
+    if (el) {
+      const len = el.value.length;
+      el.setSelectionRange(len, len);
+    }
+  }, []);
+
+  if (isEditing) {
+    return (
+      <div className="flex flex-col gap-1">
+        <div className="flex items-start gap-1.5">
+          {Icon && <Icon size={11} className="mt-[5px] shrink-0 text-muted-foreground" />}
+          {multiline ? (
+            <textarea
+              ref={setEndRef}
+              aria-label={`Edit ${label}`}
+              value={editState.draft}
+              onChange={(e) => editState.setDraft(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onBlur={() => void editState.saveEdit()}
+              rows={2}
+              disabled={editState.saving}
+              autoFocus
+              className="w-full resize-none rounded-md border border-border bg-background px-2 py-1 text-xs leading-relaxed text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 disabled:opacity-50"
+              placeholder={placeholder}
+            />
+          ) : (
+            <input
+              ref={setEndRef}
+              aria-label={`Edit ${label}`}
+              type={inputType}
+              value={editState.draft}
+              onChange={(e) => editState.setDraft(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onBlur={() => void editState.saveEdit()}
+              disabled={editState.saving}
+              autoFocus
+              className="w-full rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 disabled:opacity-50"
+              placeholder={placeholder}
+            />
+          )}
+        </div>
+        {editState.error && (
+          <p role="alert" className="text-[10px] font-medium text-destructive">
+            {editState.error}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  if (!value) {
+    if (canEdit) {
+      return (
+        <button
+          type="button"
+          onClick={() => editState.startEdit(field, "")}
+          className="flex items-center gap-1.5 text-[11px] text-muted-foreground/50 transition-colors hover:text-muted-foreground"
+        >
+          {Icon && <Icon size={11} className="shrink-0" />}
+          <span className="italic">Add {label.toLowerCase()}…</span>
+        </button>
+      );
+    }
+    return null;
+  }
+
+  return (
+    <div
+      className={cn(
+        "group/field flex items-start gap-1.5 text-[11px] text-muted-foreground/70",
+        canEdit && "cursor-pointer rounded-md transition-colors hover:bg-muted/50"
+      )}
+      onClick={canEdit ? () => { if (!hasTextSelection()) editState.startEdit(field, value); } : undefined}
+      role={canEdit ? "button" : undefined}
+      tabIndex={canEdit ? 0 : undefined}
+      onKeyDown={
+        canEdit
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                editState.startEdit(field, value);
+              }
+            }
+          : undefined
+      }
+    >
+      {Icon && <Icon size={11} className="mt-[2px] shrink-0" />}
+      <span className="break-words">{value}</span>
+      {canEdit && (
+        <Pencil
+          size={10}
+          className="ml-auto mt-[2px] shrink-0 opacity-0 transition-opacity group-hover/field:opacity-50"
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
 
 export function LocationCard({
   id,
@@ -122,13 +369,13 @@ export function LocationCard({
   category,
   requires_booking,
   working_hours,
+  useful_link,
   added_by_email,
   inItinerary,
   itineraryDayLabel,
   availableDays,
   onScheduleToDay,
   actions,
-  onEdit,
   onDelete,
   image_url,
   user_image_url,
@@ -140,51 +387,64 @@ export function LocationCard({
   onCardClick,
   isHighlighted,
   className,
+  tripId,
+  onLocationUpdated,
 }: LocationCardProps) {
   const readOnly = useReadOnly();
-  const catMeta = category ? CATEGORY_META[category as CategoryKey] : undefined;
-  const hasGeo = city || address;
-  const useMenu =
-    !readOnly && (onEdit != null || onDelete != null || deleteTrigger != null);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const canDelete =
+    !readOnly && (onDelete != null || deleteTrigger != null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [photoDialogOpen, setPhotoDialogOpen] = useState(false);
+  const [flipped, setFlipped] = useState(false);
+  const [noteExpanded, setNoteExpanded] = useState(false);
+  const [noteClamped, setNoteClamped] = useState(false);
+  const noteRef = useRef<HTMLDivElement>(null);
   const effectiveImageUrl = user_image_url ?? image_url;
-  // Show attribution only when displaying a Google-sourced photo (not user override)
   const showAttribution = !user_image_url && image_url && attribution_name;
   const canSchedule =
     availableDays != null &&
     availableDays.length > 0 &&
     onScheduleToDay != null;
-  const [hoursExpanded, setHoursExpanded] = useState(false);
-  const [noteExpanded, setNoteExpanded] = useState(false);
+
+  const editState = useInlineEdit(tripId, id, onLocationUpdated);
+
+  // Effective values: optimistic overrides while API save is in-flight
+  const eName = editState.getValue("name", name);
+  const eCity = editState.getValue("city", city);
+  const eNote = editState.getValue("note", note);
+  const eAddress = editState.getValue("address", address);
+  const eWorkingHours = editState.getValue("working_hours", working_hours);
+  const eUsefulLink = editState.getValue("useful_link", useful_link);
+  const eCategory = editState.getValue("category", category);
+  const eBooking = editState.getValue("requires_booking", requires_booking);
+
+  const catMeta = eCategory ? CATEGORY_META[eCategory as CategoryKey] : undefined;
   const isDetailedHoursValue =
-    working_hours != null && working_hours.trim() !== ""
-      ? isDetailedHours(working_hours)
+    eWorkingHours != null && eWorkingHours.trim() !== ""
+      ? isDetailedHours(eWorkingHours)
       : false;
+  const [hoursExpanded, setHoursExpanded] = useState(false);
+
+  useEffect(() => {
+    const el = noteRef.current;
+    if (!el || noteExpanded) return;
+    setNoteClamped(el.scrollHeight > el.clientHeight + 1);
+  }, [eNote, noteExpanded]);
 
   return (
     <div
       data-location-id={id}
       className={cn(
-        "group relative flex flex-col overflow-hidden rounded-xl border bg-card transition-all hover:shadow-md",
-        inItinerary
-          ? "border-brand/25 shadow-sm shadow-brand/5"
-          : "border-border",
+        "card-flip-container group h-full",
         onCardClick && "cursor-pointer",
-        isHighlighted && "animate-location-highlight",
         className
       )}
       onClick={(e) => {
-        if (!onCardClick) return;
-        // Ignore clicks that originated from nested interactive elements
-        // (buttons, links, popovers) — otherwise clicking the hours toggle,
-        // note expander, schedule menu, photo button, or Google Maps link
-        // also fires the card-level focus/flyTo side-effect.
+        if (!onCardClick || flipped) return;
         const target = e.target as HTMLElement | null;
         if (
           target?.closest(
-            'button, a, [role="menu"], [role="menuitem"], [role="dialog"]'
+            'button, a, input, textarea, select, [role="menu"], [role="menuitem"], [role="dialog"]'
           )
         ) {
           return;
@@ -192,357 +452,584 @@ export function LocationCard({
         onCardClick();
       }}
     >
-      {/* Image area */}
-      <div className="relative aspect-[16/10] w-full overflow-hidden rounded-t-xl">
-        {effectiveImageUrl ? (
-          <>
-            <img
-              src={effectiveImageUrl}
-              alt={name}
-              className="h-full w-full object-cover"
-              loading="lazy"
-              // `sizes` matches the Phase 3 responsive grid:
-              //   - below sm (< 640px): 1 column → 100vw
-              //   - sm–lg (640–1023px): 2 columns → 50vw
-              //   - lg+ (1024px+): 3 columns AND a 480px sidebar on the
-              //     right → (100vw - 480px) / 3 ≈ 33vw for typical
-              //     desktop widths. Uses 30vw as a conservative estimate.
-              sizes="(min-width: 1024px) 30vw, (min-width: 640px) 50vw, 100vw"
-            />
-            {showAttribution && (
-              <div className="absolute bottom-0 right-0 bg-black/50 px-1.5 py-0.5 text-[10px] leading-tight text-white/80">
-                {attribution_uri ? (
-                  <a
-                    href={attribution_uri}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hover:text-white"
-                  >
-                    {attribution_name}
-                  </a>
-                ) : (
-                  attribution_name
-                )}
-              </div>
-            )}
-          </>
-        ) : (
-          <div
-            className={cn(
-              "flex h-full w-full items-center justify-center bg-gradient-to-br",
-              catMeta?.gradient ?? "from-gray-100 to-gray-50"
-            )}
-            data-testid="image-placeholder"
-          >
-            {category ? (
-              <CategoryIcon
-                category={category as CategoryKey}
-                size={40}
-                className="opacity-20"
-              />
-            ) : (
-              <MapPin size={40} className="text-gray-400 opacity-20" />
-            )}
-          </div>
+      <div
+        className={cn(
+          "card-flip-inner h-full rounded-xl border bg-card transition-shadow hover:shadow-md",
+          inItinerary
+            ? "border-l-4 border-brand shadow-sm shadow-brand/5"
+            : "border-border",
+          isHighlighted && "animate-location-highlight",
+          flipped && "flipped"
         )}
-
-        {/* Overlaid badges — wrap instead of overflowing at narrow card widths */}
-        <div className="absolute bottom-3 left-3 right-3 flex flex-wrap items-center gap-1.5">
-          {category && (
-            <span className="whitespace-nowrap rounded-full bg-white/90 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-foreground backdrop-blur-sm">
-              {category}
-            </span>
-          )}
-          {requires_booking && requires_booking !== "no" && (
-            <BookingBadge status={requires_booking} />
-          )}
-        </div>
-
-        {/* Camera icon for photo upload.
-         *
-         * Visibility: always visible on touch devices (no hover), hidden
-         * until card hover on mouse/trackpad devices. Pure CSS via the
-         * `hover-none:` / `hover-hover:` variants registered in
-         * tailwind.config.ts — no JS detection needed.
-         *
-         * Hit area: the visual is compact (h-7 w-7) but `.touch-target`
-         * expands the tap zone to 44×44 via a ::after pseudo (see
-         * globals.css). Desktop feels the same, mobile is tappable. */}
-        {!readOnly && onPhotoUpload && (
-          <div className="absolute left-2 top-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="touch-target h-7 w-7 shrink-0 rounded-full bg-black/20 text-white backdrop-blur-sm transition-opacity hover:bg-black/40 hover:text-white hover-hover:opacity-0 hover-hover:group-hover:opacity-100 hover-none:opacity-100"
-              aria-label="Upload photo"
-              onClick={() => setPhotoDialogOpen(true)}
-            >
-              <Camera size={16} />
-            </Button>
-          </div>
-        )}
-
-        {/* Three-dot menu overlay.
-         *
-         * Visibility: always visible on touch (hover-none), hidden-until-
-         * hover on mouse devices (hover-hover + group-hover). Also stays
-         * visible when the popover is open via data-[state=open]. See the
-         * camera-button comment above for the rationale. */}
-        {useMenu && (
-          <div className="absolute right-2 top-2">
-            <Popover open={menuOpen} onOpenChange={setMenuOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="touch-target h-7 w-7 shrink-0 rounded-full bg-black/20 text-white backdrop-blur-sm transition-opacity hover:bg-black/40 hover:text-white data-[state=open]:opacity-100 hover-hover:opacity-0 hover-hover:group-hover:opacity-100 hover-none:opacity-100"
-                  aria-label="Location actions"
-                >
-                  <MoreVertical size={16} />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-36 p-1" align="end" sideOffset={4}>
-                {onEdit && (
-                  <button
-                    type="button"
-                    className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm hover:bg-accent"
-                    onClick={() => {
-                      onEdit();
-                      setMenuOpen(false);
-                    }}
-                  >
-                    <Pencil size={13} />
-                    Edit
-                  </button>
-                )}
-                {(onDelete || deleteTrigger) && (
-                  <div className="flex w-full">
-                    {deleteTrigger ?? (
-                      <button
-                        type="button"
-                        className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm text-destructive hover:bg-destructive/10"
-                        onClick={() => {
-                          onDelete?.();
-                          setMenuOpen(false);
-                        }}
+      >
+        {/* ============================================================
+            FRONT FACE
+            ============================================================ */}
+        <div className="card-flip-face flex h-full flex-col overflow-hidden rounded-xl">
+          {/* Image area */}
+          <div className="relative aspect-[16/10] w-full overflow-hidden rounded-t-xl">
+            {effectiveImageUrl ? (
+              <>
+                <img
+                  src={effectiveImageUrl}
+                  alt={eName ?? name}
+                  className="h-full w-full object-cover"
+                  loading="lazy"
+                  sizes="(min-width: 1024px) 30vw, (min-width: 640px) 50vw, 100vw"
+                />
+                {showAttribution && (
+                  <div className="absolute bottom-0 right-0 bg-black/50 px-1.5 py-0.5 text-[10px] leading-tight text-white/80">
+                    {attribution_uri ? (
+                      <a
+                        href={attribution_uri}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:text-white"
                       >
-                        <Trash2 size={13} />
-                        Delete
-                      </button>
+                        {attribution_name}
+                      </a>
+                    ) : (
+                      attribution_name
                     )}
                   </div>
                 )}
-              </PopoverContent>
-            </Popover>
-          </div>
-        )}
-        {!useMenu && actions != null && (
-          <div className="absolute right-2 top-2 flex items-center gap-1">
-            {actions}
-          </div>
-        )}
-      </div>
+              </>
+            ) : (
+              <div
+                className={cn(
+                  "flex h-full w-full items-center justify-center bg-gradient-to-br",
+                  catMeta?.gradient ?? "from-gray-100 to-gray-50"
+                )}
+                data-testid="image-placeholder"
+              >
+                {eCategory ? (
+                  <CategoryIcon
+                    category={eCategory as CategoryKey}
+                    size={40}
+                    className="opacity-20"
+                  />
+                ) : (
+                  <MapPin size={40} className="text-gray-400 opacity-20" />
+                )}
+              </div>
+            )}
 
-      {/* Content area */}
-      <div className="flex flex-1 flex-col px-3.5 pb-3 pt-3">
-        {/* Location name */}
-        <h3 className="text-[15px] font-semibold leading-snug tracking-tight text-foreground">
-          {name}
-        </h3>
-
-        {/* City — prominent but subordinate to name */}
-        {city && (
-          <p className="mt-0.5 text-xs font-medium text-muted-foreground">
-            {city}
-          </p>
-        )}
-
-        {/* Details: address, hours, notes */}
-        <div className="mt-2 flex min-h-0 flex-1 flex-col gap-1.5">
-          {address && (
-            <div className="flex items-start gap-1.5 text-[11px] text-muted-foreground/70">
-              <MapPin size={11} className="mt-[2px] shrink-0" />
-              <span className="line-clamp-2 break-words">{address}</span>
+            {/* Overlaid badges */}
+            <div className="absolute bottom-3 left-3 right-3 flex flex-wrap items-center gap-1.5">
+              {eCategory && (
+                <span className="whitespace-nowrap rounded-full bg-white/90 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-foreground backdrop-blur-sm">
+                  {eCategory}
+                </span>
+              )}
+              {eBooking && eBooking !== "no" && (
+                <BookingBadge status={eBooking} />
+              )}
             </div>
-          )}
-          {working_hours && (
-            <div className="flex flex-col gap-0.5">
-              {isDetailedHoursValue ? (
-                <>
+
+            {/* Camera button */}
+            {!readOnly && onPhotoUpload && (
+              <div className="absolute left-2 top-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="touch-target h-7 w-7 shrink-0 rounded-full bg-black/20 text-white backdrop-blur-sm transition-opacity hover:bg-black/40 hover:text-white hover-hover:opacity-0 hover-hover:group-hover:opacity-100 hover-none:opacity-100"
+                  aria-label="Upload photo"
+                  onClick={() => setPhotoDialogOpen(true)}
+                >
+                  <Camera size={16} />
+                </Button>
+              </div>
+            )}
+
+            {/* Delete button */}
+            {canDelete && (
+              <div className="absolute right-2 top-2">
+                {deleteTrigger ?? (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="touch-target h-7 w-7 shrink-0 rounded-full bg-black/20 text-white backdrop-blur-sm transition-opacity hover:bg-red-600/80 hover:text-white hover-hover:opacity-0 hover-hover:group-hover:opacity-100 hover-none:opacity-100"
+                    aria-label="Delete location"
+                    onClick={() => onDelete?.()}
+                  >
+                    <Trash2 size={16} />
+                  </Button>
+                )}
+              </div>
+            )}
+            {!canDelete && actions != null && (
+              <div className="absolute right-2 top-2 flex items-center gap-1">
+                {actions}
+              </div>
+            )}
+          </div>
+
+          {/* Front content — min-h ensures grid cards align */}
+          <div className="flex min-h-[140px] flex-1 flex-col px-3.5 pb-3 pt-3">
+            <h3 className="text-[15px] font-semibold leading-snug tracking-tight text-foreground">
+              {eName}
+            </h3>
+
+            {eCity && (
+              <p className="mt-0.5 text-xs font-medium text-muted-foreground">
+                {eCity}
+              </p>
+            )}
+
+            {/* Note — inline editable on front */}
+            <div className="mt-2 flex min-h-0 flex-1 flex-col gap-1.5">
+              {editState.editingField === "note" ? (
+                <InlineEditableField
+                  field="note"
+                  value={eNote}
+                  label="Note"
+                  icon={MessageSquare}
+                  placeholder="Add a note…"
+                  editState={editState}
+                  readOnly={readOnly}
+                  multiline
+                />
+              ) : eNote ? (
+                <div>
+                  <div
+                    ref={noteRef}
+                    className={cn(
+                      "rounded-lg border-l-2 border-primary/30 bg-primary/[0.04] py-1.5 pl-2.5 pr-2 text-xs leading-relaxed text-foreground/80 break-words",
+                      !noteExpanded && "line-clamp-2",
+                      !readOnly && tripId && "cursor-pointer transition-colors hover:bg-primary/[0.08]"
+                    )}
+                    onClick={
+                      !readOnly && tripId
+                        ? (e) => {
+                            e.stopPropagation();
+                            if (!hasTextSelection()) editState.startEdit("note", eNote);
+                          }
+                        : undefined
+                    }
+                    role={!readOnly && tripId ? "button" : undefined}
+                    tabIndex={!readOnly && tripId ? 0 : undefined}
+                  >
+                    {eNote}
+                  </div>
+                  {(noteClamped || noteExpanded) && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setNoteExpanded((prev) => !prev);
+                      }}
+                      className="mt-0.5 text-[10px] font-medium text-primary/70 transition-colors hover:text-primary"
+                    >
+                      {noteExpanded ? "Show less" : "Show more"}
+                    </button>
+                  )}
+                </div>
+              ) : !readOnly && tripId ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    editState.startEdit("note", "");
+                  }}
+                  className="flex items-center gap-1.5 text-[11px] italic text-muted-foreground/50 transition-colors hover:text-muted-foreground"
+                >
+                  <MessageSquare size={11} className="shrink-0" />
+                  Add note…
+                </button>
+              ) : null}
+            </div>
+
+            {/* Footer */}
+            <div className="mt-3 flex shrink-0 flex-col gap-1 border-t border-border pt-2">
+              <div className="flex items-center justify-between gap-2">
+                {/* Scheduled status */}
+                <div className="flex min-w-0 items-center gap-1 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap">
+                  {inItinerary ? (
+                    <span className="inline-flex items-center gap-1 text-brand">
+                      <CalendarCheck size={12} className="shrink-0" />
+                      <span>Scheduled</span>
+                    </span>
+                  ) : !readOnly && canSchedule ? (
+                    <Popover open={scheduleOpen} onOpenChange={setScheduleOpen}>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-primary transition-colors hover:text-primary-strong"
+                          aria-label="Schedule to a day"
+                        >
+                          <CalendarPlus size={12} className="shrink-0" />
+                          <span>Schedule</span>
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        className="w-48 p-1"
+                        align="start"
+                        sideOffset={4}
+                      >
+                        <p className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          Schedule to
+                        </p>
+                        <div className="flex max-h-52 flex-col overflow-y-auto">
+                          {availableDays!.map((day) => (
+                            <button
+                              key={day.id}
+                              type="button"
+                              className="flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm font-medium text-foreground transition-colors hover:bg-brand-muted"
+                              onClick={() => {
+                                onScheduleToDay!(day.id);
+                                setScheduleOpen(false);
+                              }}
+                            >
+                              <CalendarPlus
+                                size={13}
+                                className="shrink-0 text-brand"
+                              />
+                              {day.label}
+                            </button>
+                          ))}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-muted-foreground/50">
+                      <CalendarCheck size={12} className="shrink-0" />
+                      <span>Not scheduled</span>
+                    </span>
+                  )}
+                </div>
+
+                {/* Flip trigger */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFlipped(true);
+                  }}
+                  className="touch-target inline-flex shrink-0 items-center gap-1 rounded-full border border-primary/20 bg-primary/5 px-2.5 py-1 text-[10px] font-semibold text-primary transition-colors hover:border-primary/40 hover:bg-primary/10"
+                  aria-label="Show location details"
+                >
+                  <Info size={11} />
+                  More info
+                </button>
+              </div>
+              {!readOnly && added_by_email && (
+                <p className="text-[11px] text-muted-foreground/50">
+                  Added by {added_by_email}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ============================================================
+            BACK FACE
+            ============================================================ */}
+        <div className="card-flip-face card-flip-back flex flex-col rounded-xl bg-card">
+          {/* Back header — warm accent bar with editable name/city */}
+          <div className="flex items-center justify-between rounded-t-xl bg-primary/5 px-3.5 py-2.5">
+            <div className="min-w-0 flex-1">
+              {editState.editingField === "name" ? (
+                <InlineEditableField
+                  field="name"
+                  value={eName}
+                  label="Name"
+                  editState={editState}
+                  readOnly={readOnly}
+                  placeholder="Location name"
+                />
+              ) : !readOnly && tripId ? (
+                <button
+                  type="button"
+                  className="block w-full truncate text-left text-sm font-semibold text-foreground rounded transition-colors hover:text-primary"
+                  onClick={() => { if (!hasTextSelection()) editState.startEdit("name", eName ?? ""); }}
+                >
+                  {eName}
+                </button>
+              ) : (
+                <p className="truncate text-sm font-semibold text-foreground">
+                  {eName}
+                </p>
+              )}
+              {editState.editingField === "city" ? (
+                <InlineEditableField
+                  field="city"
+                  value={eCity}
+                  label="City"
+                  editState={editState}
+                  readOnly={readOnly}
+                  placeholder="City"
+                />
+              ) : eCity ? (
+                !readOnly && tripId ? (
                   <button
                     type="button"
-                    onClick={() => setHoursExpanded((e) => !e)}
-                    className="flex w-fit items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-                    aria-expanded={hoursExpanded}
-                    aria-label={
-                      hoursExpanded
-                        ? "Collapse opening hours"
-                        : "View opening hours"
-                    }
+                    className="block text-left text-[11px] text-muted-foreground rounded transition-colors hover:text-foreground"
+                    onClick={() => { if (!hasTextSelection()) editState.startEdit("city", eCity); }}
                   >
-                    <Clock size={12} className="shrink-0 opacity-50" />
-                    <span className="underline decoration-dotted underline-offset-2">
-                      {hoursExpanded
-                        ? "Hide opening hours"
-                        : "View opening hours"}
-                    </span>
+                    {eCity}
                   </button>
-                  {hoursExpanded && (
-                    <div className="ml-0.5 mt-1 rounded-lg border border-border bg-card">
-                      {formatHoursLines(working_hours).map((line, i) => {
-                        const parts = line.split(/:\s*(.+)/);
-                        const dayName = parts[0];
-                        const time = parts[1] || "";
-                        const isClosed = /closed/i.test(time);
-                        return (
-                          <div
-                            key={i}
-                            className={cn(
-                              "flex items-center justify-between px-2.5 py-1 text-[11px]",
-                              i > 0 && "border-t border-border/60"
-                            )}
-                          >
-                            <span className="font-medium text-foreground">
-                              {dayName}
-                            </span>
-                            <span
-                              className={
-                                isClosed
-                                  ? "text-muted-foreground/50"
-                                  : "text-muted-foreground"
-                              }
-                            >
-                              {time || line}
-                            </span>
-                          </div>
-                        );
-                      })}
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">{eCity}</p>
+                )
+              ) : !readOnly && tripId ? (
+                <button
+                  type="button"
+                  onClick={() => editState.startEdit("city", "")}
+                  className="text-[11px] italic text-muted-foreground/50 transition-colors hover:text-muted-foreground"
+                >
+                  Add city…
+                </button>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setFlipped(false);
+                editState.cancelEdit();
+              }}
+              className="touch-target ml-2 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label="Back to front"
+            >
+              <X size={14} />
+            </button>
+          </div>
+
+          {/* Scrollable content */}
+          <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-3.5 py-3">
+            {/* Location section */}
+            <div className="flex flex-col gap-1.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">Location</p>
+              <InlineEditableField
+                field="address"
+                value={eAddress}
+                label="Address"
+                icon={MapPin}
+                editState={editState}
+                readOnly={readOnly}
+                placeholder="Full address"
+              />
+              {google_link && (
+                <a
+                  href={google_link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex w-fit items-center gap-1 rounded-md text-[11px] text-primary transition-colors hover:text-primary-strong"
+                >
+                  <ExternalLink size={10} />
+                  Open in Google Maps
+                </a>
+              )}
+            </div>
+
+            {/* Info section */}
+            <div className="flex flex-col gap-1.5 border-t border-border/50 pt-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">Info</p>
+
+              {/* Working hours */}
+              {editState.editingField === "working_hours" ? (
+                <InlineEditableField
+                  field="working_hours"
+                  value={eWorkingHours}
+                  label="Hours"
+                  icon={Clock}
+                  editState={editState}
+                  readOnly={readOnly}
+                  multiline
+                  placeholder="e.g. Mon-Fri: 9am-5pm"
+                />
+              ) : eWorkingHours ? (
+                <div
+                  className={cn(
+                    "flex flex-col gap-0.5",
+                    !readOnly && tripId && "cursor-pointer rounded-md transition-colors hover:bg-muted/50"
+                  )}
+                  onClick={
+                    !readOnly && tripId
+                      ? () => { if (!hasTextSelection()) editState.startEdit("working_hours", eWorkingHours); }
+                      : undefined
+                  }
+                >
+                  {isDetailedHoursValue ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setHoursExpanded((prev) => !prev);
+                        }}
+                        className="flex w-fit items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                        aria-expanded={hoursExpanded}
+                      >
+                        <Clock size={12} className="shrink-0 opacity-50" />
+                        <span className="underline decoration-dotted underline-offset-2">
+                          {hoursExpanded ? "Hide opening hours" : "View opening hours"}
+                        </span>
+                      </button>
+                      {hoursExpanded && (
+                        <div className="ml-0.5 mt-1 rounded-lg border border-border bg-card">
+                          {formatHoursLines(eWorkingHours!).map((line, i) => {
+                            const parts = line.split(/:\s*(.+)/);
+                            const dayName = parts[0];
+                            const time = parts[1] || "";
+                            const isClosed = /closed/i.test(time);
+                            return (
+                              <div
+                                key={i}
+                                className={cn(
+                                  "flex items-center justify-between px-2.5 py-1 text-[11px]",
+                                  i > 0 && "border-t border-border/60"
+                                )}
+                              >
+                                <span className="font-medium text-foreground">{dayName}</span>
+                                <span className={isClosed ? "text-muted-foreground/50" : "text-muted-foreground"}>
+                                  {time || line}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Clock size={12} className="shrink-0 opacity-50" />
+                      {eWorkingHours}
                     </div>
                   )}
-                </>
+                </div>
+              ) : !readOnly && tripId ? (
+                <button
+                  type="button"
+                  onClick={() => editState.startEdit("working_hours", "")}
+                  className="flex items-center gap-1.5 text-[11px] italic text-muted-foreground/50 transition-colors hover:text-muted-foreground"
+                >
+                  <Clock size={11} className="shrink-0" />
+                  Add hours…
+                </button>
+              ) : null}
+
+              {/* Useful link */}
+              {editState.editingField === "useful_link" ? (
+                <InlineEditableField
+                  field="useful_link"
+                  value={eUsefulLink}
+                  label="Useful link"
+                  icon={Link2}
+                  editState={editState}
+                  readOnly={readOnly}
+                  placeholder="https://…"
+                  inputType="url"
+                />
+              ) : eUsefulLink ? (
+                <div
+                  className={cn(
+                    "group/field flex items-center gap-1.5",
+                    !readOnly && tripId && "cursor-pointer rounded-md transition-colors hover:bg-muted/50"
+                  )}
+                  onClick={!readOnly && tripId ? () => { if (!hasTextSelection()) editState.startEdit("useful_link", eUsefulLink); } : undefined}
+                >
+                  <Link2 size={11} className="shrink-0 text-muted-foreground" />
+                  <a
+                    href={eUsefulLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="truncate text-[11px] text-primary transition-colors hover:text-primary-strong"
+                  >
+                    {domainFromUrl(eUsefulLink)}
+                    <ExternalLink size={9} className="ml-0.5 inline" />
+                  </a>
+                  {!readOnly && tripId && (
+                    <Pencil size={10} className="ml-auto shrink-0 opacity-0 transition-opacity group-hover/field:opacity-50" />
+                  )}
+                </div>
+              ) : !readOnly && tripId ? (
+                <button
+                  type="button"
+                  onClick={() => editState.startEdit("useful_link", "")}
+                  className="flex items-center gap-1.5 text-[11px] italic text-muted-foreground/50 transition-colors hover:text-muted-foreground"
+                >
+                  <Link2 size={11} className="shrink-0" />
+                  Add useful link…
+                </button>
+              ) : null}
+
+              {/* Category & booking — labeled selects */}
+              {!readOnly && tripId ? (
+                <div className="mt-1 grid grid-cols-2 gap-2">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-medium text-muted-foreground/70">Category</label>
+                    <select
+                      value={eCategory ?? ""}
+                      onChange={(e) => {
+                        void editState.saveSelect("category", e.target.value || null);
+                      }}
+                      className="rounded-md border border-border bg-background px-2 py-1.5 text-[11px] text-foreground outline-none transition-colors focus:ring-1 focus:ring-primary/30"
+                      aria-label="Category"
+                    >
+                      <option value="">None</option>
+                      {CATEGORY_OPTIONS.map((cat: string) => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-medium text-muted-foreground/70">Booking</label>
+                    <select
+                      value={eBooking ?? "no"}
+                      onChange={(e) => {
+                        void editState.saveSelect("requires_booking", e.target.value);
+                      }}
+                      className="rounded-md border border-border bg-background px-2 py-1.5 text-[11px] text-foreground outline-none transition-colors focus:ring-1 focus:ring-primary/30"
+                      aria-label="Booking status"
+                    >
+                      {REQUIRES_BOOKING_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {editState.error && (
+                    <p role="alert" className="col-span-2 text-[10px] font-medium text-destructive">
+                      {editState.error}
+                    </p>
+                  )}
+                </div>
               ) : (
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Clock size={12} className="shrink-0 opacity-50" />
-                  {working_hours}
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {eCategory && (
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                      {eCategory}
+                    </span>
+                  )}
+                  {eBooking && eBooking !== "no" && (
+                    <span
+                      className={cn(
+                        "rounded-full px-2 py-0.5 text-[10px] font-medium",
+                        eBooking === "yes_done"
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "bg-amber-50 text-amber-700"
+                      )}
+                    >
+                      {eBooking === "yes_done" ? "Booked" : "Booking needed"}
+                    </span>
+                  )}
                 </div>
               )}
             </div>
-          )}
-          {note && (
-            <div className="rounded-lg border-l-2 border-primary/30 bg-primary/[0.04] py-1.5 pl-2.5 pr-2 text-xs leading-relaxed text-foreground/80">
-              {note.length <= NOTE_LONG_THRESHOLD ? (
-                <span>{note}</span>
-              ) : (
-                <>
-                  <span>{noteExpanded ? note : notePreview(note)}</span>
-                  <button
-                    type="button"
-                    onClick={() => setNoteExpanded((e) => !e)}
-                    className="ml-1 inline-flex items-center gap-0.5 text-[11px] font-medium text-primary hover:underline"
-                    aria-expanded={noteExpanded}
-                  >
-                    {noteExpanded ? (
-                      <>
-                        less
-                        <ChevronUp size={11} />
-                      </>
-                    ) : (
-                      <>
-                        more
-                        <ChevronDown size={11} />
-                      </>
-                    )}
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-        </div>
 
-        {/* Footer: itinerary status + schedule + Maps link + Added by */}
-        <div className="mt-3 flex shrink-0 flex-col gap-1 border-t border-border pt-2">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide">
-              {inItinerary ? (
-                <span className="inline-flex items-center gap-1 text-emerald-600">
-                  <CalendarCheck size={12} className="shrink-0" />
-                  <span>
-                    {itineraryDayLabel
-                      ? `Scheduled \u00B7 ${itineraryDayLabel}`
-                      : "Scheduled"}
-                  </span>
-                </span>
-              ) : !readOnly && canSchedule ? (
-                <Popover open={scheduleOpen} onOpenChange={setScheduleOpen}>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-primary transition-colors hover:text-primary-strong"
-                      aria-label="Schedule to a day"
-                    >
-                      <CalendarPlus size={12} className="shrink-0" />
-                      <span>Schedule to day</span>
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent
-                    className="w-48 p-1"
-                    align="start"
-                    sideOffset={4}
-                  >
-                    <p className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Schedule to
-                    </p>
-                    <div className="flex max-h-52 flex-col overflow-y-auto">
-                      {availableDays!.map((day) => (
-                        <button
-                          key={day.id}
-                          type="button"
-                          className="flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm font-medium text-foreground transition-colors hover:bg-brand-muted"
-                          onClick={() => {
-                            onScheduleToDay!(day.id);
-                            setScheduleOpen(false);
-                          }}
-                        >
-                          <CalendarPlus
-                            size={13}
-                            className="shrink-0 text-brand"
-                          />
-                          {day.label}
-                        </button>
-                      ))}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              ) : (
-                <span className="inline-flex items-center gap-1 text-muted-foreground/50">
-                  <CalendarCheck size={12} className="shrink-0" />
-                  <span>Not scheduled</span>
-                </span>
-              )}
-            </div>
-            {google_link && (
-              <a
-                href={google_link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex shrink-0 items-center gap-1 rounded-md text-[11px] font-medium text-primary transition-colors hover:text-primary-strong"
-                aria-label="Open in Google Maps"
-              >
-                Details &rarr;
-              </a>
+            {/* Schedule section */}
+            {inItinerary && itineraryDayLabel && (
+              <div className="flex flex-col gap-1 border-t border-border/50 pt-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">Schedule</p>
+                <div className="flex items-start gap-1.5 text-[11px] text-brand">
+                  <CalendarCheck size={11} className="mt-[2px] shrink-0" />
+                  <span className="font-medium leading-relaxed">{itineraryDayLabel}</span>
+                </div>
+              </div>
             )}
+
           </div>
-          {/* PII defense-in-depth: `added_by_email` is not in the public
-           *  `SharedLocationSummary` shape and is null-filled in the shared
-           *  adapter, so this would already be hidden in read-only mode.
-           *  The explicit `!readOnly` gate is a second layer so this
-           *  component is self-defending against any future caller that
-           *  passes a full `Location` in a public context. */}
-          {!readOnly && added_by_email && (
-            <p className="text-[11px] text-muted-foreground/50">
-              Added by {added_by_email}
-            </p>
-          )}
         </div>
       </div>
 
