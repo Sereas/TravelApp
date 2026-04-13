@@ -323,7 +323,7 @@ $$;
 
 ALTER FUNCTION public.get_itinerary_routes(p_option_ids uuid[]) OWNER TO postgres;
 
-CREATE FUNCTION public.get_itinerary_tree(p_trip_id uuid) RETURNS TABLE(day_id uuid, day_date date, day_sort_order integer, day_created_at timestamp with time zone, day_active_option_id uuid, option_id uuid, option_index integer, option_starting_city character varying, option_ending_city character varying, option_created_by character varying, option_created_at timestamp with time zone, ol_id uuid, location_id uuid, ol_sort_order integer, time_period text, loc_name text, loc_city text, loc_address text, loc_google_link text, loc_category text, loc_note text, loc_working_hours text, loc_requires_booking text, loc_latitude double precision, loc_longitude double precision)
+CREATE FUNCTION public.get_itinerary_tree(p_trip_id uuid) RETURNS TABLE(day_id uuid, day_date date, day_sort_order integer, day_created_at timestamp with time zone, day_active_option_id uuid, option_id uuid, option_index integer, option_starting_city character varying, option_ending_city character varying, option_created_by character varying, option_created_at timestamp with time zone, ol_id uuid, location_id uuid, ol_sort_order integer, time_period text, loc_name text, loc_city text, loc_address text, loc_google_link text, loc_category text, loc_note text, loc_working_hours text, loc_requires_booking text, loc_useful_link text, loc_latitude double precision, loc_longitude double precision)
     LANGUAGE sql STABLE
     AS $$
     SELECT
@@ -350,6 +350,7 @@ CREATE FUNCTION public.get_itinerary_tree(p_trip_id uuid) RETURNS TABLE(day_id u
         l.note             AS loc_note,
         l.working_hours    AS loc_working_hours,
         l.requires_booking AS loc_requires_booking,
+        l.useful_link      AS loc_useful_link,
         l.latitude         AS loc_latitude,
         l.longitude        AS loc_longitude
     FROM trip_days d
@@ -363,7 +364,7 @@ $$;
 
 ALTER FUNCTION public.get_itinerary_tree(p_trip_id uuid) OWNER TO postgres;
 
-CREATE FUNCTION public.get_itinerary_tree(p_trip_id uuid, p_user_id uuid DEFAULT NULL::uuid) RETURNS TABLE(day_id uuid, day_date date, day_sort_order integer, day_created_at timestamp with time zone, day_active_option_id uuid, option_id uuid, option_index integer, option_starting_city character varying, option_ending_city character varying, option_created_by character varying, option_created_at timestamp with time zone, ol_id uuid, location_id uuid, ol_sort_order integer, time_period text, loc_name text, loc_city text, loc_address text, loc_google_link text, loc_category text, loc_note text, loc_working_hours text, loc_requires_booking text, loc_photo_url text, loc_user_image_url text, loc_attribution_name text, loc_attribution_uri text, loc_latitude double precision, loc_longitude double precision)
+CREATE FUNCTION public.get_itinerary_tree(p_trip_id uuid, p_user_id uuid DEFAULT NULL::uuid) RETURNS TABLE(day_id uuid, day_date date, day_sort_order integer, day_created_at timestamp with time zone, day_active_option_id uuid, option_id uuid, option_index integer, option_starting_city character varying, option_ending_city character varying, option_created_by character varying, option_created_at timestamp with time zone, ol_id uuid, location_id uuid, ol_sort_order integer, time_period text, loc_name text, loc_city text, loc_address text, loc_google_link text, loc_category text, loc_note text, loc_working_hours text, loc_requires_booking text, loc_photo_url text, loc_user_image_url text, loc_attribution_name text, loc_attribution_uri text, loc_useful_link text, loc_latitude double precision, loc_longitude double precision)
     LANGUAGE sql STABLE
     AS $$
     SELECT
@@ -394,6 +395,7 @@ CREATE FUNCTION public.get_itinerary_tree(p_trip_id uuid, p_user_id uuid DEFAULT
         l.user_image_url   AS loc_user_image_url,
         pp.attribution_name AS loc_attribution_name,
         pp.attribution_uri  AS loc_attribution_uri,
+        l.useful_link      AS loc_useful_link,
         l.latitude         AS loc_latitude,
         l.longitude        AS loc_longitude
     FROM trip_days d
@@ -484,6 +486,7 @@ BEGIN
       l.latitude,
       l.longitude,
       l.google_place_id,
+      l.useful_link,
       pp.photo_url AS image_url,
       l.user_image_url,
       pp.attribution_name,
@@ -523,6 +526,7 @@ BEGIN
       l.user_image_url   AS loc_user_image_url,
       pp.attribution_name AS loc_attribution_name,
       pp.attribution_uri  AS loc_attribution_uri,
+      l.useful_link      AS loc_useful_link,
       l.latitude         AS loc_latitude,
       l.longitude        AS loc_longitude
     FROM trip_days d
@@ -972,6 +976,7 @@ CREATE TABLE public.locations (
     google_source_type text,
     added_by_email text,
     user_image_url text,
+    useful_link text,
     CONSTRAINT locations_category_check CHECK (((category IS NULL) OR ((category)::text = ANY ((ARRAY['Accommodation'::character varying, 'Bar'::character varying, 'Beach'::character varying, 'Café'::character varying, 'Church'::character varying, 'City'::character varying, 'Event'::character varying, 'Excursion'::character varying, 'Hiking'::character varying, 'Historic site'::character varying, 'Market'::character varying, 'Museum'::character varying, 'Nature'::character varying, 'Nightlife'::character varying, 'Park'::character varying, 'Parking'::character varying, 'Restaurant'::character varying, 'Shopping'::character varying, 'Spa / Wellness'::character varying, 'Transport'::character varying, 'Viewpoint'::character varying, 'Walking around'::character varying, 'Other'::character varying])::text[])))),
     CONSTRAINT locations_requires_booking_check CHECK (((requires_booking IS NULL) OR ((requires_booking)::text = ANY ((ARRAY['no'::character varying, 'yes'::character varying, 'yes_done'::character varying])::text[]))))
 );
@@ -997,6 +1002,8 @@ COMMENT ON COLUMN public.locations.working_hours IS 'Optional working hours (fre
 COMMENT ON COLUMN public.locations.requires_booking IS 'Requires booking: no | yes | yes_done (display as No, Yes, Yes (done)).';
 
 COMMENT ON COLUMN public.locations.category IS 'Optional category; only predefined values allowed.';
+
+COMMENT ON COLUMN public.locations.useful_link IS 'Optional user-supplied URL (booking, menu, video, etc). Validated as http/https in Python.';
 
 CREATE TABLE public.option_routes (
     route_id uuid DEFAULT gen_random_uuid() NOT NULL,
@@ -1387,12 +1394,10 @@ GRANT ALL ON FUNCTION public.delete_location_cascade(p_trip_id uuid, p_location_
 GRANT ALL ON FUNCTION public.get_itinerary_routes(p_option_ids uuid[]) TO authenticated;
 GRANT ALL ON FUNCTION public.get_itinerary_routes(p_option_ids uuid[]) TO service_role;
 
-REVOKE ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid) TO anon;
 GRANT ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid) TO service_role;
 
-REVOKE ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid, p_user_id uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid, p_user_id uuid) TO anon;
 GRANT ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid, p_user_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid, p_user_id uuid) TO service_role;
