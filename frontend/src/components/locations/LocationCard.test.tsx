@@ -3,47 +3,71 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { LocationCard } from "./LocationCard";
 
+/** Helper: flip the card by clicking the "More info" button on the front face. */
+async function flipCard(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(
+    screen.getByRole("button", { name: /show location details/i })
+  );
+}
+
 describe("LocationCard", () => {
   it("renders location name", () => {
     render(<LocationCard id="1" name="Eiffel Tower" />);
-    expect(screen.getByText("Eiffel Tower")).toBeInTheDocument();
+    // The front face renders the name in an <h3> heading.
+    expect(
+      screen.getByRole("heading", { name: "Eiffel Tower" })
+    ).toBeInTheDocument();
   });
 
   it("renders category text when provided", () => {
     render(<LocationCard id="1" name="Louvre" category="Museum" />);
-    expect(screen.getByText("Museum")).toBeInTheDocument();
+    // Category appears on the front face as a badge. Multiple may exist (front badge + back).
+    expect(screen.getAllByText("Museum").length).toBeGreaterThanOrEqual(1);
   });
 
   it("renders city with MapPin icon", () => {
     render(<LocationCard id="1" name="Louvre" city="Paris" />);
-    expect(screen.getByText("Paris")).toBeInTheDocument();
+    // City appears on the front face as a <p>. There may also be a back-face copy.
+    expect(screen.getAllByText("Paris").length).toBeGreaterThanOrEqual(1);
   });
 
-  it("renders city and address separately", () => {
+  it("renders city and address separately", async () => {
+    const user = userEvent.setup();
     render(
       <LocationCard id="1" name="Louvre" city="Paris" address="Rue de Rivoli" />
     );
-    expect(screen.getByText("Paris")).toBeInTheDocument();
+    // City is on the front face.
+    expect(screen.getAllByText("Paris").length).toBeGreaterThanOrEqual(1);
+    // Address is on the back face — flip the card first.
+    await flipCard(user);
     expect(screen.getByText("Rue de Rivoli")).toBeInTheDocument();
   });
 
-  it("renders address alone when no city", () => {
+  it("renders address alone when no city", async () => {
+    const user = userEvent.setup();
     render(<LocationCard id="1" name="Louvre" address="Rue de Rivoli" />);
+    // Address is on the back face — flip the card first.
+    await flipCard(user);
     expect(screen.getByText("Rue de Rivoli")).toBeInTheDocument();
   });
 
-  it("address allows up to two lines instead of truncating to one", () => {
+  it("address allows up to two lines instead of truncating to one", async () => {
+    const user = userEvent.setup();
     const longAddress =
       "123 Avenue de la Republique, 75011 Paris, Île-de-France, France";
     render(<LocationCard id="1" name="Louvre" address={longAddress} />);
+    // Address is on the back face — flip the card first.
+    await flipCard(user);
     const el = screen.getByText(longAddress);
-    // Narrower card sidebar widths need the address to flow onto two lines
-    // instead of truncating with ellipsis after a few characters.
-    expect(el).toHaveClass("line-clamp-2");
+    // Narrower card sidebar widths need the address to flow onto two lines.
+    // The back-face InlineEditableField renders with break-words instead of
+    // line-clamp-2 since the field is inline-editable and must show full text.
+    expect(el).toHaveClass("break-words");
     expect(el).not.toHaveClass("truncate");
   });
 
-  it("renders Details link when google_link provided", () => {
+  it("renders Details link when google_link provided", async () => {
+    const user = userEvent.setup();
     render(
       <LocationCard
         id="1"
@@ -52,13 +76,17 @@ describe("LocationCard", () => {
         google_link="https://maps.google.com/?q=louvre"
       />
     );
+    // Google Maps link is on the back face — flip first.
+    await flipCard(user);
     const link = screen.getByRole("link", { name: /open in google maps/i });
     expect(link).toBeInTheDocument();
     expect(link).toHaveAttribute("href", "https://maps.google.com/?q=louvre");
-    expect(screen.getByText(/Details/)).toBeInTheDocument();
+    // "Location" section header is on the back face.
+    expect(screen.getByText(/^Location$/)).toBeInTheDocument();
   });
 
-  it("renders standalone Location details link when no city/address", () => {
+  it("renders standalone Location details link when no city/address", async () => {
+    const user = userEvent.setup();
     render(
       <LocationCard
         id="1"
@@ -66,17 +94,23 @@ describe("LocationCard", () => {
         google_link="https://maps.google.com/?q=louvre"
       />
     );
+    // Google Maps link is on the back face — flip first.
+    await flipCard(user);
     const link = screen.getByRole("link", { name: /open in google maps/i });
     expect(link).toBeInTheDocument();
   });
 
-  it("renders simple working hours inline", () => {
+  it("renders simple working hours inline", async () => {
+    const user = userEvent.setup();
     render(<LocationCard id="1" name="Louvre" working_hours="9:00-18:00" />);
+    // Working hours are on the back face — flip first.
+    await flipCard(user);
     expect(screen.getByText("9:00-18:00")).toBeInTheDocument();
     expect(screen.queryByText("View opening hours")).not.toBeInTheDocument();
   });
 
-  it("shows View opening hours for detailed weekly schedule", () => {
+  it("shows View opening hours for detailed weekly schedule", async () => {
+    const user = userEvent.setup();
     render(
       <LocationCard
         id="1"
@@ -84,6 +118,8 @@ describe("LocationCard", () => {
         working_hours="Mon: Closed | Tue: 9:30 AM–6:00 PM | Wed: 9:30 AM–6:00 PM"
       />
     );
+    // Working hours are on the back face — flip first.
+    await flipCard(user);
     expect(screen.getByText("View opening hours")).toBeInTheDocument();
     expect(screen.queryByText("Mon: Closed")).not.toBeInTheDocument();
   });
@@ -97,6 +133,8 @@ describe("LocationCard", () => {
         working_hours="Mon: Closed | Tue: 9:30 AM–6:00 PM"
       />
     );
+    // Working hours are on the back face — flip first.
+    await flipCard(user);
     await user.click(
       screen.getByRole("button", { name: /view opening hours/i })
     );
@@ -105,33 +143,40 @@ describe("LocationCard", () => {
     expect(screen.getByText("Tue")).toBeInTheDocument();
     expect(screen.getByText("9:30 AM–6:00 PM")).toBeInTheDocument();
     await user.click(
-      screen.getByRole("button", { name: /collapse opening hours/i })
+      screen.getByRole("button", { name: /hide opening hours/i })
     );
     expect(screen.queryByText("Closed")).not.toBeInTheDocument();
   });
 
   it("renders booking needed badge for requires_booking=yes", () => {
     render(<LocationCard id="1" name="Louvre" requires_booking="yes" />);
-    expect(screen.getByText("Booking needed")).toBeInTheDocument();
+    // Badge appears on the front face image overlay; may also appear on back face.
+    expect(screen.getAllByText("Booking needed").length).toBeGreaterThanOrEqual(
+      1
+    );
   });
 
   it("booking needed badge stays on a single line at narrow widths", () => {
     render(<LocationCard id="1" name="Louvre" requires_booking="yes" />);
     // Prevent the pill from wrapping to 2 lines and obscuring the image
     // attribution bar when the card is narrow (xl:grid-cols sidebar widened).
-    expect(screen.getByText("Booking needed")).toHaveClass("whitespace-nowrap");
+    // Check the front-face badge (first one) has the whitespace-nowrap class.
+    expect(screen.getAllByText("Booking needed")[0]).toHaveClass(
+      "whitespace-nowrap"
+    );
   });
 
   it("category pill stays on a single line at narrow widths", () => {
     render(<LocationCard id="1" name="Louvre" category="Cultural Heritage" />);
-    expect(screen.getByText("Cultural Heritage")).toHaveClass(
+    // The front-face category badge has whitespace-nowrap.
+    expect(screen.getAllByText("Cultural Heritage")[0]).toHaveClass(
       "whitespace-nowrap"
     );
   });
 
   it("renders booked badge for requires_booking=yes_done", () => {
     render(<LocationCard id="1" name="Louvre" requires_booking="yes_done" />);
-    expect(screen.getByText(/Booked/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Booked/).length).toBeGreaterThanOrEqual(1);
   });
 
   it("does not render booking badge when requires_booking=no", () => {
@@ -148,19 +193,13 @@ describe("LocationCard", () => {
     expect(noteEl).toBeInTheDocument();
   });
 
-  it("collapses long notes and expands with more/less toggle", async () => {
-    const user = userEvent.setup();
+  it("clamps long notes to 2 lines on front face", () => {
     const longNote =
       "This is a very long note that exceeds the character threshold so it gets collapsed by default and the user can expand it to read the full content.";
     render(<LocationCard id="1" name="Louvre" note={longNote} />);
-    expect(screen.getByText(/more/)).toBeInTheDocument();
-    expect(screen.queryByText(longNote)).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /more/ }));
+    // Full text is in the DOM but visually truncated via line-clamp-2
     expect(screen.getByText(longNote)).toBeInTheDocument();
-    expect(screen.getByText(/less/)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /less/ }));
-    expect(screen.queryByText(longNote)).not.toBeInTheDocument();
-    expect(screen.getByText(/more/)).toBeInTheDocument();
+    expect(screen.getByText(longNote).className).toMatch(/line-clamp/);
   });
 
   it("renders Added by footer when added_by_email is provided", () => {
@@ -186,12 +225,16 @@ describe("LocationCard", () => {
 
   it("renders a sparse card (name only) without errors", () => {
     render(<LocationCard id="1" name="Random Place" />);
-    expect(screen.getByText("Random Place")).toBeInTheDocument();
+    // Name is in the front-face <h3> heading.
+    expect(
+      screen.getByRole("heading", { name: "Random Place" })
+    ).toBeInTheDocument();
     expect(screen.queryByText(/Added by/)).not.toBeInTheDocument();
     expect(screen.queryByText("Booking needed")).not.toBeInTheDocument();
   });
 
-  it("renders a fully populated card", () => {
+  it("renders a fully populated card", async () => {
+    const user = userEvent.setup();
     render(
       <LocationCard
         id="1"
@@ -206,15 +249,22 @@ describe("LocationCard", () => {
         added_by_email="alice@example.com"
       />
     );
-    expect(screen.getByText("Eiffel Tower")).toBeInTheDocument();
-    expect(screen.getByText("Viewpoint")).toBeInTheDocument();
-    expect(screen.getByText("Paris")).toBeInTheDocument();
-    expect(screen.getByText("Champ de Mars")).toBeInTheDocument();
-    expect(screen.getByText("9:30-23:00")).toBeInTheDocument();
-    expect(screen.getByText("Booking needed")).toBeInTheDocument();
+    // Front-face content is accessible without flipping.
+    expect(
+      screen.getByRole("heading", { name: "Eiffel Tower" })
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Viewpoint").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Paris").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Booking needed").length).toBeGreaterThanOrEqual(
+      1
+    );
     expect(screen.getByText("Must visit at sunset")).toBeInTheDocument();
     expect(screen.getByText(/Added by/)).toBeInTheDocument();
     expect(screen.getByText(/alice@example\.com/)).toBeInTheDocument();
+    // Back-face content requires flipping.
+    await flipCard(user);
+    expect(screen.getByText("Champ de Mars")).toBeInTheDocument();
+    expect(screen.getByText("9:30-23:00")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /open in google maps/i })
     ).toBeInTheDocument();
@@ -233,7 +283,7 @@ describe("LocationCard", () => {
     expect(screen.queryByText("Not scheduled")).not.toBeInTheDocument();
   });
 
-  it("shows day label when inItinerary with itineraryDayLabel", () => {
+  it("shows 'Scheduled' when inItinerary with itineraryDayLabel", () => {
     render(
       <LocationCard
         id="1"
@@ -242,10 +292,10 @@ describe("LocationCard", () => {
         itineraryDayLabel="May 15"
       />
     );
-    expect(screen.getByText("Scheduled \u00B7 May 15")).toBeInTheDocument();
+    expect(screen.getByText("Scheduled")).toBeInTheDocument();
   });
 
-  it("shows multiple day labels", () => {
+  it("shows 'Scheduled' when inItinerary with multiple day labels", () => {
     render(
       <LocationCard
         id="1"
@@ -254,9 +304,7 @@ describe("LocationCard", () => {
         itineraryDayLabel="May 15, May 17"
       />
     );
-    expect(
-      screen.getByText("Scheduled \u00B7 May 15, May 17")
-    ).toBeInTheDocument();
+    expect(screen.getByText("Scheduled")).toBeInTheDocument();
   });
 
   // --- Schedule to day tests ---
@@ -316,7 +364,7 @@ describe("LocationCard", () => {
         onScheduleToDay={() => {}}
       />
     );
-    expect(screen.getByText("Scheduled · May 15")).toBeInTheDocument();
+    expect(screen.getByText("Scheduled")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /schedule to a day/i })
     ).not.toBeInTheDocument();
@@ -326,8 +374,10 @@ describe("LocationCard", () => {
     const { container } = render(
       <LocationCard id="1" name="Louvre" inItinerary category="Museum" />
     );
-    const card = container.firstChild as HTMLElement;
-    expect(card.className).toContain("rounded-xl");
+    // The card-flip-inner div (first child of the container root) has rounded-xl.
+    const inner = (container.firstChild as HTMLElement)
+      .firstChild as HTMLElement;
+    expect(inner.className).toContain("rounded-xl");
     expect(screen.getByTestId("image-placeholder")).toBeInTheDocument();
   });
 
@@ -356,79 +406,63 @@ describe("LocationCard", () => {
     const { container, rerender } = render(
       <LocationCard id="1" name="Louvre" />
     );
-    const root = container.firstChild as HTMLElement;
-    expect(root.className).not.toContain("animate-location-highlight");
+    // The animate-location-highlight class is on the card-flip-inner div (second level).
+    const inner = (container.firstChild as HTMLElement)
+      .firstChild as HTMLElement;
+    expect(inner.className).not.toContain("animate-location-highlight");
 
     rerender(<LocationCard id="1" name="Louvre" isHighlighted={false} />);
-    const rootAfter = container.firstChild as HTMLElement;
-    expect(rootAfter.className).not.toContain("animate-location-highlight");
+    const innerAfter = (container.firstChild as HTMLElement)
+      .firstChild as HTMLElement;
+    expect(innerAfter.className).not.toContain("animate-location-highlight");
   });
 
   it("applies highlight animation class when isHighlighted is true", () => {
     const { container } = render(
       <LocationCard id="1" name="Louvre" isHighlighted />
     );
-    const root = container.firstChild as HTMLElement;
-    expect(root.className).toContain("animate-location-highlight");
+    // The animate-location-highlight class is on the card-flip-inner div.
+    const inner = (container.firstChild as HTMLElement)
+      .firstChild as HTMLElement;
+    expect(inner.className).toContain("animate-location-highlight");
   });
 
   it("toggles highlight class off on rerender from true to false", () => {
     const { container, rerender } = render(
       <LocationCard id="1" name="Louvre" isHighlighted />
     );
-    expect((container.firstChild as HTMLElement).className).toContain(
-      "animate-location-highlight"
-    );
+    const inner = (container.firstChild as HTMLElement)
+      .firstChild as HTMLElement;
+    expect(inner.className).toContain("animate-location-highlight");
 
     rerender(<LocationCard id="1" name="Louvre" isHighlighted={false} />);
-    expect((container.firstChild as HTMLElement).className).not.toContain(
-      "animate-location-highlight"
-    );
+    const innerAfter = (container.firstChild as HTMLElement)
+      .firstChild as HTMLElement;
+    expect(innerAfter.className).not.toContain("animate-location-highlight");
   });
 
   // ===========================================================================
   // Phase 2 — Touch hardening contracts
   // ===========================================================================
 
-  it("three-dot menu button has hover-none:opacity-100 class (always visible on touch)", () => {
-    render(
-      <LocationCard
-        id="1"
-        name="Louvre"
-        onEdit={() => {}}
-        onDelete={() => {}}
-      />
-    );
-    const menuBtn = screen.getByRole("button", { name: /location actions/i });
-    expect(menuBtn.className).toContain("hover-none:opacity-100");
+  it("delete button has hover-none:opacity-100 class (always visible on touch)", () => {
+    render(<LocationCard id="1" name="Louvre" onDelete={() => {}} />);
+    const deleteBtn = screen.getByRole("button", { name: /delete location/i });
+    expect(deleteBtn.className).toContain("hover-none:opacity-100");
   });
 
-  it("three-dot menu button has hover-hover:opacity-0 class (hidden until hover on pointer devices)", () => {
-    render(
-      <LocationCard
-        id="1"
-        name="Louvre"
-        onEdit={() => {}}
-        onDelete={() => {}}
-      />
-    );
-    const menuBtn = screen.getByRole("button", { name: /location actions/i });
-    expect(menuBtn.className).toContain("hover-hover:opacity-0");
+  it("delete button has hover-hover:opacity-0 class (hidden until hover on pointer devices)", () => {
+    render(<LocationCard id="1" name="Louvre" onDelete={() => {}} />);
+    const deleteBtn = screen.getByRole("button", { name: /delete location/i });
+    expect(deleteBtn.className).toContain("hover-hover:opacity-0");
   });
 
-  it("three-dot menu button has no bare opacity-0 class (regression: was unconditionally invisible)", () => {
-    render(
-      <LocationCard
-        id="1"
-        name="Louvre"
-        onEdit={() => {}}
-        onDelete={() => {}}
-      />
-    );
-    const menuBtn = screen.getByRole("button", { name: /location actions/i });
+  it("delete button has no bare opacity-0 class (regression: was unconditionally invisible)", () => {
+    render(<LocationCard id="1" name="Louvre" onDelete={() => {}} />);
+    const deleteBtn = screen.getByRole("button", { name: /delete location/i });
     // The bare `opacity-0` class (not prefixed with a variant) must not appear.
     // A variant-prefixed form like `hover-hover:opacity-0` is acceptable.
-    expect(menuBtn.className).not.toMatch(/(^|\s)opacity-0(\s|$)/);
+    expect(deleteBtn.className).not.toMatch(/(^|\s)opacity-0(\s|$)/);
   });
 
   it("camera button has hover-none:opacity-100 class (always visible on touch)", () => {
@@ -495,13 +529,16 @@ describe("LocationCard", () => {
         onCardClick={handle}
       />
     );
+    // Flip to back face first where "View opening hours" button lives.
+    await flipCard(user);
     await user.click(
       screen.getByRole("button", { name: /view opening hours/i })
     );
     expect(handle).not.toHaveBeenCalled();
   });
 
-  it("does NOT fire onCardClick when the Google Maps link is clicked", () => {
+  it("does NOT fire onCardClick when the Google Maps link is clicked", async () => {
+    const user = userEvent.setup();
     const handle = vi.fn();
     render(
       <LocationCard
@@ -511,6 +548,8 @@ describe("LocationCard", () => {
         onCardClick={handle}
       />
     );
+    // Flip to back face first where the Google Maps link lives.
+    await flipCard(user);
     fireEvent.click(screen.getByRole("link", { name: /open in google maps/i }));
     expect(handle).not.toHaveBeenCalled();
   });

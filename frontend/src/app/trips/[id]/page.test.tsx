@@ -191,9 +191,16 @@ describe("TripDetailPage", () => {
     expect(dateBtn).toHaveTextContent(/Jun 1/);
     expect(dateBtn).toHaveTextContent(/Jun 15/);
 
-    expect(screen.getByText("Eiffel Tower")).toBeInTheDocument();
+    // Location names appear in front-face <h3> headings; use heading role to
+    // avoid ambiguity with the back-face InlineEditableField that also renders
+    // the name as a span.
+    expect(
+      screen.getByRole("heading", { name: "Eiffel Tower" })
+    ).toBeInTheDocument();
     expect(screen.getByText("Must visit at sunset")).toBeInTheDocument();
-    expect(screen.getByText("Louvre Museum")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Louvre Museum" })
+    ).toBeInTheDocument();
   });
 
   it("renders extended location fields via LocationCard", async () => {
@@ -201,9 +208,12 @@ describe("TripDetailPage", () => {
     mockListLocations.mockResolvedValue(sampleLocations);
     render(<TripDetailPage />);
 
-    await screen.findByText("Eiffel Tower");
+    // Wait for the location name heading on the front face of the card.
+    await screen.findByRole("heading", { name: "Eiffel Tower" });
     // "Viewpoint" appears both as badge on card and in filter toolbar
     expect(screen.getAllByText("Viewpoint").length).toBeGreaterThanOrEqual(1);
+    // Address and hours are on the back face (always in DOM, just not visually
+    // shown until the card is flipped). getByText works for single occurrences.
     expect(screen.getByText("Champ de Mars, Paris")).toBeInTheDocument();
     expect(screen.getByText("9:00-23:00")).toBeInTheDocument();
     expect(screen.getByText("Booking needed")).toBeInTheDocument();
@@ -212,6 +222,7 @@ describe("TripDetailPage", () => {
       screen.getAllByText(/alice@example\.com/).length
     ).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("Museum").length).toBeGreaterThanOrEqual(1);
+    // Google Maps link is on the back face.
     expect(
       screen.getByRole("link", { name: /open in google maps/i })
     ).toBeInTheDocument();
@@ -299,7 +310,7 @@ describe("TripDetailPage", () => {
     mockListLocations.mockResolvedValue(sampleLocations);
     render(<TripDetailPage />);
 
-    await screen.findByText("Eiffel Tower");
+    await screen.findByRole("heading", { name: "Eiffel Tower" });
     expect(
       screen.getByPlaceholderText(
         /add a location.*paste a google maps link or type a name/i
@@ -325,7 +336,7 @@ describe("TripDetailPage", () => {
     mockListLocations.mockResolvedValue(sampleLocations);
     render(<TripDetailPage />);
 
-    await screen.findByText("Eiffel Tower");
+    await screen.findByRole("heading", { name: "Eiffel Tower" });
     // The old dropdown had a chevron-down icon next to "Add Location"
     // It should no longer be present — SmartLocationInput replaces it
     expect(
@@ -417,7 +428,10 @@ describe("TripDetailPage", () => {
       screen.getByRole("button", { name: /^save location$/i })
     );
 
-    expect(await screen.findByText("Arc de Triomphe")).toBeInTheDocument();
+    // Location name appears in front-face <h3> heading after save.
+    expect(
+      await screen.findByRole("heading", { name: "Arc de Triomphe" })
+    ).toBeInTheDocument();
     expect(screen.getByText("Great views")).toBeInTheDocument();
     expect(mockAddLocation).toHaveBeenCalledWith(
       "trip-1",
@@ -444,69 +458,16 @@ describe("TripDetailPage", () => {
 
   // --- Slice 11: Edit location ---
 
-  it("shows Edit button on each location row", async () => {
+  it("shows Delete button on each location card", async () => {
     mockGetTrip.mockResolvedValue(sampleTrip);
     mockListLocations.mockResolvedValue(sampleLocations);
     render(<TripDetailPage />);
 
-    await screen.findByText("Eiffel Tower");
-    const menuButtons = screen.getAllByRole("button", {
-      name: /location actions/i,
+    await screen.findByRole("heading", { name: "Eiffel Tower" });
+    const deleteButtons = screen.getAllByRole("button", {
+      name: /delete location/i,
     });
-    expect(menuButtons).toHaveLength(2);
-    await userEvent.click(menuButtons[0]);
-    expect(screen.getByRole("button", { name: /^edit$/i })).toBeInTheDocument();
-  });
-
-  it("edits a location inline and saves", async () => {
-    mockGetTrip.mockResolvedValue(sampleTrip);
-    mockListLocations.mockResolvedValue(sampleLocations);
-    mockUpdateLocation.mockResolvedValue({
-      ...sampleLocations[0],
-      name: "Eiffel Tower (top floor)",
-    });
-    render(<TripDetailPage />);
-
-    await screen.findByText("Eiffel Tower");
-    const menuButtons = screen.getAllByRole("button", {
-      name: /location actions/i,
-    });
-    await userEvent.click(menuButtons[0]);
-    await userEvent.click(screen.getByRole("button", { name: /^edit$/i }));
-
-    const nameInput = screen.getByDisplayValue("Eiffel Tower");
-    await userEvent.clear(nameInput);
-    await userEvent.type(nameInput, "Eiffel Tower (top floor)");
-    await userEvent.click(
-      screen.getByRole("button", { name: /^save changes$/i })
-    );
-
-    expect(
-      await screen.findByText("Eiffel Tower (top floor)")
-    ).toBeInTheDocument();
-    expect(mockUpdateLocation).toHaveBeenCalledWith(
-      "trip-1",
-      "loc-1",
-      expect.objectContaining({ name: "Eiffel Tower (top floor)" })
-    );
-  });
-
-  it("cancels location edit without saving", async () => {
-    mockGetTrip.mockResolvedValue(sampleTrip);
-    mockListLocations.mockResolvedValue(sampleLocations);
-    render(<TripDetailPage />);
-
-    await screen.findByText("Eiffel Tower");
-    const menuButtons = screen.getAllByRole("button", {
-      name: /location actions/i,
-    });
-    await userEvent.click(menuButtons[0]);
-    await userEvent.click(screen.getByRole("button", { name: /^edit$/i }));
-
-    await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
-
-    expect(screen.getByText("Eiffel Tower")).toBeInTheDocument();
-    expect(mockUpdateLocation).not.toHaveBeenCalled();
+    expect(deleteButtons).toHaveLength(2);
   });
 
   // --- Location pool features ---
@@ -516,7 +477,7 @@ describe("TripDetailPage", () => {
     mockListLocations.mockResolvedValue(sampleLocations);
     render(<TripDetailPage />);
 
-    await screen.findByText("Eiffel Tower");
+    await screen.findByRole("heading", { name: "Eiffel Tower" });
     const locationsTab = screen.getByRole("tab", { name: /places/i });
     expect(locationsTab).toHaveTextContent("2");
   });
@@ -526,14 +487,18 @@ describe("TripDetailPage", () => {
     mockListLocations.mockResolvedValue(sampleLocations);
     render(<TripDetailPage />);
 
-    await screen.findByText("Eiffel Tower");
+    await screen.findByRole("heading", { name: "Eiffel Tower" });
     const categoryBtn = screen.getByRole("button", { name: /category/i });
     expect(categoryBtn).toBeInTheDocument();
 
-    // Open the category dropdown and check options appear
+    // Open the category dropdown and check options appear.
+    // Use /^museum/i to match the "Museum" filter option (which may include a count
+    // like "Museum 1") without matching "Louvre Museum" InlineEditableField button.
     await userEvent.click(categoryBtn);
     expect(screen.getByText("All categories")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /museum/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^museum/i })
+    ).toBeInTheDocument();
   });
 
   it("filters locations by category when dropdown option is clicked", async () => {
@@ -541,19 +506,30 @@ describe("TripDetailPage", () => {
     mockListLocations.mockResolvedValue(sampleLocations);
     render(<TripDetailPage />);
 
-    await screen.findByText("Eiffel Tower");
-    // Open category dropdown and select Museum
+    await screen.findByRole("heading", { name: "Eiffel Tower" });
+    // Open category dropdown and select Museum.
+    // Use /^museum/i to match the "Museum" filter option button (which may include a
+    // count) without matching "Louvre Museum" InlineEditableField button.
     await userEvent.click(screen.getByRole("button", { name: /category/i }));
-    await userEvent.click(screen.getByRole("button", { name: /museum/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^museum/i }));
 
-    expect(screen.getByText("Louvre Museum")).toBeInTheDocument();
-    expect(screen.queryByText("Eiffel Tower")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Louvre Museum" })
+    ).toBeInTheDocument();
+    // When card is filtered out, neither the heading nor back-face span remain.
+    expect(
+      screen.queryByRole("heading", { name: "Eiffel Tower" })
+    ).not.toBeInTheDocument();
 
-    // Clear filter via dropdown — trigger button now shows "Museum"
-    await userEvent.click(screen.getByRole("button", { name: /museum/i }));
+    // Clear filter via dropdown — trigger button now shows "Museum" (the active filter).
+    await userEvent.click(screen.getByRole("button", { name: /^museum/i }));
     await userEvent.click(screen.getByText("All categories"));
-    expect(screen.getByText("Eiffel Tower")).toBeInTheDocument();
-    expect(screen.getByText("Louvre Museum")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Eiffel Tower" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Louvre Museum" })
+    ).toBeInTheDocument();
   });
 
   it("does not show category filter with only 1 category", async () => {
@@ -561,7 +537,7 @@ describe("TripDetailPage", () => {
     mockListLocations.mockResolvedValue([sampleLocations[0]]);
     render(<TripDetailPage />);
 
-    await screen.findByText("Eiffel Tower");
+    await screen.findByRole("heading", { name: "Eiffel Tower" });
     expect(
       screen.queryByRole("button", { name: /category/i })
     ).not.toBeInTheDocument();
@@ -572,7 +548,7 @@ describe("TripDetailPage", () => {
     mockListLocations.mockResolvedValue(sampleLocations);
     render(<TripDetailPage />);
 
-    await screen.findByText("Eiffel Tower");
+    await screen.findByRole("heading", { name: "Eiffel Tower" });
     // City dropdown only appears when 2+ cities exist
     expect(
       screen.queryByRole("button", { name: /city/i })
@@ -600,9 +576,9 @@ describe("TripDetailPage", () => {
     mockListLocations.mockResolvedValue(multiCityLocations);
     render(<TripDetailPage />);
 
-    await screen.findByText("Eiffel Tower");
-    // Open the city popover
-    const cityBtn = screen.getByRole("button", { name: /city/i });
+    await screen.findByRole("heading", { name: "Eiffel Tower" });
+    // Open the city popover — use exact "City" to avoid ambiguity.
+    const cityBtn = screen.getByRole("button", { name: "City" });
     expect(cityBtn).toBeInTheDocument();
 
     await userEvent.click(cityBtn);
@@ -614,26 +590,12 @@ describe("TripDetailPage", () => {
     const cityNames = headings.map((h) => h.textContent);
     expect(cityNames.some((t) => t?.includes("Nice"))).toBe(true);
     expect(cityNames.some((t) => t?.includes("Paris"))).toBe(true);
-    expect(screen.getByText("Promenade des Anglais")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Promenade des Anglais" })
+    ).toBeInTheDocument();
   });
 
   // --- Delete location ---
-
-  it("shows Delete button on each location card", async () => {
-    mockGetTrip.mockResolvedValue(sampleTrip);
-    mockListLocations.mockResolvedValue(sampleLocations);
-    render(<TripDetailPage />);
-
-    await screen.findByText("Eiffel Tower");
-    const menuButtons = screen.getAllByRole("button", {
-      name: /location actions/i,
-    });
-    expect(menuButtons).toHaveLength(2);
-    await userEvent.click(menuButtons[0]);
-    expect(
-      screen.getByRole("button", { name: /^delete$/i })
-    ).toBeInTheDocument();
-  });
 
   it("deletes a location and removes it from the list", async () => {
     mockGetTrip.mockResolvedValue(sampleTrip);
@@ -641,12 +603,11 @@ describe("TripDetailPage", () => {
     mockDeleteLocation.mockResolvedValue(undefined);
     render(<TripDetailPage />);
 
-    await screen.findByText("Eiffel Tower");
-    const menuButtons = screen.getAllByRole("button", {
-      name: /location actions/i,
+    await screen.findByRole("heading", { name: "Eiffel Tower" });
+    const deleteButtons = screen.getAllByRole("button", {
+      name: /delete location/i,
     });
-    await userEvent.click(menuButtons[0]);
-    await userEvent.click(screen.getByRole("button", { name: /^delete$/i }));
+    await userEvent.click(deleteButtons[0]);
 
     // Confirm in the dialog
     await waitFor(() => {
@@ -663,10 +624,15 @@ describe("TripDetailPage", () => {
     await waitFor(() => {
       expect(mockDeleteLocation).toHaveBeenCalledWith("trip-1", "loc-1");
     });
+    // When the card is deleted, both the front heading and back span are gone.
     await waitFor(() => {
-      expect(screen.queryByText("Eiffel Tower")).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("heading", { name: "Eiffel Tower" })
+      ).not.toBeInTheDocument();
     });
-    expect(screen.getByText("Louvre Museum")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Louvre Museum" })
+    ).toBeInTheDocument();
   });
 
   it("does not delete location when cancel is clicked", async () => {
@@ -674,12 +640,11 @@ describe("TripDetailPage", () => {
     mockListLocations.mockResolvedValue(sampleLocations);
     render(<TripDetailPage />);
 
-    await screen.findByText("Eiffel Tower");
-    const menuButtons = screen.getAllByRole("button", {
-      name: /location actions/i,
+    await screen.findByRole("heading", { name: "Eiffel Tower" });
+    const deleteButtons = screen.getAllByRole("button", {
+      name: /delete location/i,
     });
-    await userEvent.click(menuButtons[0]);
-    await userEvent.click(screen.getByRole("button", { name: /^delete$/i }));
+    await userEvent.click(deleteButtons[0]);
 
     await waitFor(() => {
       expect(screen.getByText("Delete location?")).toBeInTheDocument();
@@ -687,7 +652,9 @@ describe("TripDetailPage", () => {
     await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
 
     expect(mockDeleteLocation).not.toHaveBeenCalled();
-    expect(screen.getByText("Eiffel Tower")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Eiffel Tower" })
+    ).toBeInTheDocument();
   });
 
   it("shows error when location deletion fails", async () => {
@@ -696,12 +663,11 @@ describe("TripDetailPage", () => {
     mockDeleteLocation.mockRejectedValue(new Error("Delete failed"));
     render(<TripDetailPage />);
 
-    await screen.findByText("Eiffel Tower");
-    const menuButtons = screen.getAllByRole("button", {
-      name: /location actions/i,
+    await screen.findByRole("heading", { name: "Eiffel Tower" });
+    const deleteButtons = screen.getAllByRole("button", {
+      name: /delete location/i,
     });
-    await userEvent.click(menuButtons[0]);
-    await userEvent.click(screen.getByRole("button", { name: /^delete$/i }));
+    await userEvent.click(deleteButtons[0]);
 
     await waitFor(() => {
       expect(screen.getByText("Delete location?")).toBeInTheDocument();
@@ -1815,7 +1781,7 @@ describe("TripDetailPage", () => {
       mockGetTrip.mockResolvedValue(sampleTrip);
       mockListLocations.mockResolvedValue(sampleLocations);
       render(<TripDetailPage />);
-      await screen.findByText("Eiffel Tower");
+      await screen.findByRole("heading", { name: "Eiffel Tower" });
 
       // Card must have the data-location-id hook
       const card = document.querySelector('[data-location-id="loc-1"]');
@@ -1838,8 +1804,11 @@ describe("TripDetailPage", () => {
       mockGetTrip.mockResolvedValue(sampleTrip);
       mockListLocations.mockResolvedValue(sampleLocations);
       render(<TripDetailPage />);
+      // Use getAllByRole to avoid "multiple elements" error from the front+back faces.
       await vi.waitFor(() => {
-        expect(screen.queryByText("Eiffel Tower")).not.toBeNull();
+        expect(
+          screen.queryAllByRole("heading", { name: "Eiffel Tower" }).length
+        ).toBeGreaterThan(0);
       });
 
       const pinBtn = screen.getByTestId("mock-sidebar-pin-loc-2");
@@ -1847,9 +1816,12 @@ describe("TripDetailPage", () => {
         fireEvent.click(pinBtn);
       });
 
-      const card = document.querySelector(
+      // data-location-id is on the card-flip-container (root); the
+      // animate-location-highlight class is on the card-flip-inner (first child).
+      const cardRoot = document.querySelector(
         '[data-location-id="loc-2"]'
       ) as HTMLElement;
+      const card = cardRoot.firstChild as HTMLElement;
       // Not yet — waiting for the scroll-settle delay.
       expect(card.className).not.toContain("animate-location-highlight");
 
@@ -1860,9 +1832,10 @@ describe("TripDetailPage", () => {
       expect(card.className).toContain("animate-location-highlight");
 
       // Other card is never highlighted.
-      const otherCard = document.querySelector(
+      const otherCardRoot = document.querySelector(
         '[data-location-id="loc-1"]'
       ) as HTMLElement;
+      const otherCard = otherCardRoot.firstChild as HTMLElement;
       expect(otherCard.className).not.toContain("animate-location-highlight");
     });
 
@@ -1872,7 +1845,9 @@ describe("TripDetailPage", () => {
       mockListLocations.mockResolvedValue(sampleLocations);
       render(<TripDetailPage />);
       await vi.waitFor(() => {
-        expect(screen.queryByText("Eiffel Tower")).not.toBeNull();
+        expect(
+          screen.queryAllByRole("heading", { name: "Eiffel Tower" }).length
+        ).toBeGreaterThan(0);
       });
 
       const pinBtn = screen.getByTestId("mock-sidebar-pin-loc-1");
@@ -1880,9 +1855,12 @@ describe("TripDetailPage", () => {
         fireEvent.click(pinBtn);
       });
 
-      const card = document.querySelector(
+      // animate-location-highlight is on the card-flip-inner (first child of the
+      // card-flip-container which carries data-location-id).
+      const cardRoot = document.querySelector(
         '[data-location-id="loc-1"]'
       ) as HTMLElement;
+      const card = cardRoot.firstChild as HTMLElement;
 
       // Advance past the start delay so the class lands.
       act(() => {
@@ -1903,7 +1881,9 @@ describe("TripDetailPage", () => {
       mockListLocations.mockResolvedValue(sampleLocations);
       render(<TripDetailPage />);
       await vi.waitFor(() => {
-        expect(screen.queryByText("Eiffel Tower")).not.toBeNull();
+        expect(
+          screen.queryAllByRole("heading", { name: "Eiffel Tower" }).length
+        ).toBeGreaterThan(0);
       });
 
       // Click pin 1 and let the highlight actually land.
@@ -1914,12 +1894,13 @@ describe("TripDetailPage", () => {
         vi.advanceTimersByTime(400); // past start delay
       });
 
-      const card1 = document.querySelector(
-        '[data-location-id="loc-1"]'
-      ) as HTMLElement;
-      const card2 = document.querySelector(
-        '[data-location-id="loc-2"]'
-      ) as HTMLElement;
+      // animate-location-highlight is on the card-flip-inner (first child).
+      const card1 = (
+        document.querySelector('[data-location-id="loc-1"]') as HTMLElement
+      ).firstChild as HTMLElement;
+      const card2 = (
+        document.querySelector('[data-location-id="loc-2"]') as HTMLElement
+      ).firstChild as HTMLElement;
       expect(card1.className).toContain("animate-location-highlight");
 
       // Click pin 2 while pin 1's highlight is still visible. loc-1 should
@@ -1947,7 +1928,7 @@ describe("TripDetailPage", () => {
       mockGetTrip.mockResolvedValue(sampleTrip);
       mockListLocations.mockResolvedValue(sampleLocations);
       render(<TripDetailPage />);
-      await screen.findByText("Eiffel Tower");
+      await screen.findByRole("heading", { name: "Eiffel Tower" });
 
       const card = document.querySelector(
         '[data-location-id="loc-1"]'
@@ -1961,7 +1942,7 @@ describe("TripDetailPage", () => {
       mockGetTrip.mockResolvedValue(sampleTrip);
       mockListLocations.mockResolvedValue(sampleLocations);
       render(<TripDetailPage />);
-      await screen.findByText("Eiffel Tower");
+      await screen.findByRole("heading", { name: "Eiffel Tower" });
 
       expect(
         document.querySelector('[data-location-id="loc-1"]')

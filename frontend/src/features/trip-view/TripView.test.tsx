@@ -200,8 +200,10 @@ describe("TripView — edit mode", () => {
 
   it("renders filter toolbar: city popover trigger", () => {
     // sampleLocations has 2 distinct cities (Tokyo, Kyoto) — trigger appears.
+    // Use exact match "City" to avoid ambiguity with location addresses that
+    // contain "City" as part of their text (e.g. "Taito City").
     renderTripView();
-    expect(screen.getByRole("button", { name: /city/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "City" })).toBeInTheDocument();
   });
 
   it("renders filter toolbar: category popover trigger", () => {
@@ -223,7 +225,8 @@ describe("TripView — edit mode", () => {
   it("renders group-by toggle controls", async () => {
     renderTripView();
     // Group-by controls live inside the City filter popover — open it first.
-    await userEvent.click(screen.getByRole("button", { name: /city/i }));
+    // Use exact match to avoid ambiguity with location address text containing "city".
+    await userEvent.click(screen.getByRole("button", { name: "City" }));
     expect(
       screen.getByRole("button", { name: /group by city/i })
     ).toBeInTheDocument();
@@ -391,7 +394,8 @@ describe("TripView — read-only mode (shared view)", () => {
 
   it("still renders the city filter popover", () => {
     renderReadOnly();
-    expect(screen.getByRole("button", { name: /city/i })).toBeInTheDocument();
+    // Use exact match to avoid ambiguity with location address text containing "city".
+    expect(screen.getByRole("button", { name: "City" })).toBeInTheDocument();
   });
 
   it("still renders the category filter popover", () => {
@@ -409,10 +413,18 @@ describe("TripView — read-only mode (shared view)", () => {
 
   it("renders LocationCards in read-only mode", () => {
     renderReadOnly();
-    // Each location name appears in a card.
-    expect(screen.getByText("Senso-ji Temple")).toBeInTheDocument();
-    expect(screen.getByText("Shibuya Crossing")).toBeInTheDocument();
-    expect(screen.getByText("Nishiki Market")).toBeInTheDocument();
+    // Each location name appears in the front-face <h3> heading of a card.
+    // Use getByRole("heading") to avoid ambiguity with the back-face
+    // InlineEditableField that also renders the name as a span.
+    expect(
+      screen.getByRole("heading", { name: "Senso-ji Temple" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Shibuya Crossing" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Nishiki Market" })
+    ).toBeInTheDocument();
   });
 
   it("LocationCards in read-only mode have no edit/delete menu buttons", () => {
@@ -557,7 +569,8 @@ describe("TripView — Phase 2 touch hardening", () => {
 
   it("City filter pill button has touch-target class", () => {
     renderTripView();
-    const cityBtn = screen.getByRole("button", { name: /city/i });
+    // Use exact match to avoid ambiguity with location address text containing "city".
+    const cityBtn = screen.getByRole("button", { name: "City" });
     expect(cityBtn.className).toContain("touch-target");
   });
 
