@@ -156,6 +156,7 @@ def _rpc_rows_to_tree_data(
                     "category": r.get("loc_category"),
                     "note": r.get("loc_note"),
                     "working_hours": r.get("loc_working_hours"),
+                    "useful_link": r.get("loc_useful_link"),
                     "requires_booking": r.get("loc_requires_booking"),
                     "image_url": r.get("loc_photo_url"),
                     "user_image_url": r.get("loc_user_image_url"),

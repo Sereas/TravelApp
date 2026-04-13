@@ -246,6 +246,7 @@ def mock_supabase_trips_and_locations():
             "added_by_email": r.get("added_by_email"),
             "city": r.get("city"),
             "working_hours": r.get("working_hours"),
+            "useful_link": r.get("useful_link"),
             "requires_booking": r.get("requires_booking"),
             "category": r.get("category"),
         }

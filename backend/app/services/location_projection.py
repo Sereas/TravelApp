@@ -23,6 +23,7 @@ LOCATION_SUMMARY_COLUMNS: tuple[str, ...] = (
     "category",
     "requires_booking",
     "google_place_id",
+    "useful_link",
     "latitude",
     "longitude",
     "user_image_url",
@@ -32,7 +33,7 @@ LOCATION_SUMMARY_COLUMNS: tuple[str, ...] = (
 # Note: locations table uses "location_id" as PK, not "id".
 _LOCATION_SUMMARY_SELECT = (
     "location_id, name, city, address, google_link, google_place_id, "
-    "category, note, working_hours, requires_booking, "
+    "category, note, working_hours, useful_link, requires_booking, "
     "latitude, longitude, user_image_url"
 )
 
@@ -134,6 +135,7 @@ def build_location_summary(row: dict | None, location_id: str) -> LocationSummar
         category=row.get("category"),
         note=row.get("note"),
         working_hours=row.get("working_hours"),
+        useful_link=row.get("useful_link"),
         requires_booking=row.get("requires_booking"),
         image_url=row.get("image_url"),
         user_image_url=row.get("user_image_url"),

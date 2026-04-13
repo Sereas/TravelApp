@@ -15,6 +15,7 @@ function makeLocation(overrides: Partial<Location> = {}): Location {
     added_by_email: "alice@test.com",
     city: null,
     working_hours: null,
+    useful_link: null,
     requires_booking: null,
     category: null,
     latitude: null,

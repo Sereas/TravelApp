@@ -14,6 +14,7 @@ function makeLocation(id: string, name: string, city: string | null = null) {
     added_by_email: null,
     city,
     working_hours: null,
+    useful_link: null,
     requires_booking: null,
     category: null,
     google_place_id: null,

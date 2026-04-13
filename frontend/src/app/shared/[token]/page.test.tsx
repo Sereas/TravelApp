@@ -305,7 +305,9 @@ describe("SharedTripPage", () => {
   it("LocationCards render without edit/delete menus (ReadOnlyProvider wraps content)", async () => {
     mockGetSharedTrip.mockResolvedValueOnce(sharedTripData);
     render(<SharedTripPage />);
-    await screen.findByText("Senso-ji Temple");
+    // Use heading role to find the location name on the front face of the flip card,
+    // avoiding the duplicate span that the back-face InlineEditableField renders.
+    await screen.findByRole("heading", { name: "Senso-ji Temple" });
 
     // In read-only mode LocationCard does not render an edit or delete button.
     expect(

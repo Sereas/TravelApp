@@ -63,7 +63,7 @@ router = APIRouter(prefix="/trips", tags=["trips-locations"])
 _LOCATIONS_SELECT = (
     "location_id, trip_id, name, address, google_link, google_place_id, "
     "google_source_type, added_by_email, note, added_by_user_id, city, "
-    "working_hours, requires_booking, category, latitude, longitude, user_image_url"
+    "working_hours, useful_link, requires_booking, category, latitude, longitude, user_image_url"
 )
 
 
@@ -83,6 +83,7 @@ def _loc_to_response(loc: dict) -> LocationResponse:
         added_by_email=loc.get("added_by_email"),
         city=loc.get("city"),
         working_hours=loc.get("working_hours"),
+        useful_link=loc.get("useful_link"),
         requires_booking=loc.get("requires_booking"),
         category=loc.get("category"),
         latitude=loc.get("latitude"),
@@ -148,6 +149,7 @@ async def add_location(
         "added_by_email": user_email,
         "city": body.city,
         "working_hours": body.working_hours,
+        "useful_link": body.useful_link,
         "requires_booking": body.requires_booking,
         "category": body.category,
     }
@@ -275,6 +277,7 @@ async def batch_add_locations(
             "added_by_email": user_email,
             "city": item.city,
             "working_hours": item.working_hours,
+            "useful_link": item.useful_link,
             "requires_booking": item.requires_booking,
             "category": item.category,
         }
@@ -612,6 +615,7 @@ async def update_location(
         "note",
         "city",
         "working_hours",
+        "useful_link",
         "requires_booking",
         "category",
     ):

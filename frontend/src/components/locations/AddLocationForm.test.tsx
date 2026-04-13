@@ -245,6 +245,7 @@ describe("AddLocationForm", () => {
         added_by_email: null,
         city: null,
         working_hours: null,
+        useful_link: null,
         requires_booking: null,
         category: null,
         latitude: null,

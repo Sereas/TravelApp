@@ -223,6 +223,7 @@ export function TripView({
           category={loc.category}
           requires_booking={loc.requires_booking}
           working_hours={loc.working_hours}
+          useful_link={loc.useful_link}
           added_by_email={loc.added_by_email}
           image_url={loc.image_url}
           user_image_url={loc.user_image_url}
@@ -249,12 +250,9 @@ export function TripView({
                   itineraryMutations.handleScheduleLocationToDay(loc.id, dayId)
               : undefined
           }
+          tripId={tripId}
+          onLocationUpdated={onLocationUpdated}
           isHighlighted={highlightedLocationId === loc.id}
-          onEdit={
-            isReadOnly || !onStartEditingLocation
-              ? undefined
-              : () => onStartEditingLocation(loc.id)
-          }
           onCardClick={onCardClick ? () => onCardClick(loc.id) : undefined}
           deleteTrigger={
             isReadOnly || !renderLocationDeleteTrigger
@@ -272,9 +270,10 @@ export function TripView({
       availableDays,
       itineraryMutations,
       highlightedLocationId,
-      onStartEditingLocation,
       onCardClick,
       renderLocationDeleteTrigger,
+      tripId,
+      onLocationUpdated,
     ]
   );
 

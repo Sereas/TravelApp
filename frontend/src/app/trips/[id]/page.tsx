@@ -27,6 +27,7 @@ import { ShareTripDialog } from "@/components/trips/ShareTripDialog";
 import { LoadingSpinner } from "@/components/feedback/LoadingSpinner";
 import { ErrorBanner } from "@/components/feedback/ErrorBanner";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Button } from "@/components/ui/button";
 import { ChevronLeft, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { useItineraryState } from "@/features/itinerary/useItineraryState";
@@ -435,13 +436,14 @@ export default function TripDetailPage() {
         renderLocationDeleteTrigger={(loc) => (
           <ConfirmDialog
             trigger={
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-destructive hover:bg-destructive/10"
+              <Button
+                variant="ghost"
+                size="icon"
+                className="touch-target h-7 w-7 shrink-0 rounded-full bg-black/20 text-white backdrop-blur-sm transition-opacity hover:bg-red-600/80 hover:text-white hover-hover:opacity-0 hover-hover:group-hover:opacity-100 hover-none:opacity-100"
+                aria-label="Delete location"
               >
-                <Trash2 size={14} />
-                Delete
-              </button>
+                <Trash2 size={16} />
+              </Button>
             }
             title="Delete location?"
             description={`"${loc.name}" will be permanently removed from this trip.`}

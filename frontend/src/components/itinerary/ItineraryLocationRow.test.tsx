@@ -17,6 +17,7 @@ const optionLocation = {
     category: "Viewpoint",
     note: "Go at sunset",
     working_hours: "9:00-23:00",
+    useful_link: null,
     requires_booking: "yes",
     latitude: null,
     longitude: null,

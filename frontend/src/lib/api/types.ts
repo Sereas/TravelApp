@@ -38,6 +38,7 @@ export interface Location {
   added_by_email: string | null;
   city: string | null;
   working_hours: string | null;
+  useful_link: string | null;
   requires_booking: string | null; // no | yes | yes_done
   category: string | null;
   latitude: number | null;
@@ -58,6 +59,7 @@ export interface LocationSummary {
   category: string | null;
   note: string | null;
   working_hours: string | null;
+  useful_link: string | null;
   requires_booking: string | null;
   latitude: number | null;
   longitude: number | null;
@@ -215,6 +217,7 @@ export interface SharedLocationSummary {
   category: string | null;
   note: string | null;
   working_hours: string | null;
+  useful_link: string | null;
   requires_booking: string | null;
   latitude: number | null;
   longitude: number | null;
@@ -243,6 +246,7 @@ export interface LocationWriteBody {
   note?: string | null;
   city?: string | null;
   working_hours?: string | null;
+  useful_link?: string | null;
   requires_booking?: string | null;
   category?: string | null;
   latitude?: number | null;

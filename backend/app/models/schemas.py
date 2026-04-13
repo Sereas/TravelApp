@@ -67,6 +67,7 @@ _NULLABLE_TEXT_FIELDS = (
     "working_hours",
     "google_place_id",
     "google_source_type",
+    "useful_link",
 )
 
 # Max lengths aligned with DB / audit (city varchar(255); others reasonable limits)
@@ -76,6 +77,7 @@ _LOCATION_GOOGLE_LINK_MAX = 2048
 _LOCATION_NOTE_MAX = 2000
 _LOCATION_CITY_MAX = 255
 _LOCATION_WORKING_HOURS_MAX = 500
+_LOCATION_USEFUL_LINK_MAX = 2048
 
 
 class _LocationFieldsMixin(BaseModel):
@@ -110,9 +112,18 @@ class _LocationFieldsMixin(BaseModel):
     @classmethod
     def validate_google_link_scheme(cls, v: str | None) -> str | None:
         if v is not None:
-            stripped = v.strip().lower()
-            if not (stripped.startswith("https://") or stripped.startswith("http://")):
+            v = v.strip()
+            if not (v.lower().startswith("https://") or v.lower().startswith("http://")):
                 raise ValueError("google_link must be an http/https URL")
+        return v
+
+    @field_validator("useful_link", check_fields=False)
+    @classmethod
+    def validate_useful_link_scheme(cls, v: str | None) -> str | None:
+        if v is not None:
+            v = v.strip()
+            if not (v.lower().startswith("https://") or v.lower().startswith("http://")):
+                raise ValueError("useful_link must be an http/https URL")
         return v
 
     @field_validator("photo_resource_name", check_fields=False)
@@ -137,6 +148,7 @@ class AddLocationBody(_LocationFieldsMixin):
     note: str | None = Field(None, max_length=_LOCATION_NOTE_MAX)
     city: str | None = Field(None, max_length=_LOCATION_CITY_MAX)
     working_hours: str | None = Field(None, max_length=_LOCATION_WORKING_HOURS_MAX)
+    useful_link: str | None = Field(None, max_length=_LOCATION_USEFUL_LINK_MAX)
     requires_booking: str | None = Field(
         None,
         description="One of: no, yes, yes_done",
@@ -163,6 +175,7 @@ class LocationResponse(BaseModel):
     added_by_email: str | None = None
     city: str | None = None
     working_hours: str | None = None
+    useful_link: str | None = None
     requires_booking: str | None = None
     category: str | None = None
     latitude: float | None = None
@@ -195,6 +208,7 @@ class UpdateLocationBody(_LocationFieldsMixin):
     note: str | None = Field(None, max_length=_LOCATION_NOTE_MAX)
     city: str | None = Field(None, max_length=_LOCATION_CITY_MAX)
     working_hours: str | None = Field(None, max_length=_LOCATION_WORKING_HOURS_MAX)
+    useful_link: str | None = Field(None, max_length=_LOCATION_USEFUL_LINK_MAX)
     requires_booking: str | None = None
     category: str | None = None
     google_place_id: str | None = None
@@ -386,6 +400,7 @@ class LocationSummary(BaseModel):
     category: str | None = None
     note: str | None = None
     working_hours: str | None = None
+    useful_link: str | None = None
     requires_booking: str | None = None
     latitude: float | None = None
     longitude: float | None = None
@@ -621,6 +636,7 @@ class SharedLocationSummary(BaseModel):
     category: str | None = None
     note: str | None = None
     working_hours: str | None = None
+    useful_link: str | None = None
     requires_booking: str | None = None
     latitude: float | None = None
     longitude: float | None = None

@@ -60,6 +60,7 @@ export function EditLocationRow({
   const [workingHours, setWorkingHours] = useState(
     location.working_hours ?? ""
   );
+  const [usefulLink, setUsefulLink] = useState(location.useful_link ?? "");
   const [requiresBooking, setRequiresBooking] = useState(
     location.requires_booking || "no"
   );
@@ -80,6 +81,7 @@ export function EditLocationRow({
         note: note || null,
         city: city || null,
         working_hours: workingHours || null,
+        useful_link: usefulLink || null,
         requires_booking: requiresBooking || null,
         category: category || null,
       });
@@ -259,6 +261,29 @@ export function EditLocationRow({
                   onChange={(e) => setGoogleLink(e.target.value)}
                   placeholder="https://maps.google.com/..."
                   aria-label="Google Maps link"
+                  autoComplete="off"
+                  className={`${fieldInput} pl-9`}
+                />
+              </div>
+            </div>
+
+            {/* Useful link */}
+            <div className="space-y-1">
+              <Label htmlFor="edit-location-useful-link" className={fieldLabel}>
+                Useful link
+              </Label>
+              <div className="relative">
+                <Link2
+                  size={14}
+                  className={`absolute left-3 top-1/2 -translate-y-1/2 ${iconClass}`}
+                />
+                <input
+                  id="edit-location-useful-link"
+                  type="url"
+                  value={usefulLink}
+                  onChange={(e) => setUsefulLink(e.target.value)}
+                  placeholder="https://booking.com/..."
+                  aria-label="Useful link"
                   autoComplete="off"
                   className={`${fieldInput} pl-9`}
                 />

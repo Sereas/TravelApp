@@ -649,6 +649,66 @@ def test_list_locations_other_users_trip_returns_404(
         app.dependency_overrides.clear()
 
 
+def test_add_location_with_useful_link_returns_201(
+    client: TestClient,
+    mock_user_id,
+    mock_supabase_trips_and_locations,
+):
+    """useful_link is accepted and returned on create."""
+    locations_inserted, MockSupabase = mock_supabase_trips_and_locations
+    trip_id = str(uuid4())
+    mock_sb = MockSupabase({trip_id: str(mock_user_id)}, mock_user_id)
+
+    async def override_user():
+        return mock_user_id
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        r = client.post(
+            f"/api/v1/trips/{trip_id}/locations",
+            json={
+                "name": "Restaurant",
+                "useful_link": "https://example.com/menu",
+            },
+        )
+        assert r.status_code == 201
+        data = r.json()
+        assert data["useful_link"] == "https://example.com/menu"
+        assert len(locations_inserted) == 1
+        assert locations_inserted[0]["useful_link"] == "https://example.com/menu"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_add_location_invalid_useful_link_returns_422(
+    client: TestClient,
+    mock_user_id,
+    mock_supabase_trips_and_locations,
+):
+    """useful_link must be an http/https URL."""
+    _locations_inserted, MockSupabase = mock_supabase_trips_and_locations
+    trip_id = str(uuid4())
+    mock_sb = MockSupabase({trip_id: str(mock_user_id)}, mock_user_id)
+
+    async def override_user():
+        return mock_user_id
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        r = client.post(
+            f"/api/v1/trips/{trip_id}/locations",
+            json={
+                "name": "Bad Link",
+                "useful_link": "ftp://not-http.com",
+            },
+        )
+        assert r.status_code == 422
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_list_locations_no_jwt_returns_401(client: TestClient, monkeypatch):
     """No Authorization header -> 401."""
     monkeypatch.setenv("SUPABASE_JWT_SECRET", "test-secret")

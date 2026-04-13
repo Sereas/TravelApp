@@ -65,6 +65,7 @@ function makeLocationSummary(
     category: null,
     note: null,
     working_hours: null,
+    useful_link: null,
     requires_booking: null,
     latitude: null,
     longitude: null,

@@ -289,3 +289,22 @@ def test_build_location_summary_missing_lat_lng_returns_none():
     summary = build_location_summary(row, loc_id)
     assert summary.latitude is None
     assert summary.longitude is None
+
+
+def test_location_summary_columns_includes_useful_link():
+    """useful_link must appear in the canonical column list."""
+    assert "useful_link" in LOCATION_SUMMARY_COLUMNS
+
+
+def test_build_location_summary_includes_useful_link():
+    loc_id = str(uuid4())
+    row = {"name": "Spot", "useful_link": "https://example.com/book"}
+    summary = build_location_summary(row, loc_id)
+    assert summary.useful_link == "https://example.com/book"
+
+
+def test_build_location_summary_useful_link_none_when_missing():
+    loc_id = str(uuid4())
+    row = {"name": "Spot"}
+    summary = build_location_summary(row, loc_id)
+    assert summary.useful_link is None
