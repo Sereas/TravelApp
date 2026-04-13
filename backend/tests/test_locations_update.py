@@ -123,6 +123,7 @@ def _make_location(location_id: str, trip_id: str, **kwargs):
         "added_by_user_id": None,
         "city": None,
         "working_hours": None,
+        "useful_link": None,
         "requires_booking": None,
         "category": None,
     }
@@ -363,6 +364,66 @@ def test_update_location_invalid_category_returns_422(
             json={"category": "InvalidCategory"},
         )
         assert r.status_code == 422
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_update_location_useful_link(
+    client: TestClient,
+    mock_user_id: UUID,
+):
+    """PATCH useful_link updates and returns the new value."""
+    trips_store: dict[str, dict] = {}
+    locations_store: dict[str, dict] = {}
+    trip_id = str(uuid4())
+    loc_id = str(uuid4())
+    trips_store[trip_id] = _make_trip(trip_id, mock_user_id)
+    locations_store[loc_id] = _make_location(loc_id, trip_id)
+    mock_sb = MockSupabaseLocations(trips_store, locations_store)
+
+    async def override_user():
+        return mock_user_id
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        r = client.patch(
+            f"/api/v1/trips/{trip_id}/locations/{loc_id}",
+            json={"useful_link": "https://example.com/booking"},
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["useful_link"] == "https://example.com/booking"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_update_location_useful_link_empty_string_becomes_null(
+    client: TestClient,
+    mock_user_id: UUID,
+):
+    """Empty-string useful_link is converted to null via _NULLABLE_TEXT_FIELDS."""
+    trips_store: dict[str, dict] = {}
+    locations_store: dict[str, dict] = {}
+    trip_id = str(uuid4())
+    loc_id = str(uuid4())
+    trips_store[trip_id] = _make_trip(trip_id, mock_user_id)
+    locations_store[loc_id] = _make_location(loc_id, trip_id, useful_link="https://old.example.com")
+    mock_sb = MockSupabaseLocations(trips_store, locations_store)
+
+    async def override_user():
+        return mock_user_id
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        r = client.patch(
+            f"/api/v1/trips/{trip_id}/locations/{loc_id}",
+            json={"useful_link": ""},
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["useful_link"] is None
     finally:
         app.dependency_overrides.clear()
 
