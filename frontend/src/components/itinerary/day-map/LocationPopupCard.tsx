@@ -12,10 +12,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  CATEGORY_META,
-  type CategoryKey,
-} from "@/lib/location-constants";
+import { CATEGORY_META, type CategoryKey } from "@/lib/location-constants";
 
 // Max note length — must match backend `_LOCATION_NOTE_MAX` in schemas.py.
 const POPUP_NOTE_MAX_LENGTH = 2000;
@@ -121,7 +118,9 @@ export function LocationPopupCard({
   const canEditNote = !readOnly && onSaveNote != null;
   const canDelete = !readOnly && onDelete != null;
   const catMeta = category ? CATEGORY_META[category as CategoryKey] : null;
-  const isDetailedHoursValue = working_hours ? isDetailedHours(working_hours) : false;
+  const isDetailedHoursValue = working_hours
+    ? isDetailedHours(working_hours)
+    : false;
 
   const enterEditMode = () => {
     setNoteError(null);
@@ -294,7 +293,12 @@ export function LocationPopupCard({
                   }}
                   className="block w-full cursor-pointer select-text rounded-lg border-l-2 border-primary/30 bg-primary/[0.04] px-2.5 py-1.5 pr-7 text-left text-[11px] leading-relaxed text-foreground/80 outline-none transition-colors hover:bg-primary/[0.08]"
                 >
-                  <span className={cn("break-words", !noteExpanded && "line-clamp-2")}>
+                  <span
+                    className={cn(
+                      "break-words",
+                      !noteExpanded && "line-clamp-2"
+                    )}
+                  >
                     {note}
                   </span>
                 </div>
@@ -372,7 +376,10 @@ export function LocationPopupCard({
               </button>
             </div>
             {noteError && (
-              <p role="alert" className="text-[11px] font-medium text-destructive">
+              <p
+                role="alert"
+                className="text-[11px] font-medium text-destructive"
+              >
                 {noteError}
               </p>
             )}
@@ -508,7 +515,10 @@ export function LocationPopupCard({
               </button>
             </div>
             {deleteError && (
-              <p role="alert" className="text-[11px] font-medium text-destructive">
+              <p
+                role="alert"
+                className="text-[11px] font-medium text-destructive"
+              >
                 {deleteError}
               </p>
             )}

@@ -13,7 +13,6 @@ import {
   MapPin,
   MessageSquare,
   Pencil,
-
   Ticket,
   Trash2,
   X,
@@ -146,7 +145,9 @@ function useInlineEdit(
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [optimistic, setOptimistic] = useState<Partial<Record<EditableField, string | null>>>({});
+  const [optimistic, setOptimistic] = useState<
+    Partial<Record<EditableField, string | null>>
+  >({});
   const originalRef = useRef("");
 
   const startEdit = useCallback(
@@ -183,36 +184,62 @@ function useInlineEdit(
     const field = editingField;
     const value = trimmed || null;
     // Optimistic: close edit and show new value immediately
-    setOptimistic(prev => ({ ...prev, [field]: value }));
+    setOptimistic((prev) => ({ ...prev, [field]: value }));
     setEditingField(null);
     setDraft("");
     setError(null);
     try {
-      const updated = await api.locations.update(tripId, locationId, { [field]: value });
+      const updated = await api.locations.update(tripId, locationId, {
+        [field]: value,
+      });
       onLocationUpdated?.(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save");
     } finally {
-      setOptimistic(prev => { const next = { ...prev }; delete next[field]; return next; });
+      setOptimistic((prev) => {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      });
     }
   }, [tripId, locationId, editingField, draft, cancelEdit, onLocationUpdated]);
 
   /** Optimistic save for select/dropdown fields. */
-  const saveSelect = useCallback(async (field: EditableField, value: string | null) => {
-    if (!tripId) return;
-    setOptimistic(prev => ({ ...prev, [field]: value }));
-    setError(null);
-    try {
-      const updated = await api.locations.update(tripId, locationId, { [field]: value });
-      onLocationUpdated?.(updated);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save");
-    } finally {
-      setOptimistic(prev => { const next = { ...prev }; delete next[field]; return next; });
-    }
-  }, [tripId, locationId, onLocationUpdated]);
+  const saveSelect = useCallback(
+    async (field: EditableField, value: string | null) => {
+      if (!tripId) return;
+      setOptimistic((prev) => ({ ...prev, [field]: value }));
+      setError(null);
+      try {
+        const updated = await api.locations.update(tripId, locationId, {
+          [field]: value,
+        });
+        onLocationUpdated?.(updated);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to save");
+      } finally {
+        setOptimistic((prev) => {
+          const next = { ...prev };
+          delete next[field];
+          return next;
+        });
+      }
+    },
+    [tripId, locationId, onLocationUpdated]
+  );
 
-  return { editingField, draft, setDraft, saving, error, startEdit, cancelEdit, saveEdit, saveSelect, getValue };
+  return {
+    editingField,
+    draft,
+    setDraft,
+    saving,
+    error,
+    startEdit,
+    cancelEdit,
+    saveEdit,
+    saveSelect,
+    getValue,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -256,18 +283,26 @@ function InlineEditableField({
   };
 
   // Place cursor at end of text when entering edit mode
-  const setEndRef = useCallback((el: HTMLInputElement | HTMLTextAreaElement | null) => {
-    if (el) {
-      const len = el.value.length;
-      el.setSelectionRange(len, len);
-    }
-  }, []);
+  const setEndRef = useCallback(
+    (el: HTMLInputElement | HTMLTextAreaElement | null) => {
+      if (el) {
+        const len = el.value.length;
+        el.setSelectionRange(len, len);
+      }
+    },
+    []
+  );
 
   if (isEditing) {
     return (
       <div className="flex flex-col gap-1">
         <div className="flex items-start gap-1.5">
-          {Icon && <Icon size={11} className="mt-[5px] shrink-0 text-muted-foreground" />}
+          {Icon && (
+            <Icon
+              size={11}
+              className="mt-[5px] shrink-0 text-muted-foreground"
+            />
+          )}
           {multiline ? (
             <textarea
               ref={setEndRef}
@@ -327,9 +362,16 @@ function InlineEditableField({
     <div
       className={cn(
         "group/field flex items-start gap-1.5 text-[11px] text-muted-foreground/70",
-        canEdit && "cursor-pointer rounded-md transition-colors hover:bg-muted/50"
+        canEdit &&
+          "cursor-pointer rounded-md transition-colors hover:bg-muted/50"
       )}
-      onClick={canEdit ? () => { if (!hasTextSelection()) editState.startEdit(field, value); } : undefined}
+      onClick={
+        canEdit
+          ? () => {
+              if (!hasTextSelection()) editState.startEdit(field, value);
+            }
+          : undefined
+      }
       role={canEdit ? "button" : undefined}
       tabIndex={canEdit ? 0 : undefined}
       onKeyDown={
@@ -391,8 +433,7 @@ export function LocationCard({
   onLocationUpdated,
 }: LocationCardProps) {
   const readOnly = useReadOnly();
-  const canDelete =
-    !readOnly && (onDelete != null || deleteTrigger != null);
+  const canDelete = !readOnly && (onDelete != null || deleteTrigger != null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [photoDialogOpen, setPhotoDialogOpen] = useState(false);
   const [flipped, setFlipped] = useState(false);
@@ -418,7 +459,9 @@ export function LocationCard({
   const eCategory = editState.getValue("category", category);
   const eBooking = editState.getValue("requires_booking", requires_booking);
 
-  const catMeta = eCategory ? CATEGORY_META[eCategory as CategoryKey] : undefined;
+  const catMeta = eCategory
+    ? CATEGORY_META[eCategory as CategoryKey]
+    : undefined;
   const isDetailedHoursValue =
     eWorkingHours != null && eWorkingHours.trim() !== ""
       ? isDetailedHours(eWorkingHours)
@@ -596,13 +639,16 @@ export function LocationCard({
                     className={cn(
                       "rounded-lg border-l-2 border-primary/30 bg-primary/[0.04] py-1.5 pl-2.5 pr-2 text-xs leading-relaxed text-foreground/80 break-words",
                       !noteExpanded && "line-clamp-2",
-                      !readOnly && tripId && "cursor-pointer transition-colors hover:bg-primary/[0.08]"
+                      !readOnly &&
+                        tripId &&
+                        "cursor-pointer transition-colors hover:bg-primary/[0.08]"
                     )}
                     onClick={
                       !readOnly && tripId
                         ? (e) => {
                             e.stopPropagation();
-                            if (!hasTextSelection()) editState.startEdit("note", eNote);
+                            if (!hasTextSelection())
+                              editState.startEdit("note", eNote);
                           }
                         : undefined
                     }
@@ -741,7 +787,10 @@ export function LocationCard({
                 <button
                   type="button"
                   className="block w-full truncate text-left text-sm font-semibold text-foreground rounded transition-colors hover:text-primary"
-                  onClick={() => { if (!hasTextSelection()) editState.startEdit("name", eName ?? ""); }}
+                  onClick={() => {
+                    if (!hasTextSelection())
+                      editState.startEdit("name", eName ?? "");
+                  }}
                 >
                   {eName}
                 </button>
@@ -764,7 +813,10 @@ export function LocationCard({
                   <button
                     type="button"
                     className="block text-left text-[11px] text-muted-foreground rounded transition-colors hover:text-foreground"
-                    onClick={() => { if (!hasTextSelection()) editState.startEdit("city", eCity); }}
+                    onClick={() => {
+                      if (!hasTextSelection())
+                        editState.startEdit("city", eCity);
+                    }}
                   >
                     {eCity}
                   </button>
@@ -799,7 +851,9 @@ export function LocationCard({
           <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-3.5 py-3">
             {/* Location section */}
             <div className="flex flex-col gap-1.5">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">Location</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                Location
+              </p>
               <InlineEditableField
                 field="address"
                 value={eAddress}
@@ -824,7 +878,9 @@ export function LocationCard({
 
             {/* Info section */}
             <div className="flex flex-col gap-1.5 border-t border-border/50 pt-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">Info</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                Info
+              </p>
 
               {/* Working hours */}
               {editState.editingField === "working_hours" ? (
@@ -842,11 +898,16 @@ export function LocationCard({
                 <div
                   className={cn(
                     "flex flex-col gap-0.5",
-                    !readOnly && tripId && "cursor-pointer rounded-md transition-colors hover:bg-muted/50"
+                    !readOnly &&
+                      tripId &&
+                      "cursor-pointer rounded-md transition-colors hover:bg-muted/50"
                   )}
                   onClick={
                     !readOnly && tripId
-                      ? () => { if (!hasTextSelection()) editState.startEdit("working_hours", eWorkingHours); }
+                      ? () => {
+                          if (!hasTextSelection())
+                            editState.startEdit("working_hours", eWorkingHours);
+                        }
                       : undefined
                   }
                 >
@@ -863,7 +924,9 @@ export function LocationCard({
                       >
                         <Clock size={12} className="shrink-0 opacity-50" />
                         <span className="underline decoration-dotted underline-offset-2">
-                          {hoursExpanded ? "Hide opening hours" : "View opening hours"}
+                          {hoursExpanded
+                            ? "Hide opening hours"
+                            : "View opening hours"}
                         </span>
                       </button>
                       {hoursExpanded && (
@@ -881,8 +944,16 @@ export function LocationCard({
                                   i > 0 && "border-t border-border/60"
                                 )}
                               >
-                                <span className="font-medium text-foreground">{dayName}</span>
-                                <span className={isClosed ? "text-muted-foreground/50" : "text-muted-foreground"}>
+                                <span className="font-medium text-foreground">
+                                  {dayName}
+                                </span>
+                                <span
+                                  className={
+                                    isClosed
+                                      ? "text-muted-foreground/50"
+                                      : "text-muted-foreground"
+                                  }
+                                >
                                   {time || line}
                                 </span>
                               </div>
@@ -925,9 +996,18 @@ export function LocationCard({
                 <div
                   className={cn(
                     "group/field flex items-center gap-1.5",
-                    !readOnly && tripId && "cursor-pointer rounded-md transition-colors hover:bg-muted/50"
+                    !readOnly &&
+                      tripId &&
+                      "cursor-pointer rounded-md transition-colors hover:bg-muted/50"
                   )}
-                  onClick={!readOnly && tripId ? () => { if (!hasTextSelection()) editState.startEdit("useful_link", eUsefulLink); } : undefined}
+                  onClick={
+                    !readOnly && tripId
+                      ? () => {
+                          if (!hasTextSelection())
+                            editState.startEdit("useful_link", eUsefulLink);
+                        }
+                      : undefined
+                  }
                 >
                   <Link2 size={11} className="shrink-0 text-muted-foreground" />
                   <a
@@ -941,7 +1021,10 @@ export function LocationCard({
                     <ExternalLink size={9} className="ml-0.5 inline" />
                   </a>
                   {!readOnly && tripId && (
-                    <Pencil size={10} className="ml-auto shrink-0 opacity-0 transition-opacity group-hover/field:opacity-50" />
+                    <Pencil
+                      size={10}
+                      className="ml-auto shrink-0 opacity-0 transition-opacity group-hover/field:opacity-50"
+                    />
                   )}
                 </div>
               ) : !readOnly && tripId ? (
@@ -959,38 +1042,55 @@ export function LocationCard({
               {!readOnly && tripId ? (
                 <div className="mt-1 grid grid-cols-2 gap-2">
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-medium text-muted-foreground/70">Category</label>
+                    <label className="text-[10px] font-medium text-muted-foreground/70">
+                      Category
+                    </label>
                     <select
                       value={eCategory ?? ""}
                       onChange={(e) => {
-                        void editState.saveSelect("category", e.target.value || null);
+                        void editState.saveSelect(
+                          "category",
+                          e.target.value || null
+                        );
                       }}
                       className="rounded-md border border-border bg-background px-2 py-1.5 text-[11px] text-foreground outline-none transition-colors focus:ring-1 focus:ring-primary/30"
                       aria-label="Category"
                     >
                       <option value="">None</option>
                       {CATEGORY_OPTIONS.map((cat: string) => (
-                        <option key={cat} value={cat}>{cat}</option>
+                        <option key={cat} value={cat}>
+                          {cat}
+                        </option>
                       ))}
                     </select>
                   </div>
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-medium text-muted-foreground/70">Booking</label>
+                    <label className="text-[10px] font-medium text-muted-foreground/70">
+                      Booking
+                    </label>
                     <select
                       value={eBooking ?? "no"}
                       onChange={(e) => {
-                        void editState.saveSelect("requires_booking", e.target.value);
+                        void editState.saveSelect(
+                          "requires_booking",
+                          e.target.value
+                        );
                       }}
                       className="rounded-md border border-border bg-background px-2 py-1.5 text-[11px] text-foreground outline-none transition-colors focus:ring-1 focus:ring-primary/30"
                       aria-label="Booking status"
                     >
                       {REQUIRES_BOOKING_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
                       ))}
                     </select>
                   </div>
                   {editState.error && (
-                    <p role="alert" className="col-span-2 text-[10px] font-medium text-destructive">
+                    <p
+                      role="alert"
+                      className="col-span-2 text-[10px] font-medium text-destructive"
+                    >
                       {editState.error}
                     </p>
                   )}
@@ -1021,14 +1121,17 @@ export function LocationCard({
             {/* Schedule section */}
             {inItinerary && itineraryDayLabel && (
               <div className="flex flex-col gap-1 border-t border-border/50 pt-3">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">Schedule</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                  Schedule
+                </p>
                 <div className="flex items-start gap-1.5 text-[11px] text-brand">
                   <CalendarCheck size={11} className="mt-[2px] shrink-0" />
-                  <span className="font-medium leading-relaxed">{itineraryDayLabel}</span>
+                  <span className="font-medium leading-relaxed">
+                    {itineraryDayLabel}
+                  </span>
                 </div>
               </div>
             )}
-
           </div>
         </div>
       </div>

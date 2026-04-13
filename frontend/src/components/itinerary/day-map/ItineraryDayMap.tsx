@@ -256,7 +256,6 @@ export function ItineraryDayMap({
             user_image_url={loc.user_image_url}
             requires_booking={loc.requires_booking}
             city={loc.city}
-
             working_hours={loc.working_hours}
             useful_link={loc.useful_link}
             google_link={loc.google_link}
