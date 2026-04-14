@@ -141,7 +141,7 @@ Before any HTTP request or browser navigation, the URL must be validated:
 
 ## BACK-003 — Add progress streaming to Google list import endpoint
 
-- **Status:** todo
+- **Status:** done
 - **Area:** back
 - **Type:** improvement
 - **Priority:** medium
@@ -192,7 +192,11 @@ Progress events should include:
 - Works correctly on Render deployment
 
 ### Implementation notes
-- None yet.
+- Implemented as SSE endpoint `POST /{trip_id}/locations/import-google-list-stream` in `trip_locations.py`.
+- Import logic extracted to `services/google_list_import.py` as async generator yielding typed dataclass events: `ScrapingStarted`, `ScrapingDone`, `EnrichingItem`, `SavingBatch`, `ImportComplete`, `ImportError`.
+- Router converts events to SSE via `_event_to_sse_dict()` and streams with `StreamingResponse(media_type="text/event-stream")`.
+- Events include phase, current/total counts, per-item status (imported/existing/failed), and final summary.
+- Works on Render deployment with `X-Accel-Buffering: no` header.
 
 ## BACK-004 — Return richer details for failed items in Google list import
 
@@ -248,7 +252,7 @@ For failed items, include additional context in the response:
 
 ## BACK-005 — Expose `_search_place_by_text` as public method on GooglePlacesClient
 
-- **Status:** todo
+- **Status:** wontfix
 - **Area:** back
 - **Type:** improvement
 - **Priority:** low
@@ -286,7 +290,7 @@ Add a public method on `GooglePlacesClient` (e.g. `search_by_text()` or `resolve
 - Tests pass
 
 ### Implementation notes
-- None yet.
+- Closed as wontfix. The refactor in phase-6 extracted import logic from `trip_locations.py` into `services/google_list_import.py`, which is a dedicated service module — not a router. Services calling private client methods is an accepted internal pattern; the encapsulation concern was about routers reaching into client internals, which no longer applies. The call sites (`_search_place_by_text`, `_search_place_nearby`) are now inside a cohesive service that is tightly coupled to the client by design.
 
 ## BACK-006 — Full backend security audit remediation
 

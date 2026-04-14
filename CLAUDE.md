@@ -151,6 +151,8 @@ Route metrics are computed lazily: segments are only calculated when the user vi
 
 ### Frontend (`frontend/src/`)
 
+**Design System:** All UI/UX conventions, color token usage, component patterns, animation rules, and accessibility requirements are documented in [`frontend/DESIGN.md`](frontend/DESIGN.md). Read it before making any visual changes.
+
 #### App Routes
 
 | Route | Purpose |
@@ -215,8 +217,6 @@ Route metrics are computed lazily: segments are only calculated when the user vi
 
 Page Object Models in `frontend/e2e/pages/`, helpers in `frontend/e2e/helpers/`, global setup/teardown for auth.
 
-**Performance:** Backend load tests in `tests/perf/` with JSON artifacts in `tests/perf/artifacts/`.
-
 ### CI/CD (`.github/workflows/ci.yml`)
 
 | Job | What it runs |
@@ -225,7 +225,6 @@ Page Object Models in `frontend/e2e/pages/`, helpers in `frontend/e2e/helpers/`,
 | `test` | `pytest` (backend) |
 | `frontend-lint` | `tsc --noEmit` + ESLint |
 | `frontend-test` | Vitest unit tests |
-| `e2e` | Playwright E2E (push to main only); starts backend + frontend, uploads artifacts on failure |
 
 ## Database Performance Rules
 
@@ -376,6 +375,10 @@ Skills are loaded by you or your teammates as reference during task execution. T
 | `tdd-workflow` | Starting a feature with tests | Red-Green-Refactor cycle with git checkpoints. pytest and Vitest command patterns. |
 | `e2e-testing` | Writing or debugging Playwright tests | POM patterns, flaky test quarantine, CI/CD artifact management. |
 | `security-review` | Auth, user input, new API endpoints | Full security checklist. FastAPI auth patterns, Supabase RLS/service-role gotchas. |
+| `animations-skill` | Any UI animation or interaction work | Animation decision framework, easing/duration rules, spring guidelines, review checklist. |
+| `ui-ux-pro-max` | New UI components, pages, or design decisions | 67 styles, 96 palettes, accessibility rules, pre-delivery checklist. Generic reference — project-specific rules are in `frontend/DESIGN.md`. |
+
+**Project design reference:** [`frontend/DESIGN.md`](frontend/DESIGN.md) — color token usage, component inventory, layout patterns, animation conventions, do's/don'ts. Read this before any visual change.
 
 ---
 

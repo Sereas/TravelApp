@@ -91,7 +91,6 @@ supabase/
   migrations/
 
 tests/
-  perf/
 ```
 
 ## Status

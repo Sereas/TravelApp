@@ -62,8 +62,6 @@ Prioritize E2E coverage for these flows:
 6. **Import Google Maps list** → verify locations appear in trip
 7. **View route with segments** → verify route metrics load (retry-on-view pattern)
 
-Existing perf tests: `tests/perf/frontend/` (trip load timing via Playwright). Don't break these.
-
 ## Workflow
 
 ### 1. Plan

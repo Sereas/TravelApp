@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Pre-push hook — mirrors the GitHub Actions CI pipeline.
+# Pre-push hook — full validation before code reaches remote.
+# Runs unit tests, type checks, lint, schema validation, and smoke E2E.
 # Blocks the push if any check fails.
 set -euo pipefail
 
@@ -67,6 +68,33 @@ if [ "${SKIP_SUPABASE_SCHEMA_CHECK:-0}" != "1" ]; then
   pass "schema sync"
   "$python_bin" supabase/check_schema_dependents.py || fail "schema dependents check failed"
   pass "schema dependents"
+fi
+
+# ── 5. Smoke E2E (critical path only) ────────────────────────────────────────
+if [ "${SKIP_E2E:-0}" != "1" ]; then
+  header "Smoke E2E (critical-path)"
+
+  BACKEND_OK=0
+  FRONTEND_OK=0
+  curl -sf http://localhost:8000/health >/dev/null 2>&1 && BACKEND_OK=1
+  curl -sf http://localhost:3000 >/dev/null 2>&1 && FRONTEND_OK=1
+
+  if [ "$BACKEND_OK" = "1" ] && [ "$FRONTEND_OK" = "1" ]; then
+    cd frontend
+    npx playwright test e2e/specs/smoke/critical-path.spec.ts --retries=1 --reporter=list \
+      || fail "smoke E2E failed"
+    pass "smoke E2E"
+    cd "$REPO_ROOT"
+  else
+    echo -e "  ${RED}⚠ Skipping — backend and/or frontend not running.${RESET}"
+    [ "$BACKEND_OK" = "0" ] && echo "    Backend not reachable at http://localhost:8000/health"
+    [ "$FRONTEND_OK" = "0" ] && echo "    Frontend not reachable at http://localhost:3000"
+    echo "    Start both services before pushing to run smoke E2E."
+    echo "  Smoke E2E skipped (services not running)"
+  fi
+else
+  echo -e "\n${BOLD}── Smoke E2E${RESET}"
+  echo "  Skipped (SKIP_E2E=1)"
 fi
 
 echo -e "\n${GREEN}${BOLD}All checks passed — pushing.${RESET}\n"

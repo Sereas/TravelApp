@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Pre-commit hook — fast feedback on Python formatting/lint only.
+set -euo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BOLD='\033[1m'
+RESET='\033[0m'
+
+pass() { echo -e "${GREEN}✓${RESET} $1"; }
+fail() { echo -e "${RED}✗ $1${RESET}"; exit 1; }
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+echo -e "${BOLD}── Pre-commit: Python lint (ruff)${RESET}"
+if command -v ruff &>/dev/null; then
+  ruff check . || fail "ruff check failed"
+  ruff format --check . || fail "ruff format check failed"
+  pass "ruff"
+elif [ -f ".venv/bin/ruff" ]; then
+  .venv/bin/ruff check . || fail "ruff check failed"
+  .venv/bin/ruff format --check . || fail "ruff format check failed"
+  pass "ruff"
+else
+  echo "  ruff not found — skipping"
+fi
