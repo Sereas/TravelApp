@@ -34,7 +34,7 @@ test.describe("Add location — manual", () => {
     await page.locator("#add-location-name").fill("E2E Test Restaurant");
 
     // Submit (button text "Add Location" — AddLocationForm.tsx line 411)
-    await page.getByRole("button", { name: "Add Location" }).click();
+    await page.getByRole("button", { name: "Save Location" }).click();
 
     // Dialog should close and the new location card should appear
     await expect(detail.locationCard("E2E Test Restaurant")).toBeVisible({
@@ -90,7 +90,7 @@ test.describe("@google — Add location via Google Maps link", () => {
     }
 
     // Submit
-    await page.getByRole("button", { name: "Add Location" }).click();
+    await page.getByRole("button", { name: "Save Location" }).click();
 
     // The card with the auto-filled name should appear
     await expect(detail.locationCard(nameValue.trim())).toBeVisible({
@@ -118,7 +118,7 @@ test.describe("@google — Add location via Google Maps link", () => {
       return;
     }
 
-    await page.getByRole("button", { name: "Add Location" }).click();
+    await page.getByRole("button", { name: "Save Location" }).click();
     // Wait for the dialog to close
     await page
       .getByRole("dialog")

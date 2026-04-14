@@ -109,8 +109,7 @@ test.describe("Trip date display", () => {
     const detail = new TripDetailPage(page);
     await detail.goto(trip.id);
 
-    // formatDateRange returns "Starts Jun 1, 2026" (page.tsx line 65)
-    await expect(page.getByText(/Starts/)).toBeVisible();
+    // TripDateRangePicker renders just the date (no "Starts" prefix on detail page)
     await expect(page.getByText(/Jun 1, 2026/)).toBeVisible();
 
     await apiClient.deleteTrip(trip.id);
@@ -128,8 +127,7 @@ test.describe("Trip date display", () => {
     const detail = new TripDetailPage(page);
     await detail.goto(trip.id);
 
-    // formatDateRange returns "Ends Jun 10, 2026" (page.tsx line 66)
-    await expect(page.getByText(/Ends/)).toBeVisible();
+    // TripDateRangePicker renders just the date (no "Ends" prefix on detail page)
     await expect(page.getByText(/Jun 10, 2026/)).toBeVisible();
 
     await apiClient.deleteTrip(trip.id);
@@ -201,8 +199,8 @@ test.describe("Trip edit", () => {
     // Submit the edit form. The save button text is "Save" (EditTripForm.tsx).
     await page.getByRole("button", { name: /Save Changes/i }).click();
 
-    // After save the form is dismissed and the h1 should show the new name
-    await expect(page.locator("h1")).toHaveText(newName, { timeout: 10_000 });
+    // After save the form is dismissed and the trip name button should show the new name
+    await expect(page.getByRole("button", { name: newName })).toBeVisible({ timeout: 10_000 });
   });
 
   test("end date cannot be set before start date in edit form", async ({

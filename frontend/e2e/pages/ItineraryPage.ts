@@ -301,11 +301,11 @@ export class ItineraryPage {
   // ── Departure / Arrival fields ──────────────────────────────────────────
 
   getDepartureField(): Locator {
-    return this.page.getByRole("textbox", { name: "Departure" }).first();
+    return this.page.getByRole("textbox", { name: "From" }).first();
   }
 
   getArrivalField(): Locator {
-    return this.page.getByRole("textbox", { name: "Arrival" }).first();
+    return this.page.getByRole("textbox", { name: "To" }).first();
   }
 
   // ── Logistics / Routes ───────────────────────────────────────────────────
@@ -343,11 +343,12 @@ export class ItineraryPage {
   // ── Unscheduled panel ─────────────────────────────────────────────────────
 
   getUnscheduledPanel(): Locator {
-    // The panel header changed from "Not yet planned" to "Quick add" in the UI refresh.
-    // Match either to stay resilient to future label changes.
+    // The panel header is "Quick add". Use first() to avoid strict mode
+    // when both desktop sidebar and mobile panel match.
     return this.page
       .locator("aside")
-      .filter({ hasText: /Quick add|Not yet planned/i });
+      .filter({ hasText: /Quick add/i })
+      .first();
   }
 
   /**

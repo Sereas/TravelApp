@@ -67,7 +67,7 @@ test.describe("iPhone 12 (390×844, touch)", () => {
       "Mozilla/5.0 (iPhone; CPU iPhone OS 14_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1",
   });
 
-  test("LocationCard menu button is visible without hover on touch device", async ({
+  test("LocationCard action buttons visible without hover on touch device", async ({
     page,
     apiClient,
   }) => {
@@ -76,27 +76,32 @@ test.describe("iPhone 12 (390×844, touch)", () => {
     const detail = new TripDetailPage(page);
     await detail.goto(trip.id);
 
-    // Wait for first location card to appear
     await expect(detail.locationCard("E2E Touch A")).toBeVisible({
       timeout: 20_000,
     });
 
-    // The three-dot menu button (Location actions) must be visible immediately
-    // on a touch device — no hover needed. Pre-Phase-2 this button has
-    // opacity-0 and is invisible until a mouse hovers the card.
-    const menuButton = page
-      .getByRole("button", { name: /location actions/i })
+    // On touch devices, the delete button (hover-none:opacity-100) must be
+    // visible immediately — no hover needed.
+    const deleteButton = page
+      .getByRole("button", { name: "Delete location" })
       .first();
-    await expect(menuButton).toBeVisible({ timeout: 5_000 });
+    await expect(deleteButton).toBeVisible({ timeout: 5_000 });
 
     await apiClient.deleteTrip(trip.id);
   });
 
-  test("filter popover fits inside viewport on iPhone 12", async ({
+  test("schedule popover fits inside viewport on iPhone 12", async ({
     page,
     apiClient,
   }) => {
-    const trip = await setupTripWithLocations(apiClient, "E2E Popover iPhone");
+    // Create trip with dates so schedule popover has day options
+    const trip = await apiClient.createTrip({
+      name: `E2E Popover iPhone ${Date.now()}`,
+      start_date: "2026-08-01",
+      end_date: "2026-08-03",
+    });
+    await apiClient.addLocation(trip.id, { name: "E2E Touch A" });
+    await apiClient.generateDays(trip.id);
 
     const detail = new TripDetailPage(page);
     await detail.goto(trip.id);
@@ -105,24 +110,21 @@ test.describe("iPhone 12 (390×844, touch)", () => {
       timeout: 20_000,
     });
 
-    // Click the City filter pill to open its popover
-    const cityPill = page.getByRole("button", { name: /city/i });
-    await cityPill.click();
-
-    // Wait for the popover to open (a panel with city options should appear)
+    // Click the "Schedule to a day" button on the location card
+    const scheduleBtn = page.getByRole("button", {
+      name: /Schedule to a day/i,
+    });
+    await scheduleBtn.click();
     await page.waitForTimeout(400);
 
-    // Find the open popover content — it should have a bounding box that fits
-    // inside the 390px viewport with at least 4px safety margin on each side.
+    // The schedule popover should fit inside the 390px viewport
     const popoverContent = page
-      .locator('[role="dialog"],[data-radix-popper-content-wrapper]')
+      .locator('[data-radix-popper-content-wrapper]')
       .first();
     const box = await popoverContent.boundingBox();
 
     if (box) {
-      // Must not overflow left edge
       expect(box.x).toBeGreaterThanOrEqual(0);
-      // Must not overflow right edge (390 viewport - 4px safety)
       expect(box.x + box.width).toBeLessThanOrEqual(390 - 4);
     }
 
@@ -181,7 +183,7 @@ test.describe("iPad portrait (768×1024, touch)", () => {
     isMobile: true,
   });
 
-  test("LocationCard menu button is visible without hover on iPad touch", async ({
+  test("LocationCard action buttons visible without hover on iPad touch", async ({
     page,
     apiClient,
   }) => {
@@ -194,10 +196,11 @@ test.describe("iPad portrait (768×1024, touch)", () => {
       timeout: 20_000,
     });
 
-    const menuButton = page
-      .getByRole("button", { name: /location actions/i })
+    // On touch devices, the delete button must be visible immediately
+    const deleteButton = page
+      .getByRole("button", { name: "Delete location" })
       .first();
-    await expect(menuButton).toBeVisible({ timeout: 5_000 });
+    await expect(deleteButton).toBeVisible({ timeout: 5_000 });
 
     await apiClient.deleteTrip(trip.id);
   });
@@ -240,7 +243,7 @@ test.describe("Desktop (1440×900, no touch)", () => {
     hasTouch: false,
   });
 
-  test("LocationCard menu button is hidden before hover on desktop (regression guard)", async ({
+  test("LocationCard delete button hidden before hover on desktop (regression guard)", async ({
     page,
     apiClient,
   }) => {
@@ -253,21 +256,19 @@ test.describe("Desktop (1440×900, no touch)", () => {
       timeout: 20_000,
     });
 
-    // On a hover-capable device the menu button must NOT be visible
-    // before hovering — the hover-hover:opacity-0 variant hides it.
-    const menuButton = page
-      .getByRole("button", { name: /location actions/i })
+    // On a hover-capable device the delete button uses hover-hover:opacity-0
+    // — invisible until mouse hovers the card.
+    const deleteButton = page
+      .getByRole("button", { name: "Delete location" })
       .first();
 
-    // The button exists in the DOM but is visually hidden (opacity 0 in CSS).
-    // Playwright's toBeVisible() checks CSS visibility — opacity:0 makes it
-    // invisible to Playwright. We expect it is NOT visible before hover.
-    await expect(menuButton).not.toBeVisible({ timeout: 3_000 });
+    // Before hover: opacity-0 makes it invisible to Playwright
+    await expect(deleteButton).not.toBeVisible({ timeout: 3_000 });
 
-    // After hovering the card, the button should become visible.
+    // After hovering: hover-hover:group-hover:opacity-100 makes it visible
     const card = page.locator("[data-location-id]").first();
     await card.hover();
-    await expect(menuButton).toBeVisible({ timeout: 3_000 });
+    await expect(deleteButton).toBeVisible({ timeout: 3_000 });
 
     await apiClient.deleteTrip(trip.id);
   });

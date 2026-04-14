@@ -28,10 +28,18 @@ export class TripDetailPage {
   }
 
   async getTripName(): Promise<string> {
-    // The trip name renders as an inline-editable <button> — the aria-label equals the trip name.
-    // We can get the visible text from the first button in the "Trip name" area.
-    // Fallback: find the button in the tablist container's sibling heading area.
-    return this.page.locator('[aria-label="Trip name"]').inputValue();
+    // In read-only (shared) view, trip name is an <h1>.
+    // In authenticated view, trip name is a <button> styled with text-2xl.
+    const h1 = this.page.locator("h1");
+    if (await h1.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      return (await h1.textContent())?.trim() ?? "";
+    }
+    return (
+      (await this.page
+        .locator('button[class*="text-2xl"]')
+        .first()
+        .textContent()) ?? ""
+    ).trim();
   }
 
   async switchToLocationsTab(): Promise<void> {
@@ -67,17 +75,30 @@ export class TripDetailPage {
   /**
    * Opens the inline AddLocationForm.
    *
-   * When locations exist: clicks "Add Location" dropdown then "Paste Link".
-   * When empty: clicks the "Add a location" button directly.
-   * The form is inline (not a dialog) — waits for the name input.
+   * Empty trip: EmptyLocationsCTA shows "Paste Link" / "Add Manually" buttons.
+   * Non-empty trip: SmartLocationInput is always visible — focus the input.
    */
   async clickAddLocation(): Promise<void> {
-    const dropdown = this.page.getByRole("button", { name: /Add Location/i });
-    if (await dropdown.isVisible().catch(() => false)) {
-      await dropdown.click();
-      await this.page.getByText("Paste Link").click();
-    } else {
-      await this.page.getByRole("button", { name: /Add a location/i }).click();
+    // Empty state: EmptyLocationsCTA shows "Add Manually" / "Paste Link" buttons.
+    // "Add Manually" opens AddLocationForm in form phase (name input visible).
+    // "Paste Link" opens link phase (only link input visible — wrong for manual add).
+    const addManually = this.page.getByRole("button", {
+      name: "Add Manually",
+    });
+    const smartInput = this.page.locator(
+      'input[placeholder*="Add a location"]'
+    );
+
+    if (
+      await addManually.isVisible({ timeout: 3_000 }).catch(() => false)
+    ) {
+      await addManually.click();
+    } else if (
+      await smartInput.isVisible({ timeout: 1_000 }).catch(() => false)
+    ) {
+      // Non-empty: SmartLocationInput is always visible — type directly
+      await smartInput.click();
+      return; // SmartInput is already visible, no need to wait
     }
     await this.page
       .locator("#add-location-name")
@@ -88,14 +109,19 @@ export class TripDetailPage {
    * Opens the Import Google Maps List dialog.
    */
   async clickImportGoogleList(): Promise<void> {
-    const dropdown = this.page.getByRole("button", { name: /Add Location/i });
-    if (await dropdown.isVisible().catch(() => false)) {
-      await dropdown.click();
-      await this.page.getByText("Import Google List").first().click();
+    // Empty state: "Import List" button in EmptyLocationsCTA
+    const emptyImport = this.page.getByRole("button", {
+      name: "Import List",
+    });
+    // Non-empty: SmartLocationInput "Import Google List" button (aria-label)
+    const smartImport = this.page.getByRole("button", {
+      name: /Import Google List/i,
+    });
+
+    if (await emptyImport.isVisible({ timeout: 3_000 }).catch(() => false)) {
+      await emptyImport.click();
     } else {
-      await this.page
-        .getByRole("button", { name: /Import Google List/i })
-        .click();
+      await smartImport.click();
     }
     await this.page
       .getByText("Import from Google Maps List")

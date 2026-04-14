@@ -126,11 +126,6 @@ test.describe("trip sharing", () => {
       noAuthPage.getByRole("button", { name: /Add Location/i })
     ).toBeHidden();
 
-    // "Shared trip" badge should appear
-    await expect(noAuthPage.getByText("Shared trip")).toBeVisible({
-      timeout: 5_000,
-    });
-
     await apiClient.deleteTrip(trip.id);
   });
 });

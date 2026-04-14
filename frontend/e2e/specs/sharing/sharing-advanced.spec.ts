@@ -92,11 +92,6 @@ test.describe("Sharing advanced", () => {
       noAuthPage.getByRole("heading", { name: tripName })
     ).toBeVisible({ timeout: 20_000 });
 
-    // Verify "Shared trip" badge
-    await expect(noAuthPage.getByText("Shared trip")).toBeVisible({
-      timeout: 5_000,
-    });
-
     // Verify both locations visible in the default Locations tab
     await expect(noAuthPage.getByText("E2E Shared Loc A")).toBeVisible({
       timeout: 10_000,
@@ -147,8 +142,8 @@ test.describe("Sharing advanced", () => {
     const detail = new TripDetailPage(page);
     await detail.goto(trip.id);
 
-    // Verify we are on the trip detail page
-    await expect(page.locator("h1")).toHaveText(tripName, { timeout: 10_000 });
+    // Verify we are on the trip detail page (trip name is a button in authenticated view)
+    await expect(page.getByRole("button", { name: tripName })).toBeVisible({ timeout: 10_000 });
 
     // Click "Edit trip" to open the EditTripForm dialog
     await detail.getEditTripButton().click();

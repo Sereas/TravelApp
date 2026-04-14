@@ -81,16 +81,21 @@ if [ "${SKIP_E2E:-0}" != "1" ]; then
 
   if [ "$BACKEND_OK" = "1" ] && [ "$FRONTEND_OK" = "1" ]; then
     cd frontend
-    npx playwright test e2e/specs/smoke/critical-path.spec.ts --retries=1 --reporter=list \
+    E2E_RUN_TRIGGER=push npx playwright test e2e/specs/smoke/critical-path.spec.ts --retries=1 \
       || fail "smoke E2E failed"
     pass "smoke E2E"
     cd "$REPO_ROOT"
   else
-    echo -e "  ${RED}⚠ Skipping — backend and/or frontend not running.${RESET}"
-    [ "$BACKEND_OK" = "0" ] && echo "    Backend not reachable at http://localhost:8000/health"
-    [ "$FRONTEND_OK" = "0" ] && echo "    Frontend not reachable at http://localhost:3000"
-    echo "    Start both services before pushing to run smoke E2E."
-    echo "  Smoke E2E skipped (services not running)"
+    echo -e "  ${RED}✗ Cannot run smoke E2E — services not running:${RESET}"
+    [ "$BACKEND_OK" = "0" ] && echo "    ✗ Backend not reachable at http://localhost:8000/health"
+    [ "$FRONTEND_OK" = "0" ] && echo "    ✗ Frontend not reachable at http://localhost:3000"
+    echo ""
+    echo "    Start the services first:"
+    echo "      Backend:  uvicorn backend.app.main:app --reload"
+    echo "      Frontend: cd frontend && npm run dev"
+    echo ""
+    echo "    Then retry the push. Use SKIP_E2E=1 only for non-code changes."
+    fail "smoke E2E blocked — start backend + frontend and retry"
   fi
 else
   echo -e "\n${BOLD}── Smoke E2E${RESET}"
