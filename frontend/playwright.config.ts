@@ -2,8 +2,8 @@ import { defineConfig, devices } from "@playwright/test";
 import * as dotenv from "dotenv";
 import * as path from "path";
 
-// Load .env.e2e before anything else so env vars are available during config
-dotenv.config({ path: path.resolve(__dirname, ".env.e2e") });
+// Load e2e/.env.e2e before anything else so env vars are available during config
+dotenv.config({ path: path.resolve(__dirname, "e2e", ".env.e2e") });
 
 const isCI = !!process.env.CI;
 
