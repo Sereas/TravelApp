@@ -32,7 +32,7 @@ interface TestRecord {
   hasFlow: boolean;
 }
 
-function slugify(text: string, maxLen = 80): string {
+function slugify(text: string, maxLen = 120): string {
   return text
     .replace(/[^a-zA-Z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
@@ -106,8 +106,11 @@ class RunSummaryReporter implements Reporter {
     const fullTitle = spec.join(" › ");
     const file = test.location.file.replace(/.*e2e\/specs\//, "");
 
-    // Build a deterministic folder name: test-{slugified-title}
-    const dirName = `test-${slugify(fullTitle)}`;
+    // Build a short, readable folder name: {spec-path}--{test-name}
+    // e.g. "auth-login--redirects-unauthenticated-user-to-login"
+    const specSlug = slugify(file.replace(/\.spec\.ts$/, ""));
+    const testSlug = slugify(test.title, 60);
+    const dirName = `${specSlug}--${testSlug}`;
     const testDir = path.join(this.outputDir, dirName);
 
     // Check for approved flow
@@ -151,7 +154,7 @@ class RunSummaryReporter implements Reporter {
 
       // Include only the matching section of the approved flow
       if (approvedFlow) {
-        const section = extractFlowSection(approvedFlow, fullTitle);
+        const section = extractFlowSection(approvedFlow, test.title);
         lines.push("", "## Approved Flow", "", section ?? approvedFlow);
       } else {
         lines.push(
@@ -295,7 +298,7 @@ class RunSummaryReporter implements Reporter {
       // Clean up empty Playwright artifact folders (auto-created per test
       // even when no failure artifacts exist). Keep only our test-* folders.
       for (const entry of fs.readdirSync(this.outputDir)) {
-        if (entry.startsWith("test-") || entry === "SUMMARY.md" || entry.startsWith(".")) continue;
+        if (entry === "SUMMARY.md" || entry.startsWith(".")) continue;
         const full = path.join(this.outputDir, entry);
         try {
           const stat = fs.statSync(full);

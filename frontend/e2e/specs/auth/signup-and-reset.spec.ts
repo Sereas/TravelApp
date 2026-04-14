@@ -24,26 +24,27 @@ test.describe("Signup & password reset edge cases", () => {
       noAuthPage.getByRole("heading", { name: "Welcome back" })
     ).toBeVisible({ timeout: 10_000 });
 
-    // Switch to signup mode
     await noAuthPage.getByRole("button", { name: "Create one" }).click();
     await expect(
       noAuthPage.getByRole("heading", { name: "Create an account" })
     ).toBeVisible({ timeout: 5_000 });
 
-    // Fill form with the existing E2E test email
     await noAuthPage.getByLabel("Email").fill(getE2EEmail());
     await noAuthPage
       .getByLabel("Password", { exact: true })
       .fill("SomePass123");
     await noAuthPage.getByLabel("Confirm password").fill("SomePass123");
 
-    // Submit
     await noAuthPage.getByRole("button", { name: "Create account" }).click();
 
-    // Supabase returns "User already registered" for duplicate signups
     const errorAlert = noAuthPage.getByRole("alert").first();
     await expect(errorAlert).toBeVisible({ timeout: 15_000 });
     await expect(errorAlert).toContainText(/already registered/i);
+
+    await test.info().attach("07-signup-existing-email.png", {
+      body: await noAuthPage.screenshot(),
+      contentType: "image/png",
+    });
   });
 
   test("signup — mismatched passwords shows error", async ({ noAuthPage }) => {
@@ -52,24 +53,25 @@ test.describe("Signup & password reset edge cases", () => {
       noAuthPage.getByRole("heading", { name: "Welcome back" })
     ).toBeVisible({ timeout: 10_000 });
 
-    // Switch to signup mode
     await noAuthPage.getByRole("button", { name: "Create one" }).click();
     await expect(
       noAuthPage.getByRole("heading", { name: "Create an account" })
     ).toBeVisible({ timeout: 5_000 });
 
-    // Fill form with mismatched passwords
     await noAuthPage.getByLabel("Email").fill("test-mismatch@example.com");
     await noAuthPage.getByLabel("Password", { exact: true }).fill("Password1");
     await noAuthPage.getByLabel("Confirm password").fill("Password2");
 
-    // Submit
     await noAuthPage.getByRole("button", { name: "Create account" }).click();
 
-    // Client-side validation: "Passwords do not match" (LoginForm.tsx line 51)
     const errorAlert = noAuthPage.getByRole("alert").first();
     await expect(errorAlert).toBeVisible({ timeout: 5_000 });
     await expect(errorAlert).toContainText("Passwords do not match");
+
+    await test.info().attach("08-signup-password-mismatch.png", {
+      body: await noAuthPage.screenshot(),
+      contentType: "image/png",
+    });
   });
 
   test("forgot password — empty email shows error", async ({ noAuthPage }) => {
@@ -78,15 +80,18 @@ test.describe("Signup & password reset edge cases", () => {
       noAuthPage.getByRole("heading", { name: "Welcome back" })
     ).toBeVisible({ timeout: 10_000 });
 
-    // Leave email empty and click "Forgot your password?"
     await noAuthPage
       .getByRole("button", { name: "Forgot your password?" })
       .click();
 
-    // "Enter your email address first" (LoginForm.tsx line 108)
     const errorAlert = noAuthPage.getByRole("alert").first();
     await expect(errorAlert).toBeVisible({ timeout: 5_000 });
     await expect(errorAlert).toContainText("Enter your email address first");
+
+    await test.info().attach("09-forgot-empty-email.png", {
+      body: await noAuthPage.screenshot(),
+      contentType: "image/png",
+    });
   });
 
   test("forgot password — valid email shows response", async ({
@@ -97,21 +102,22 @@ test.describe("Signup & password reset edge cases", () => {
       noAuthPage.getByRole("heading", { name: "Welcome back" })
     ).toBeVisible({ timeout: 10_000 });
 
-    // Fill email with the E2E test email
     await noAuthPage.getByLabel("Email").fill(getE2EEmail());
 
-    // Click "Forgot your password?"
     await noAuthPage
       .getByRole("button", { name: "Forgot your password?" })
       .click();
 
-    // Supabase may accept or reject the email format.
-    // If accepted: "Password reset link sent to <email>"
-    // If rejected: error banner with the Supabase error message.
-    // Either way, the UI should respond — wait for either outcome.
     const successMsg = noAuthPage.getByText(/Password reset link sent to/i);
     const errorMsg = noAuthPage.getByRole("alert").first();
 
     await expect(successMsg.or(errorMsg)).toBeVisible({ timeout: 15_000 });
+    // Wait for the full message to render (success banner or error text)
+    await noAuthPage.waitForLoadState("networkidle");
+
+    await test.info().attach("10-forgot-valid-email.png", {
+      body: await noAuthPage.screenshot(),
+      contentType: "image/png",
+    });
   });
 });
