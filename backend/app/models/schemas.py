@@ -491,7 +491,15 @@ class ItineraryResponse(BaseModel):
 
 
 class LocationPreviewResponse(BaseModel):
-    """Response body for Google-based location preview (no DB write)."""
+    """Response body for Google-based location preview (no DB write).
+
+    Fields are limited to what the *Place Details Pro* SKU returns
+    (displayName + Essentials tier) plus the photo resource name, which is
+    passed back to the client so that ``POST /locations`` can trigger a
+    one-off photo fetch on save without a second Place Details call.
+    Enterprise-tier data (phone, website, opening hours) is deliberately
+    excluded — see ADR on Google Places cost reduction.
+    """
 
     name: str
     address: str | None = None
@@ -500,9 +508,6 @@ class LocationPreviewResponse(BaseModel):
     longitude: float | None = None
     google_place_id: str
     suggested_category: str | None = None
-    working_hours: list[str] = Field(default_factory=list)
-    website: str | None = None
-    phone: str | None = None
     photo_resource_name: str | None = None
 
 

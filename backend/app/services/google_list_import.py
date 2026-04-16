@@ -17,7 +17,6 @@ import structlog
 from backend.app.clients.google_list_scraper import GoogleListScraper
 from backend.app.clients.google_places import GoogleListParseError
 from backend.app.routers.locations_google import (
-    _clean_working_hours,
     _resolve_city,
     _suggest_category,
 )
@@ -107,10 +106,15 @@ def _build_row(
     used_nearby: bool,
     place_note: str | None,
 ) -> dict:
-    """Build a DB-ready location dict from a resolved PlaceResolution."""
+    """Build a DB-ready location dict from a resolved PlaceResolution.
+
+    ``working_hours`` is intentionally left unset here. It is an
+    Enterprise-tier field in the Google Places API and was dropped from the
+    resolve call to keep every request in the Essentials/Pro SKU tiers. Users
+    edit working hours manually after import.
+    """
     suggested_category = _suggest_category(resolved.types)
     city = _resolve_city(resolved)
-    clean_hours = _clean_working_hours(resolved.opening_hours_text)
     google_link = f"https://www.google.com/maps/place/?q=place_id:{resolved.place_id}"
     return {
         "trip_id": trip_id,
@@ -122,7 +126,6 @@ def _build_row(
         "added_by_user_id": user_id,
         "added_by_email": user_email,
         "city": city,
-        "working_hours": " | ".join(clean_hours) if clean_hours else None,
         "category": suggested_category,
         "latitude": resolved.latitude,
         "longitude": resolved.longitude,

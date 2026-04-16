@@ -24,9 +24,6 @@ def _make_resolution(
         latitude=None,
         longitude=None,
         types=types,
-        website=None,
-        formatted_phone_number=None,
-        opening_hours_text=[],
         first_photo_resource=None,
     )
 
@@ -140,12 +137,6 @@ def test_preview_location_from_google_link_returns_200(client: TestClient, monke
             latitude=48.8606111,
             longitude=2.337644,
             types=["museum", "tourist_attraction"],
-            website="https://www.louvre.fr/en",
-            formatted_phone_number="+33 1 40 20 50 50",
-            opening_hours_text=[
-                "Monday: Closed",
-                "Tuesday: 9:00 AM - 6:00 PM",
-            ],
             first_photo_resource="places/ChIJCzYy5IS16lQR/photos/AXCi2Q6abc",
         )
 
@@ -167,8 +158,77 @@ def test_preview_location_from_google_link_returns_200(client: TestClient, monke
         assert data["photo_resource_name"] == "places/ChIJCzYy5IS16lQR/photos/AXCi2Q6abc"
         # Category suggestion from types
         assert data["suggested_category"] == "Museum"
+        # Enterprise-tier fields must not be present in the response:
+        # they were removed to keep Google Places billing in the Essentials SKU.
+        assert "working_hours" not in data
+        assert "website" not in data
+        assert "phone" not in data
     finally:
         app.dependency_overrides.clear()
+
+
+def test_field_masks_contain_no_enterprise_fields():
+    """Regression: Google Places v1 bills at the Enterprise SKU whenever the
+    field mask asks for ``websiteUri``, ``nationalPhoneNumber``, or
+    ``regularOpeningHours.*``. We keep all three Places client call sites off
+    the Enterprise SKU.
+
+    Implementation note: we parse ``google_places.py`` with :mod:`ast`, walk
+    every string constant, split each on commas (the field-mask delimiter),
+    and check each token. This catches Enterprise fields at **any position**
+    in a comma-separated mask — not just the first — and ignores mentions
+    inside docstrings whose tokens don't look like field-mask fragments.
+    Docstrings still contain these words for explanation; we filter those
+    out by requiring the enclosing string to look like a field mask (no
+    whitespace, at least one recognized Places field token).
+    """
+    import ast
+    import inspect
+
+    from backend.app.clients import google_places as gp
+
+    forbidden = {"websiteUri", "nationalPhoneNumber", "regularOpeningHours"}
+    # Any field known to appear in a legitimate Places field mask. A string
+    # literal is treated as a field mask only if it contains one of these;
+    # docstrings containing `websiteUri` in prose won't match because they
+    # also contain spaces and prose words.
+    mask_signal_fields = {
+        "id",
+        "displayName",
+        "formattedAddress",
+        "location",
+        "types",
+        "photos",
+        "addressComponents",
+        "viewport",
+    }
+
+    tree = ast.parse(inspect.getsource(gp))
+    offenders: list[str] = []
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Constant) and isinstance(node.value, str)):
+            continue
+        value = node.value
+        # A field mask has no whitespace and is a CSV of tokens.
+        if " " in value or "\n" in value or "\t" in value:
+            continue
+        tokens = [t.strip() for t in value.split(",") if t.strip()]
+        if not tokens:
+            continue
+        bare_tokens = [t.removeprefix("places.").split(".")[0] for t in tokens]
+        if not (set(bare_tokens) & mask_signal_fields):
+            continue
+        # This string is shaped like a field mask. Fail if any forbidden
+        # field appears at any position.
+        bad_in_this_mask = [b for b in bare_tokens if b in forbidden]
+        if bad_in_this_mask:
+            offenders.append(f"{sorted(set(bad_in_this_mask))} in {value!r}")
+
+    assert not offenders, (
+        "Enterprise-tier field(s) found in a Google Places field mask in "
+        "google_places.py — every Places request including these fields is "
+        "billed at Enterprise rates ($20-35/1k):\n  " + "\n  ".join(offenders)
+    )
 
 
 def test_follow_redirects_stops_at_google_maps_url():
@@ -222,9 +282,6 @@ def test_preview_returns_place_name_as_city_when_place_is_a_town(client: TestCli
                 latitude=49.7072,
                 longitude=0.2036,
                 types=["locality", "political"],
-                website=None,
-                formatted_phone_number=None,
-                opening_hours_text=[],
                 first_photo_resource=None,
             )
 

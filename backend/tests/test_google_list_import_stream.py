@@ -45,9 +45,6 @@ def _make_resolution(place_id: str, name: str) -> PlaceResolution:
         latitude=48.86,
         longitude=2.34,
         types=["restaurant"],
-        website=None,
-        formatted_phone_number=None,
-        opening_hours_text=[],
         first_photo_resource=None,
     )
 
