@@ -2,7 +2,7 @@ import * as dotenv from "dotenv";
 import * as fs from "fs";
 import * as path from "path";
 
-dotenv.config({ path: path.resolve(__dirname, "../.env.e2e") });
+dotenv.config({ path: path.resolve(__dirname, ".env.e2e") });
 
 const AUTH_DIR = path.resolve(__dirname, ".auth");
 const TOKEN_JSON = path.join(AUTH_DIR, "token.json");

@@ -217,7 +217,16 @@ Route metrics are computed lazily: segments are only calculated when the user vi
 
 Page Object Models in `frontend/e2e/pages/`, helpers in `frontend/e2e/helpers/`, global setup/teardown for auth.
 
-### CI/CD (`.github/workflows/ci.yml`)
+### CI/CD Pipeline
+
+**Local hooks (`.githooks/`):**
+
+| Hook | What it runs |
+|------|-------------|
+| `pre-commit` | `ruff check` + `ruff format --check` (fast, ~2-3s) |
+| `pre-push` | ruff, pytest, typecheck, eslint+prettier, vitest, schema checks, smoke E2E (`critical-path.spec.ts`) |
+
+**GitHub Actions (`.github/workflows/ci.yml`):**
 
 | Job | What it runs |
 |-----|-------------|
@@ -225,6 +234,12 @@ Page Object Models in `frontend/e2e/pages/`, helpers in `frontend/e2e/helpers/`,
 | `test` | `pytest` (backend) |
 | `frontend-lint` | `tsc --noEmit` + ESLint |
 | `frontend-test` | Vitest unit tests |
+
+**E2E tests run locally only** (pre-push hook + manual `npm run test:e2e`), not in GitHub Actions. They require running backend and frontend instances:
+- Backend: `http://0.0.0.0:8000` (run `uvicorn backend.app.main:app --reload`)
+- Frontend: `http://localhost:3000` (run `npm run dev` from `frontend/`)
+
+If services are not running when E2E is triggered, **prompt the user to start them** — do not skip or bypass E2E testing.
 
 ## Database Performance Rules
 

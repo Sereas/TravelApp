@@ -1,16 +1,12 @@
 /**
  * Edit and delete location E2E tests.
  *
- * Selectors:
- *   - Three-dot menu: aria-label="Location actions" (LocationCard.tsx line 252)
- *   - "Edit" menu item: text "Edit" (LocationCard.tsx line 264)
- *   - "Delete" menu item: text "Delete" (LocationCard.tsx line 278 / page.tsx line 393)
- *   - Edit name field: id="edit-location-name" (EditLocationRow.tsx line 110)
- *   - Save button: text "Save Changes" (EditLocationRow.tsx line 265)
- *   - Confirm delete: ConfirmDialog confirm button "Delete" (page.tsx line 398)
+ * LocationCard uses a flip-card pattern:
+ *   - Front: name, city, note, schedule status, "More info" button
+ *   - Back: inline-editable fields (name, city, category, booking, note)
  *
- * The three-dot button uses `opacity-0 group-hover:opacity-100` so we must
- * hover the card before clicking the menu button.
+ * Editing: click "More info" → flip to back → click field → inline edit → blur/Enter saves
+ * Deleting: click "Delete location" button on card image area (top-right)
  */
 
 import { test, expect } from "../../fixtures/index";
@@ -22,7 +18,6 @@ test.describe("Edit location", () => {
     testTrip,
     apiClient,
   }) => {
-    // Add a location via API
     const loc = await apiClient.addLocation(testTrip.id, {
       name: "E2E Edit Me",
     });
@@ -30,32 +25,42 @@ test.describe("Edit location", () => {
     const detail = new TripDetailPage(page);
     await detail.goto(testTrip.id);
 
-    // The location card should be visible
     await expect(detail.locationCard(loc.name)).toBeVisible({
       timeout: 15_000,
     });
 
-    // Hover the card so the three-dot menu becomes visible, then click it
+    // Flip card to back face via "More info" button
     const card = page
       .locator("div.group")
       .filter({ has: page.locator("h3", { hasText: loc.name }) })
       .first();
-    await card.hover();
-    await card.getByRole("button", { name: "Location actions" }).click();
+    await card.getByRole("button", { name: "Show location details" }).click();
+    await page.waitForTimeout(500); // flip animation
 
-    // Click "Edit" in the popover menu (LocationCard.tsx line 264).
-    // The menu is a Popover, not a dialog — find the Edit button directly.
-    await page.getByRole("button", { name: "Edit", exact: true }).click();
+    // Click the name text on the back face to start inline edit
+    const nameButton = card.getByRole("button", { name: loc.name });
+    await nameButton.click();
 
-    // The EditLocationRow appears inline. Clear and retype the name.
-    // id="edit-location-name" (EditLocationRow.tsx line 110)
+    // The inline edit input should appear with aria-label="Edit Name"
+    const nameInput = card.getByRole("textbox", { name: "Edit Name" });
+    await expect(nameInput).toBeVisible({ timeout: 5_000 });
+
     const newName = `Renamed Location ${Date.now()}`;
-    await page.locator("#edit-location-name").fill(newName);
+    await nameInput.fill(newName);
+    await nameInput.press("Enter");
 
-    // Click "Save Changes" (EditLocationRow.tsx line 265)
-    await page.getByRole("button", { name: "Save Changes" }).click();
+    // Wait for save
+    await page.waitForTimeout(1_000);
 
-    // The dialog closes; the card should now show the new name
+    // Flip back to front to verify the name updated
+    await card
+      .getByRole("button", { name: "Back to front" })
+      .click()
+      .catch(() => {
+        // Card may auto-flip back after save
+      });
+
+    // The card should now show the new name
     await expect(detail.locationCard(newName)).toBeVisible({ timeout: 10_000 });
     // Old name should be gone
     await expect(detail.locationCard(loc.name)).not.toBeVisible();
@@ -68,7 +73,6 @@ test.describe("Delete location", () => {
     testTrip,
     apiClient,
   }) => {
-    // Add two locations via API
     const loc1 = await apiClient.addLocation(testTrip.id, {
       name: "E2E Location To Delete",
     });
@@ -79,37 +83,28 @@ test.describe("Delete location", () => {
     const detail = new TripDetailPage(page);
     await detail.goto(testTrip.id);
 
-    // Both cards should be visible
     await expect(detail.locationCard(loc1.name)).toBeVisible({
       timeout: 15_000,
     });
     await expect(detail.locationCard(loc2.name)).toBeVisible();
 
-    // Hover the first card to reveal the three-dot menu
+    // Hover the card to reveal the delete button, then click it
     const card1 = page
       .locator("div.group")
       .filter({ has: page.locator("h3", { hasText: loc1.name }) })
       .first();
     await card1.hover();
-    await card1.getByRole("button", { name: "Location actions" }).click();
+    await card1.getByRole("button", { name: "Delete location" }).click();
 
-    // The delete trigger inside the menu is a ConfirmDialog.
-    // The menu item is a <button> containing "Delete" text.
-    // Clicking it opens the ConfirmDialog (page.tsx lines 388-404).
-    await page.getByRole("button", { name: "Delete" }).first().click();
-
-    // ConfirmDialog renders a dialog with a confirm button labelled "Delete"
+    // ConfirmDialog should appear — click the destructive confirm button
     const confirmDialog = page.getByRole("dialog");
     await confirmDialog.waitFor({ state: "visible", timeout: 8_000 });
-    // Click the destructive "Delete" confirm button inside the dialog
     await confirmDialog.getByRole("button", { name: "Delete" }).click();
 
-    // The first location card should disappear
+    // First card should disappear, second remains
     await expect(detail.locationCard(loc1.name)).not.toBeVisible({
       timeout: 10_000,
     });
-
-    // The second location card should still be visible
     await expect(detail.locationCard(loc2.name)).toBeVisible();
   });
 });

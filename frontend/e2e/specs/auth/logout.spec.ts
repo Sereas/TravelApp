@@ -1,21 +1,19 @@
 /**
- * UserNav E2E test.
+ * UserNav sign-out E2E test.
  *
- * Verifies the profile menu opens and shows the sign-out option.
+ * Verifies the full sign-out flow: profile menu opens, shows email,
+ * clicking "Sign out" triggers supabase.auth.signOut() and redirects
+ * to /login.
  *
- * NOTE: We do NOT actually click "Sign out" because Supabase's signOut()
- * uses scope="global" by default, which invalidates ALL sessions for the
- * user — including the shared storageState session used by all other tests.
- * The redirect-to-login behavior is already covered by the auth/login tests
- * (unauthenticated users are redirected to /login).
+ * Safe for other tests: signOut() invalidates the refresh token server-side,
+ * but the JWT access token in storageState stays valid until expiry (~1 hour).
+ * Each subsequent test creates a fresh browser context from storageState.
  */
 
 import { test, expect } from "../../fixtures/index";
 
 test.describe("UserNav", () => {
-  test("profile menu shows user email and sign-out option", async ({
-    page,
-  }) => {
+  test("sign out redirects to login page", async ({ page }) => {
     await page.goto("/trips");
     await page
       .getByRole("heading", { name: "My Trips" })
@@ -24,10 +22,27 @@ test.describe("UserNav", () => {
     // Open profile menu
     await page.getByRole("button", { name: "Profile menu" }).click();
 
-    // Verify user email is shown
+    // Verify menu content
     await expect(page.getByText("Signed in as")).toBeVisible();
-
-    // Verify sign-out button exists
     await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+
+    await test.info().attach("05-profile-menu-open.png", {
+      body: await page.screenshot(),
+      contentType: "image/png",
+    });
+
+    // Sign out
+    await page.getByRole("button", { name: "Sign out" }).click();
+
+    // Verify redirect to login
+    await expect(page).toHaveURL(/\/login/, { timeout: 10_000 });
+    await expect(
+      page.getByRole("heading", { name: "Welcome back" })
+    ).toBeVisible();
+
+    await test.info().attach("06-signed-out.png", {
+      body: await page.screenshot(),
+      contentType: "image/png",
+    });
   });
 });

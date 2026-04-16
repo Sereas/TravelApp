@@ -9,7 +9,7 @@ import {
   getE2EPassword,
 } from "./helpers/env";
 
-dotenv.config({ path: path.resolve(__dirname, "../.env.e2e") });
+dotenv.config({ path: path.resolve(__dirname, ".env.e2e") });
 
 const AUTH_DIR = path.resolve(__dirname, ".auth");
 const USER_JSON = path.join(AUTH_DIR, "user.json");
