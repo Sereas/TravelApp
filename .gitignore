@@ -25,6 +25,7 @@ htmlcov/
 frontend/.next/
 frontend/tsconfig.tsbuildinfo
 frontend/test-results/
+test-results/
 **/__pycache__/
 
 # Type checking
