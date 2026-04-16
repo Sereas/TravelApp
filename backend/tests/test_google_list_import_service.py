@@ -38,7 +38,6 @@ class _FakeResolved:
     longitude: float
     first_photo_resource: str | None
     types: list
-    opening_hours_text: list
 
 
 def _fake_resolved(name: str, place_id: str) -> _FakeResolved:
@@ -50,7 +49,6 @@ def _fake_resolved(name: str, place_id: str) -> _FakeResolved:
         longitude=2.0 + len(name),
         first_photo_resource=None,
         types=["restaurant"],
-        opening_hours_text=[],
     )
 
 

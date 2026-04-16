@@ -43,14 +43,6 @@ def test_resolve_short_link_returns_place_data(client: GooglePlacesClient):
     assert len(result.types) > 0, "types must not be empty"
 
 
-def test_resolve_short_link_returns_opening_hours(client: GooglePlacesClient):
-    """The resolved place should include opening hours text."""
-    result = client.resolve_from_link(TEST_LINK)
-
-    assert len(result.opening_hours_text) == 7, "should have 7 weekday descriptions"
-    assert any("AM" in h or "PM" in h or "Closed" in h for h in result.opening_hours_text)
-
-
 def test_resolve_short_link_returns_formatted_address(client: GooglePlacesClient):
     """Address should contain Cannes and France."""
     result = client.resolve_from_link(TEST_LINK)
@@ -104,14 +96,3 @@ def test_city_extraction_strips_postcode():
     assert _extract_city("Pl. du Casino, 98000 Monaco") == "Monaco"
     assert _extract_city("Victoria Peak, Hong Kong") == "Hong Kong"
     assert _extract_city(None) is None
-
-
-def test_working_hours_cleaning():
-    """Hours should have Unicode spaces normalized and day names shortened."""
-    from backend.app.routers.locations_google import _clean_working_hours
-
-    raw = ["Monday: 11:00\u202fAM\u2009\u201311:00\u202fPM"]
-    cleaned = _clean_working_hours(raw)
-    assert cleaned == ["Mon: 11:00 AM-11:00 PM"]
-    assert "\u202f" not in cleaned[0]
-    assert "\u2009" not in cleaned[0]

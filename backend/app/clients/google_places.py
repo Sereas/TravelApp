@@ -45,7 +45,15 @@ class GoogleListParseError(RuntimeError):
 
 @dataclass
 class PlaceResolution:
-    """Normalized subset of Place Details."""
+    """Normalized subset of Place Details.
+
+    Field selection is cost-driven: we keep the place inside the *Place Details
+    Pro* SKU (needed for ``displayName``) and deliberately exclude
+    Enterprise-tier fields (``websiteUri``, ``nationalPhoneNumber``,
+    ``regularOpeningHours``). ``first_photo_resource`` rides along for free
+    inside the Pro call — it is the ``photos[0].name`` identifier used later
+    by ``fetch_photo_bytes`` to lazily download the actual image bytes.
+    """
 
     place_id: str
     name: str
@@ -53,9 +61,6 @@ class PlaceResolution:
     latitude: float | None
     longitude: float | None
     types: list[str]
-    website: str | None
-    formatted_phone_number: str | None
-    opening_hours_text: list[str]
     first_photo_resource: str | None
 
 
@@ -106,20 +111,17 @@ class GooglePlacesClient:
         return img_resp.content
 
     def get_place_by_id(self, place_id: str) -> PlaceResolution:
-        """Look up a place directly by its Google place_id."""
+        """Look up a place directly by its Google place_id.
+
+        Field mask is pinned to *Place Details Pro* tier. ``displayName`` is the
+        only Pro-tier field (it forces this SKU); the others are Essentials and
+        ride along for free. Enterprise-tier fields (``websiteUri``,
+        ``nationalPhoneNumber``, ``regularOpeningHours``) are intentionally
+        excluded — they would bump every call to the Enterprise SKU.
+        """
         if not _PLACE_ID_RE.match(place_id):
             raise ValueError(f"Invalid place_id format: {place_id!r}")
-        field_mask = (
-            "id,"
-            "displayName,"
-            "formattedAddress,"
-            "location,"
-            "types,"
-            "websiteUri,"
-            "nationalPhoneNumber,"
-            "regularOpeningHours.weekdayDescriptions,"
-            "photos"
-        )
+        field_mask = "id,displayName,formattedAddress,location,types,photos"
         headers = {
             "X-Goog-Api-Key": self._api_key,
             "X-Goog-FieldMask": field_mask,
@@ -325,7 +327,6 @@ class GooglePlacesClient:
 
     def _place_to_resolution(self, place: dict) -> PlaceResolution:
         location = place.get("location") or {}
-        opening = (place.get("regularOpeningHours") or {}).get("weekdayDescriptions", []) or []
         display_name = place.get("displayName") or {}
         photos = place.get("photos") or []
         first_photo = photos[0].get("name") if photos else None
@@ -339,25 +340,22 @@ class GooglePlacesClient:
             latitude=location.get("latitude"),
             longitude=location.get("longitude"),
             types=[str(t) for t in (place.get("types") or [])],
-            website=place.get("websiteUri"),
-            formatted_phone_number=place.get("nationalPhoneNumber"),
-            opening_hours_text=[str(t) for t in opening],
             first_photo_resource=first_photo,
         )
 
     def _search_place_nearby(self, latitude: float, longitude: float) -> PlaceResolution:
-        """Resolve a map pin using Nearby Search (no text query)."""
-        field_mask = (
-            "places.id,"
-            "places.displayName,"
-            "places.formattedAddress,"
-            "places.location,"
-            "places.types,"
-            "places.websiteUri,"
-            "places.nationalPhoneNumber,"
-            "places.regularOpeningHours.weekdayDescriptions,"
-            "places.photos"
-        )
+        """Resolve a map pin using Nearby Search (no text query).
+
+        Cost-optimized 2-call pattern:
+          1. ``places:searchNearby`` with ``field_mask="places.id"`` → billed at
+             the *Nearby Search Essentials (IDs Only)* SKU (**FREE**, unlimited).
+          2. Delegate to :meth:`get_place_by_id` → billed at *Place Details Pro*
+             ($17/1k) for the actual fields we need.
+
+        Net cost per resolve: ~$17/1k, vs ~$35/1k for a single Enterprise-tier
+        Nearby Search call with a rich field mask.
+        """
+        field_mask = "places.id"
         headers = {
             "X-Goog-Api-Key": self._api_key,
             "X-Goog-FieldMask": field_mask,
@@ -380,13 +378,16 @@ class GooglePlacesClient:
             data = resp.json()
             places = data.get("places") or []
             logger.debug(
-                "places_nearby_search",
+                "places_nearby_search_ids_only",
                 duration_ms=duration_ms,
                 radius=radius,
                 results=len(places),
             )
             if places:
-                return self._place_to_resolution(places[0])
+                place_id = str(places[0].get("id") or "")
+                if not place_id:
+                    raise RuntimeError("Places nearby search returned a result without a place_id")
+                return self.get_place_by_id(place_id)
         raise RuntimeError("Places nearby search returned no candidates near coordinates")
 
     def _search_place_by_text(
@@ -397,18 +398,18 @@ class GooglePlacesClient:
         longitude: float | None = None,
         radius_m: float | None = None,
     ) -> PlaceResolution:
-        """Search by text using places:searchText, optionally with locationBias."""
-        field_mask = (
-            "places.id,"
-            "places.displayName,"
-            "places.formattedAddress,"
-            "places.location,"
-            "places.types,"
-            "places.websiteUri,"
-            "places.nationalPhoneNumber,"
-            "places.regularOpeningHours.weekdayDescriptions,"
-            "places.photos"
-        )
+        """Search by text using places:searchText, optionally with locationBias.
+
+        Cost-optimized 2-call pattern (per Google's "Cost optimization"
+        guidance):
+          1. ``places:searchText`` with ``field_mask="places.id"`` → billed at
+             the *Text Search Essentials (IDs Only)* SKU (**FREE**, unlimited).
+             This replaces the old single-call approach that requested rich
+             fields and was billed at the Enterprise tier (~$35/1k).
+          2. Delegate to :meth:`get_place_by_id` → billed at *Place Details Pro*
+             ($17/1k) for the actual fields we need.
+        """
+        field_mask = "places.id"
         headers = {
             "X-Goog-Api-Key": self._api_key,
             "X-Goog-FieldMask": field_mask,
@@ -436,10 +437,13 @@ class GooglePlacesClient:
         data = resp.json()
         places = data.get("places") or []
         logger.debug(
-            "places_text_search",
+            "places_text_search_ids_only",
             duration_ms=duration_ms,
             results=len(places),
         )
         if not places:
             raise RuntimeError("Places search returned no candidates")
-        return self._place_to_resolution(places[0] or {})
+        place_id = str(places[0].get("id") or "")
+        if not place_id:
+            raise RuntimeError("Places search returned a result without a place_id")
+        return self.get_place_by_id(place_id)

@@ -227,9 +227,6 @@ describe("AddLocationForm", () => {
       longitude: 2.34,
       google_place_id: "ChIJ123",
       suggested_category: null,
-      working_hours: [],
-      website: null,
-      phone: null,
       photo_resource_name: null,
     });
 
@@ -433,9 +430,6 @@ describe("AddLocationForm", () => {
       longitude: 2.337644,
       google_place_id: "ChIJCzYy5IS16lQRQrfeQ5K5Oxw",
       suggested_category: "Museum",
-      working_hours: ["Tuesday: 9-18"],
-      website: null,
-      phone: null,
       photo_resource_name: "places/ChIJCzYy5IS/photos/AXCi2Q6abc",
     });
 
@@ -469,9 +463,6 @@ describe("AddLocationForm", () => {
       longitude: 7.43,
       google_place_id: "ChIJABC",
       suggested_category: "Viewpoint",
-      working_hours: ["Mon: 2:00 PM-4:00 AM"],
-      website: null,
-      phone: null,
       photo_resource_name: null,
     });
 
@@ -576,9 +567,6 @@ describe("AddLocationForm", () => {
       longitude: 2.29,
       google_place_id: "ChIJXYZ",
       suggested_category: null,
-      working_hours: [],
-      website: null,
-      phone: null,
       photo_resource_name: null,
     });
 
@@ -613,9 +601,6 @@ describe("AddLocationForm", () => {
       longitude: 2.337644,
       google_place_id: "ChIJCzYy5IS16lQRQrfeQ5K5Oxw",
       suggested_category: "Museum",
-      working_hours: ["Tuesday: 9-18"],
-      website: "https://www.louvre.fr/en",
-      phone: "+33 1 40 20 50 50",
       photo_resource_name: "places/ChIJCzYy5IS/photos/AXCi2Q6abc",
     });
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { Label } from "@/components/ui/label";
 import { ErrorBanner } from "@/components/feedback/ErrorBanner";
@@ -51,50 +51,6 @@ const fieldTextarea =
   "w-full resize-none rounded-2xl bg-secondary/80 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 border border-transparent focus-visible:border-primary/20";
 
 const iconClass = "shrink-0 text-primary/50";
-
-/* ── Helpers ─────────────────────────────────────────────────── */
-
-const DAY_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-/** Condense Google working_hours like ["Mon: 9-6", "Tue: 9-6", …] into
- *  compact ranges like "Mon-Fri: 9-6 | Sat-Sun: 10-4" or "Daily: 9-6". */
-function condenseHours(hours: string[]): string {
-  // Parse "Day: hours" entries
-  const parsed: { day: string; time: string }[] = [];
-  for (const h of hours) {
-    const colonIdx = h.indexOf(":");
-    if (colonIdx === -1) return hours.join(" | "); // unparseable, bail
-    const day = h.slice(0, colonIdx).trim();
-    const time = h.slice(colonIdx + 1).trim();
-    parsed.push({ day, time });
-  }
-
-  // Group consecutive days with same hours
-  const groups: { days: string[]; time: string }[] = [];
-  for (const { day, time } of parsed) {
-    const last = groups[groups.length - 1];
-    if (last && last.time === time) {
-      last.days.push(day);
-    } else {
-      groups.push({ days: [day], time });
-    }
-  }
-
-  // If single group covering all 7 days → "Daily: …"
-  if (groups.length === 1 && groups[0].days.length === DAY_ORDER.length) {
-    return `Daily: ${groups[0].time}`;
-  }
-
-  return groups
-    .map((g) => {
-      const label =
-        g.days.length === 1
-          ? g.days[0]
-          : `${g.days[0]}-${g.days[g.days.length - 1]}`;
-      return `${label}: ${g.time}`;
-    })
-    .join(" | ");
-}
 
 /* ── Component ───────────────────────────────────────────────── */
 
@@ -150,9 +106,18 @@ export function AddLocationForm({
 
   const hasInitialLink = Boolean(initialGoogleLink);
 
+  // Guard against concurrent preview calls for the same URL. React 18 Strict
+  // Mode in dev invokes the mount effect twice; without this, we fire two
+  // identical /preview requests, and a slow-loser's error can overwrite the
+  // winner's success state. Synchronous ref > state so the second call sees
+  // the in-flight flag even before React flushes setPreviewLoading.
+  const inFlightUrlRef = useRef<string | null>(null);
+
   async function triggerPreview(url: string) {
     const trimmed = url.trim();
     if (!trimmed) return;
+    if (inFlightUrlRef.current === trimmed) return;
+    inFlightUrlRef.current = trimmed;
     setPreviewLoading(true);
     setError(null);
     try {
@@ -176,8 +141,6 @@ export function AddLocationForm({
       setName((prev) => prev || preview.name);
       if (preview.address) setAddress((prev) => prev || preview.address || "");
       if (preview.city) setCity((prev) => prev || preview.city || "");
-      if (preview.working_hours.length > 0)
-        setWorkingHours((prev) => prev || condenseHours(preview.working_hours));
       if (preview.suggested_category)
         setCategory((prev) => prev || preview.suggested_category || "");
       // Transition to full form after successful preview in link-entry mode
@@ -190,6 +153,7 @@ export function AddLocationForm({
       );
     } finally {
       setPreviewLoading(false);
+      inFlightUrlRef.current = null;
     }
   }
 

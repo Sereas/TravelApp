@@ -61,13 +61,17 @@ export default function TripDetailPage() {
     seq: number;
   } | null>(null);
   const focusSeqRef = useRef(0);
-  const mountedRef = useRef(true);
-  useEffect(
-    () => () => {
+  // mountedRef guards async callbacks that outlive the component. Start false
+  // and flip to true in the mount effect so that React 18 Strict Mode's
+  // double-invoke (setup → cleanup → setup) leaves the ref in the correct
+  // mounted state instead of permanently false.
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
       mountedRef.current = false;
-    },
-    []
-  );
+    };
+  }, []);
   // Transient highlight flash when a sidebar map pin is clicked.
   const { highlightedLocationId, handlePinClick } = usePinHighlight();
   const [shareDialogOpen, setShareDialogOpen] = useState(false);

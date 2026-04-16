@@ -131,19 +131,6 @@ def _resolve_city(resolved: PlaceResolution) -> str | None:
     return _extract_city(resolved.formatted_address)
 
 
-def _clean_working_hours(hours: list[str]) -> list[str]:
-    """Normalize Unicode spaces and shorten day names in hours strings."""
-    cleaned = []
-    for h in hours:
-        h = h.replace("\u202f", " ").replace("\u2009", "").replace("\u2013", "-")
-        h = h.replace("Monday", "Mon").replace("Tuesday", "Tue")
-        h = h.replace("Wednesday", "Wed").replace("Thursday", "Thu")
-        h = h.replace("Friday", "Fri").replace("Saturday", "Sat")
-        h = h.replace("Sunday", "Sun")
-        cleaned.append(h.strip())
-    return cleaned
-
-
 class GoogleLinkPreviewBody(BaseModel):
     """Request body for Google link preview."""
 
@@ -165,10 +152,15 @@ async def preview_location_from_google_link(
     """Resolve a Google Maps link into normalized location data (no DB write).
 
     - Requires a valid JWT (same auth as other app endpoints).
-    - Calls Google Places only once per request.
-    - Returns data the UI can use to pre-fill trip location fields, including
-      the full raw JSON payload so later POST /trips/{trip_id}/locations can
-      simply persist it without re-calling Google.
+    - In the common case, issues two sequential Google Places calls: a free
+      Text Search / Nearby Search (IDs Only) to find the place_id, followed
+      by a Place Details Pro lookup ($17/1k) for the user-facing fields.
+      When the URL already contains an explicit ``place_id:``, only the
+      Place Details call is made.
+    - Returns data the UI can use to pre-fill trip location fields. The
+      ``photo_resource_name`` is echoed back so that a later ``POST
+      /trips/{trip_id}/locations`` can trigger one lazy photo-bytes fetch
+      without calling Google Places again.
     """
     google_link = (body.google_link or "").strip()
     if not google_link:
@@ -187,7 +179,6 @@ async def preview_location_from_google_link(
 
     suggested_category = _suggest_category(resolved.types)
     city = _resolve_city(resolved)
-    clean_hours = _clean_working_hours(resolved.opening_hours_text)
 
     logger.info(
         "google_preview_succeeded",
@@ -202,8 +193,5 @@ async def preview_location_from_google_link(
         longitude=resolved.longitude,
         google_place_id=resolved.place_id,
         suggested_category=suggested_category,
-        working_hours=clean_hours,
-        website=resolved.website,
-        phone=resolved.formatted_phone_number,
         photo_resource_name=resolved.first_photo_resource,
     )
