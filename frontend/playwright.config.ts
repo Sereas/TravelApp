@@ -1,4 +1,4 @@
-import { defineConfig, devices } from "@playwright/test";
+import { defineConfig, devices, type ReporterDescription } from "@playwright/test";
 import * as dotenv from "dotenv";
 import * as path from "path";
 
@@ -46,7 +46,7 @@ export default defineConfig({
   reporter: [
     ["list"],
     ["./e2e/run-summary-reporter.ts"],
-    ...(isCI ? [["github" as const]] : []),
+    ...((isCI ? [["github"]] : []) as ReporterDescription[]),
   ],
 
   use: {
