@@ -127,12 +127,18 @@ class GooglePlacesClient:
             "X-Goog-FieldMask": field_mask,
         }
         url = f"https://places.googleapis.com/v1/places/{place_id}"
+        logger.info("places_get_by_id_start", place_id=place_id)
         start = time.perf_counter()
         resp = self._http.get(url, headers=headers)
         resp.raise_for_status()
         duration_ms = round((time.perf_counter() - start) * 1000, 1)
         data = resp.json()
-        logger.debug("places_get_by_id", duration_ms=duration_ms, place_id=place_id)
+        logger.info(
+            "places_get_by_id_done",
+            duration_ms=duration_ms,
+            place_id=place_id,
+            status=resp.status_code,
+        )
         return self._place_to_resolution(data)
 
     @staticmethod
@@ -185,6 +191,10 @@ class GooglePlacesClient:
         6. Fallback: call places:searchText with a truncated URL as textQuery.
         """
         start = time.perf_counter()
+        logger.info(
+            "places_resolve_start",
+            link_host=urlparse(google_link).netloc,
+        )
 
         # Fast path: URL contains an explicit place_id
         pid = self._extract_place_id_from_url(google_link)
@@ -201,6 +211,11 @@ class GooglePlacesClient:
         name, lat, lng = self._extract_name_and_location_from_url(long_url)
         if name and self._is_coordinate_style_place_slug(name):
             name = None
+        logger.info(
+            "places_resolve_branch",
+            has_name=name is not None,
+            has_coords=(lat is not None and lng is not None),
+        )
         try:
             if name and lat is not None and lng is not None:
                 result = self._search_place_by_text(
@@ -244,11 +259,24 @@ class GooglePlacesClient:
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
             "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
         )
-        for _ in range(5):
+        for hop in range(5):
+            logger.info(
+                "places_redirect_hop_start",
+                hop=hop,
+                host=urlparse(current_url).netloc,
+            )
+            hop_start = time.perf_counter()
             resp = self._http.get(
                 current_url,
                 follow_redirects=False,
                 headers={"User-Agent": ua},
+            )
+            hop_ms = round((time.perf_counter() - hop_start) * 1000, 1)
+            logger.info(
+                "places_redirect_hop_done",
+                hop=hop,
+                duration_ms=hop_ms,
+                status=resp.status_code,
             )
             location = resp.headers.get("location") or ""
             if not location or resp.status_code not in (301, 302, 303, 307, 308):
@@ -371,17 +399,19 @@ class GooglePlacesClient:
                 "maxResultCount": 20,
                 "rankPreference": "DISTANCE",
             }
+            logger.info("places_nearby_search_start", radius=radius)
             start = time.perf_counter()
             resp = self._http.post(self._NEARBY_URL, json=payload, headers=headers)
             resp.raise_for_status()
             duration_ms = round((time.perf_counter() - start) * 1000, 1)
             data = resp.json()
             places = data.get("places") or []
-            logger.debug(
-                "places_nearby_search_ids_only",
+            logger.info(
+                "places_nearby_search_done",
                 duration_ms=duration_ms,
                 radius=radius,
                 results=len(places),
+                status=resp.status_code,
             )
             if places:
                 place_id = str(places[0].get("id") or "")
@@ -420,7 +450,8 @@ class GooglePlacesClient:
             ),
             "pageSize": 1,
         }
-        if latitude is not None and longitude is not None and radius_m is not None:
+        has_bias = latitude is not None and longitude is not None and radius_m is not None
+        if has_bias:
             payload["locationBias"] = {
                 "circle": {
                     "center": {
@@ -430,16 +461,18 @@ class GooglePlacesClient:
                     "radius": radius_m,
                 }
             }
+        logger.info("places_text_search_start", has_bias=has_bias)
         start = time.perf_counter()
         resp = self._http.post(self._SEARCH_URL, json=payload, headers=headers)
         resp.raise_for_status()
         duration_ms = round((time.perf_counter() - start) * 1000, 1)
         data = resp.json()
         places = data.get("places") or []
-        logger.debug(
-            "places_text_search_ids_only",
+        logger.info(
+            "places_text_search_done",
             duration_ms=duration_ms,
             results=len(places),
+            status=resp.status_code,
         )
         if not places:
             raise RuntimeError("Places search returned no candidates")
