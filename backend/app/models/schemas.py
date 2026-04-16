@@ -491,11 +491,16 @@ class ItineraryResponse(BaseModel):
 
 
 class LocationPreviewResponse(BaseModel):
-    """Response body for Google-based location preview (no DB write).
+    """Response body shared by ``/locations/google/preview`` (URL paste) and
+    ``/locations/google/resolve`` (typeahead pick).
+
+    Both endpoints call Place Details (New) Pro and populate this same
+    shape so the frontend ``AddLocationForm`` prefill path is identical
+    regardless of entry point.
 
     Fields are limited to what the *Place Details Pro* SKU returns
-    (displayName + Essentials tier) plus the photo resource name, which is
-    passed back to the client so that ``POST /locations`` can trigger a
+    (``displayName`` + Essentials tier) plus the photo resource name, which
+    is passed back to the client so that ``POST /locations`` can trigger a
     one-off photo fetch on save without a second Place Details call.
     Enterprise-tier data (phone, website, opening hours) is deliberately
     excluded — see ADR on Google Places cost reduction.
@@ -509,6 +514,98 @@ class LocationPreviewResponse(BaseModel):
     google_place_id: str
     suggested_category: str | None = None
     photo_resource_name: str | None = None
+
+
+# -------- Google Places autocomplete (typeahead) schemas --------
+#
+# Cost contract (Places API New, 2026):
+#   * /autocomplete invokes Autocomplete (New). FREE when the session ends
+#     with a /resolve call carrying the same ``session_token`` (Session Usage
+#     SKU). $2.83 / 1000 if the session is abandoned (first 10k/mo free).
+#   * /resolve invokes Place Details (New) Pro. $17 / 1000 (first 5k/mo
+#     free). Same SKU and field mask as /preview.
+# The ``sessionToken`` query param forwarded to the Place Details GET is
+# what retroactively makes all preceding autocomplete requests in the
+# session FREE.
+
+
+class LocationBias(BaseModel):
+    """Optional geographic bias for autocomplete (circle).
+
+    Narrows Google's ranking toward a region without restricting results.
+    Not wired into the frontend in v1; the backend accepts it so future
+    callers (trip starting-city biasing) can opt in without schema change.
+    """
+
+    lat: float = Field(..., ge=-90.0, le=90.0)
+    lng: float = Field(..., ge=-180.0, le=180.0)
+    radius_m: float = Field(..., gt=0.0, le=50000.0)
+
+
+# Session tokens are client-generated UUIDs. Enforce a reasonably tight
+# character set so nothing exotic (XSS, path-traversal sentinels) ever
+# reaches the Google API.
+_SESSION_TOKEN_PATTERN = r"^[A-Za-z0-9_\-]+$"
+_PLACE_ID_PATTERN = r"^[A-Za-z0-9_\-]+$"
+# BCP-47-lite: letters only for the primary tag (``en``, ``fra``) with
+# optional subtags separated by dashes. Locks down ``language`` / ``region``
+# so nothing exotic (CRLF, control chars) can hitch a ride into Google's
+# JSON payload.
+_LANGUAGE_REGION_PATTERN = r"^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$"
+
+
+class AutocompleteRequest(BaseModel):
+    """Request body for POST /locations/google/autocomplete."""
+
+    input: str = Field(..., min_length=1, max_length=100)
+    session_token: str = Field(
+        ...,
+        min_length=16,
+        max_length=128,
+        pattern=_SESSION_TOKEN_PATTERN,
+    )
+    language: str | None = Field(None, max_length=10, pattern=_LANGUAGE_REGION_PATTERN)
+    region: str | None = Field(None, max_length=10, pattern=_LANGUAGE_REGION_PATTERN)
+    location_bias: LocationBias | None = None
+
+
+class AutocompleteSuggestionDTO(BaseModel):
+    """One suggestion row rendered in the typeahead dropdown."""
+
+    place_id: str
+    main_text: str
+    secondary_text: str | None = None
+    types: list[str] = Field(default_factory=list)
+
+
+class AutocompleteResponse(BaseModel):
+    """Response body for POST /locations/google/autocomplete."""
+
+    suggestions: list[AutocompleteSuggestionDTO]
+
+
+class ResolvePlaceRequest(BaseModel):
+    """Request body for POST /locations/google/resolve.
+
+    ``session_token`` is optional so internal callers that don't run a
+    typeahead session (e.g. batch tooling) can reuse this endpoint. When
+    present, it is forwarded as the ``?sessionToken=`` query parameter on
+    the Place Details (New) call so Google bills the preceding autocomplete
+    requests as FREE Session Usage instead of per-request.
+    """
+
+    place_id: str = Field(
+        ...,
+        min_length=1,
+        max_length=256,
+        pattern=_PLACE_ID_PATTERN,
+    )
+    session_token: str | None = Field(
+        None,
+        min_length=16,
+        max_length=128,
+        pattern=_SESSION_TOKEN_PATTERN,
+    )
 
 
 # -------- Route schemas (option_routes, route_stops) --------

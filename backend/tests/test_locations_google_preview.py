@@ -115,6 +115,15 @@ class _DummySupabase:
     def table(self, name):  # pragma: no cover - preview does not touch DB
         raise AssertionError(f"Preview should not access table {name}")
 
+    def rpc(self, name, params=None):
+        # Preview now bumps `bump_google_usage` via the shared cost guard.
+        # Any other RPC is still unexpected.
+        if name == "bump_google_usage":
+            m = MagicMock()
+            m.execute.return_value = MagicMock(data=True)
+            return m
+        raise AssertionError(f"Preview should not call RPC {name!r}")
+
 
 def _override_auth_and_supabase(client: TestClient, user_id):
     async def override_user():
@@ -201,6 +210,11 @@ def test_field_masks_contain_no_enterprise_fields():
         "photos",
         "addressComponents",
         "viewport",
+        # New autocomplete mask fields — added so the AST walker
+        # inspects field-mask strings that use these tokens.
+        "placeId",
+        "structuredFormat",
+        "suggestions",
     }
 
     tree = ast.parse(inspect.getsource(gp))
@@ -314,5 +328,105 @@ def test_preview_location_missing_google_link_returns_422(client: TestClient, mo
     try:
         r = client.post("/api/v1/locations/google/preview", json={})
         assert r.status_code == 422
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_field_masks_contain_autocomplete_session_prefix():
+    """Regression: the new autocomplete method must define a field-mask string that
+    starts with 'suggestions.placePrediction'. This verifies that once the
+    implementation lands, the autocomplete mask is actually present in the client
+    source (not hidden behind a variable or generated at runtime).
+
+    This test will FAIL in the Red phase (google_places.py does not yet have
+    the autocomplete method) and must PASS once the implementation is added.
+    """
+    import ast
+    import inspect
+
+    from backend.app.clients import google_places as gp
+
+    source = inspect.getsource(gp)
+    tree = ast.parse(source)
+
+    found_autocomplete_mask = False
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Constant) and isinstance(node.value, str)):
+            continue
+        value = node.value
+        if "suggestions.placePrediction" in value:
+            found_autocomplete_mask = True
+            # Verify the forbidden Enterprise fields are NOT present in any
+            # string that contains the autocomplete mask prefix.
+            forbidden_in_autocomplete = {
+                "websiteUri",
+                "nationalPhoneNumber",
+                "regularOpeningHours",
+                "rating",
+                "priceLevel",
+                "reviews",
+            }
+            tokens = set(value.replace(",", " ").split())
+            bad = tokens & forbidden_in_autocomplete
+            assert not bad, (
+                f"Enterprise-tier field(s) {sorted(bad)} found inside an autocomplete "
+                f"field-mask string: {value!r}. These fields trigger $20-40/1k Enterprise "
+                f"billing on every autocomplete call."
+            )
+
+    assert found_autocomplete_mask, (
+        "No field-mask string containing 'suggestions.placePrediction' was found in "
+        "google_places.py. The autocomplete method must define its mask inline so the "
+        "AST regression test can inspect it. (This test fails in Red phase — expected.)"
+    )
+
+
+def test_preview_respects_daily_cap(client: TestClient):
+    """The existing /preview handler must check the per-user daily quota.
+
+    When bump_google_usage RPC returns False (user has exceeded 200 preview
+    calls today), the handler must return 429 without calling the Places API.
+
+    This test validates that the quota guard was wired into the EXISTING preview
+    handler as part of the typeahead feature work — not just the new endpoints.
+    """
+    from unittest.mock import MagicMock
+
+    user_id = uuid4()
+
+    # Supabase that signals cap exceeded for any bump_google_usage call
+    class _CapExceededSupabase:
+        def rpc(self, name, params=None):
+            if name == "bump_google_usage":
+                m = MagicMock()
+                m.execute.return_value = MagicMock(data=False)
+                return m
+            raise AssertionError(f"Unexpected RPC: {name!r}")
+
+        def table(self, name):
+            raise AssertionError(f"Should not access table {name!r}")
+
+    async def override_user():
+        return user_id
+
+    class ShouldNotBeCalledClient:
+        def resolve_from_link(self, _link: str):
+            raise AssertionError("Places API must not be called when daily cap is exceeded")
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_supabase_client] = lambda: _CapExceededSupabase()
+    app.dependency_overrides[get_google_places_client] = lambda: ShouldNotBeCalledClient()
+    try:
+        r = client.post(
+            "/api/v1/locations/google/preview",
+            json={"google_link": "https://maps.app.goo.gl/HFaERRSAPvPePT1D6"},
+        )
+        assert r.status_code == 429, (
+            f"Expected 429 when preview daily cap is exceeded, got {r.status_code}: {r.text}"
+        )
+        detail = r.json().get("detail", "")
+        assert "daily" in detail.lower() or "quota" in detail.lower() or "cap" in detail.lower(), (
+            f"429 detail must mention daily cap, got: {detail!r}"
+        )
     finally:
         app.dependency_overrides.clear()

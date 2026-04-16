@@ -12,6 +12,22 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _bool_env(name: str) -> bool:
+    """Parse a boolean env var. Accepts 1/true/yes (case-insensitive)."""
+    return os.getenv(name, "").strip().lower() in ("1", "true", "yes")
+
+
+def _int_env(name: str, default: int) -> int:
+    """Parse an integer env var, falling back to `default` if unset/invalid."""
+    raw = os.getenv(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
 class Settings:
     """Application settings loaded from environment variables."""
 
@@ -35,6 +51,24 @@ class Settings:
         self.google_places_api_key: str | None = os.getenv("GOOGLE_PLACES_API_KEY") or None
         # Optional Google Routes API key (Routes API only; not shared with Places).
         self.google_routes_api_key: str | None = os.getenv("GOOGLE_ROUTES_API_KEY") or None
+
+        # Cost-guard kill switches. All default False.
+        # - google_apis_disabled: master switch; blocks every Google endpoint.
+        # - google_autocomplete_disabled: blocks /autocomplete AND /resolve
+        #   (they are two halves of the same typeahead UX). Does NOT block
+        #   /preview (URL-paste path) or list import.
+        # - google_list_import_disabled: blocks the Google Maps list-import
+        #   SSE endpoint only.
+        self.google_apis_disabled: bool = _bool_env("GOOGLE_APIS_DISABLED")
+        self.google_autocomplete_disabled: bool = _bool_env("GOOGLE_AUTOCOMPLETE_DISABLED")
+        self.google_list_import_disabled: bool = _bool_env("GOOGLE_LIST_IMPORT_DISABLED")
+
+        # Per-user daily quotas (enforced via bump_google_usage RPC).
+        # Defaults sized to absorb a normal user's daily usage with headroom.
+        self.google_daily_cap_autocomplete: int = _int_env("GOOGLE_DAILY_CAP_AUTOCOMPLETE", 2000)
+        self.google_daily_cap_resolve: int = _int_env("GOOGLE_DAILY_CAP_RESOLVE", 200)
+        self.google_daily_cap_preview: int = _int_env("GOOGLE_DAILY_CAP_PREVIEW", 200)
+        self.google_daily_cap_list_import: int = _int_env("GOOGLE_DAILY_CAP_LIST_IMPORT", 500)
 
         # MED-07: CORS origins centralized in Settings (previously at module level in main.py)
         _default_cors = "http://localhost:3000,http://localhost:3001,https://shtabtravel.vercel.app"

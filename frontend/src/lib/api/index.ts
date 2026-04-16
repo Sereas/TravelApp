@@ -32,6 +32,8 @@ export const api = {
   },
   google: {
     previewLocationFromLink: _google.previewLocationFromLink,
+    autocomplete: _google.autocomplete,
+    resolvePlace: _google.resolvePlace,
   },
   itinerary: {
     get: _itinerary.get,
@@ -64,4 +66,11 @@ export const api = {
 };
 
 export * from "./types";
+export type {
+  AutocompleteSuggestion,
+  AutocompleteLocationBias,
+  AutocompleteRequestBody,
+  AutocompleteResponsePayload,
+  ResolvePlaceBody,
+} from "./google";
 export { ApiError } from "./transport";

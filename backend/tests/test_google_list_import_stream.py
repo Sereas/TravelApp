@@ -76,6 +76,18 @@ def _mock_supabase(existing_place_ids: list[str] | None = None):
         return t
 
     sb.table.side_effect = _table
+
+    # `bump_google_usage` quota RPC (list-import guard). Default: always
+    # under cap so existing happy-path tests don't need to re-stub it.
+    # The cap-exceeded test overrides this with its own supabase mock.
+    def _rpc(name, params=None):
+        if name == "bump_google_usage":
+            m = MagicMock()
+            m.execute.return_value = MagicMock(data=True)
+            return m
+        return MagicMock()
+
+    sb.rpc.side_effect = _rpc
     return sb
 
 
@@ -386,6 +398,182 @@ def test_stream_enrichment_failure_continues(client: TestClient):
 
             # No error event for a per-place failure — stream finishes normally
             assert "error" not in event_types
+        finally:
+            app.dependency_overrides.clear()
+
+
+def test_list_import_respects_kill_switch(client: TestClient, monkeypatch):
+    """GOOGLE_LIST_IMPORT_DISABLED=true must block the SSE endpoint immediately.
+
+    The stream must either return a non-200 HTTP status OR, if the endpoint
+    returns 200 with SSE, the first event must be 'error' and no Places API
+    calls must be made. Either behaviour is acceptable as long as the user
+    is informed and no Google billing happens.
+
+    This test validates that the granular kill switch is wired into the SSE
+    handler — not just the new autocomplete/resolve endpoints.
+    """
+    monkeypatch.setenv("GOOGLE_LIST_IMPORT_DISABLED", "true")
+    from backend.app.core.config import get_settings
+
+    get_settings.cache_clear()
+
+    class ShouldNotBeCalledClient:
+        def _search_place_by_text(self, *a, **kw):
+            raise AssertionError("Places API must not be called when list import is disabled")
+
+        def _search_place_nearby(self, *a, **kw):
+            raise AssertionError("Places API must not be called when list import is disabled")
+
+    sb = _mock_supabase()
+    _setup_overrides(sb, places_client=ShouldNotBeCalledClient())
+
+    with patch("backend.app.services.google_list_import.GoogleListScraper") as MockScraper:
+        scraper_instance = MockScraper.return_value
+        # Even if somehow the scraper ran, it would see no places
+        scraper_instance.extract_places = AsyncMock(return_value=[])
+        try:
+            resp = client.post(STREAM_URL, json=REQUEST_BODY)
+            # Either a non-200 (503) or an SSE stream whose first data event is 'error'
+            if resp.status_code != 200:
+                assert resp.status_code == 503, (
+                    f"Expected 503 when list import is disabled, got {resp.status_code}"
+                )
+            else:
+                assert "text/event-stream" in resp.headers.get("content-type", ""), (
+                    "If 200, response must be SSE"
+                )
+                events = _parse_sse_events(resp.text)
+                assert events, "SSE stream must contain at least one event"
+                # First substantive event must be 'error' (or the only event is error)
+                event_types = [e.get("event") for e in events]
+                assert "error" in event_types, (
+                    f"Expected an 'error' event when kill switch is active. "
+                    f"Got events: {event_types}"
+                )
+                # No 'complete' event — the import must be stopped
+                assert "complete" not in event_types, (
+                    "A 'complete' event must not appear when the kill switch blocks the import"
+                )
+        finally:
+            app.dependency_overrides.clear()
+            get_settings.cache_clear()
+
+
+def test_list_import_stops_on_daily_cap_mid_stream(client: TestClient):
+    """Daily cap is hit on the 3rd place — stream emits 'error' and closes.
+
+    Setup: 3 scraped places, quota supabase returns True for places 1-2 and
+    False for place 3. The stream must:
+    - Emit 'enriching' events for the first 2 places (imported)
+    - Emit an 'error' event when the 3rd place hits the cap
+    - NOT emit a 'complete' event after the error
+
+    This validates that bump_google_usage is called inside the SSE streaming
+    loop per resolved place, and the handler terminates correctly on cap hit.
+    """
+    scraped = [
+        ScrapedPlace(name="Place A", latitude=48.86, longitude=2.34),
+        ScrapedPlace(name="Place B", latitude=48.87, longitude=2.35),
+        ScrapedPlace(name="Place C", latitude=48.88, longitude=2.36),
+    ]
+
+    def fake_search(text, *, latitude=None, longitude=None, radius_m=None):
+        if "Place A" in text:
+            return _make_resolution("place_a_id", "Place A")
+        if "Place B" in text:
+            return _make_resolution("place_b_id", "Place B")
+        return _make_resolution("place_c_id", "Place C")
+
+    mock_places = MagicMock()
+    mock_places._search_place_by_text.side_effect = fake_search
+
+    # Quota supabase: counts bump calls and returns False starting at the 3rd call
+    class _QuotaSupabase:
+        def __init__(self):
+            self._bump_count = 0
+
+        def rpc(self, name, params=None):
+            if name == "bump_google_usage":
+                self._bump_count += 1
+                under_cap = self._bump_count <= 2  # first 2 are fine, 3rd hits cap
+                m = MagicMock()
+                m.execute.return_value = MagicMock(data=under_cap)
+                return m
+            # For verify_resource_chain (ownership check)
+            if name == "verify_resource_chain":
+                m = MagicMock()
+                m.execute.return_value = MagicMock(data=True)
+                return m
+            raise AssertionError(f"Unexpected RPC: {name!r}")
+
+        def table(self, name):
+            t = MagicMock()
+            trip_row = {"trip_id": TRIP_ID, "user_id": str(USER_ID)}
+            if name == "trips":
+                t.select.return_value.eq.return_value.eq.return_value.execute.return_value = (
+                    MagicMock(data=[trip_row])
+                )
+            elif name == "locations":
+                select_mock = MagicMock()
+                select_mock.eq.return_value.execute.return_value = MagicMock(data=[])
+                t.select.return_value = select_mock
+
+                def _insert(data):
+                    m = MagicMock()
+                    m.execute.return_value = MagicMock(data=data)
+                    return m
+
+                t.insert.side_effect = _insert
+            return t
+
+    quota_sb = _QuotaSupabase()
+
+    async def override_user():
+        return USER_ID
+
+    async def override_email():
+        return USER_EMAIL
+
+    app.dependency_overrides[get_current_user_id] = override_user
+    app.dependency_overrides[get_current_user_email] = override_email
+    app.dependency_overrides[get_supabase_client] = lambda: quota_sb
+    app.dependency_overrides[get_google_places_client_optional] = lambda: mock_places
+
+    with patch("backend.app.services.google_list_import.GoogleListScraper") as MockScraper:
+        scraper_instance = MockScraper.return_value
+        scraper_instance.extract_places = AsyncMock(return_value=scraped)
+        try:
+            resp = client.post(STREAM_URL, json=REQUEST_BODY)
+            assert resp.status_code == 200, f"Expected 200 SSE, got {resp.status_code}"
+            assert "text/event-stream" in resp.headers.get("content-type", ""), (
+                "Expected SSE content-type"
+            )
+            events = _parse_sse_events(resp.text)
+            event_types = [e.get("event") for e in events]
+
+            # The first 2 places must have been processed
+            enriching_events = [e for e in events if e.get("event") == "enriching"]
+            assert len(enriching_events) >= 2, (
+                f"Expected at least 2 enriching events before cap hit, got {len(enriching_events)}"
+            )
+            # The stream must have emitted an error event for the cap
+            assert "error" in event_types, (
+                f"Expected an 'error' event when daily cap is hit mid-stream. "
+                f"Got events: {event_types}"
+            )
+            error_event = next(e for e in events if e.get("event") == "error")
+            error_msg = error_event.get("message", "").lower()
+            assert (
+                "daily" in error_msg
+                or "quota" in error_msg
+                or "cap" in error_msg
+                or "limit" in error_msg
+            ), f"Error message must mention cap/quota/daily, got: {error_msg!r}"
+            # No 'complete' after the cap-triggered error
+            assert "complete" not in event_types, (
+                "A 'complete' event must not appear after the daily cap error"
+            )
         finally:
             app.dependency_overrides.clear()
 

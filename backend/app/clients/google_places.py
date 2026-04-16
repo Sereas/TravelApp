@@ -22,6 +22,11 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger("google_places")
 # Validating this prevents path traversal when interpolating into API URLs.
 _PLACE_ID_RE = re.compile(r"^[A-Za-z0-9_\-]+$")
 
+# Client-generated autocomplete session tokens must match this pattern. Same
+# character set as place_ids; Pydantic already enforces at the router
+# boundary, but the client re-validates before concatenating into a URL.
+_SESSION_TOKEN_RE = re.compile(r"^[A-Za-z0-9_\-]{16,128}$")
+
 # Validate photo resource names (e.g. "places/ChIJ.../photos/Aaw_FcI...")
 _PHOTO_RESOURCE_RE = re.compile(r"^places/[A-Za-z0-9_\-]+/photos/[A-Za-z0-9_\-]+$")
 
@@ -64,11 +69,34 @@ class PlaceResolution:
     first_photo_resource: str | None
 
 
+@dataclass
+class AutocompleteSuggestion:
+    """One prediction returned by Autocomplete (New).
+
+    Populated from ``suggestions[].placePrediction.structuredFormat`` which
+    splits a Google display name into ``mainText`` (place name, usually
+    bolded in the UI) and ``secondaryText`` (disambiguating address line).
+    ``types`` (Google's place-type tags) lets the frontend render a
+    category-coloured icon without a second API call.
+
+    The Autocomplete (New) SKU is per-request, not per-field: the field mask
+    only controls response payload size. This dataclass intentionally omits
+    every Pro- and Enterprise-tier Place Details field so nothing in the
+    autocomplete response path can accidentally trigger a higher SKU.
+    """
+
+    place_id: str
+    main_text: str
+    secondary_text: str | None
+    types: list[str]
+
+
 class GooglePlacesClient:
     """Thin wrapper around the **new** Places API (v1)."""
 
     _SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
     _NEARBY_URL = "https://places.googleapis.com/v1/places:searchNearby"
+    _AUTOCOMPLETE_URL = "https://places.googleapis.com/v1/places:autocomplete"
     _MEDIA_URL = "https://places.googleapis.com/v1"
     # Text Search rejects overlong / invalid queries; stay under common API limits.
     _TEXT_QUERY_MAX_BYTES = 256
@@ -110,7 +138,12 @@ class GooglePlacesClient:
         img_resp.raise_for_status()
         return img_resp.content
 
-    def get_place_by_id(self, place_id: str) -> PlaceResolution:
+    def get_place_by_id(
+        self,
+        place_id: str,
+        *,
+        session_token: str | None = None,
+    ) -> PlaceResolution:
         """Look up a place directly by its Google place_id.
 
         Field mask is pinned to *Place Details Pro* tier. ``displayName`` is the
@@ -118,6 +151,14 @@ class GooglePlacesClient:
         ride along for free. Enterprise-tier fields (``websiteUri``,
         ``nationalPhoneNumber``, ``regularOpeningHours``) are intentionally
         excluded — they would bump every call to the Enterprise SKU.
+
+        ``session_token`` (optional) is forwarded as the ``?sessionToken=``
+        query parameter. When the caller also passed the same token to
+        ``autocomplete()`` earlier, Google bills all of those Autocomplete
+        (New) calls at the FREE Session Usage SKU. Without a session token,
+        each autocomplete request is billed at $2.83 / 1000 (first 10k/mo
+        free). This is the ONLY mechanism that collapses the autocomplete
+        charges into the free tier — it must be forwarded unchanged.
         """
         if not _PLACE_ID_RE.match(place_id):
             raise ValueError(f"Invalid place_id format: {place_id!r}")
@@ -127,13 +168,127 @@ class GooglePlacesClient:
             "X-Goog-FieldMask": field_mask,
         }
         url = f"https://places.googleapis.com/v1/places/{place_id}"
+        if session_token:
+            # Defence-in-depth: Pydantic already validates token shape at
+            # the router boundary, but this is the only place that builds
+            # a Google URL so we re-check before string-concat.
+            if not _SESSION_TOKEN_RE.match(session_token):
+                # Never log the raw token — Pydantic already validates at
+                # the router boundary, so this branch is a bug/defence-in-
+                # depth signal rather than a user-facing error.
+                raise ValueError(f"Invalid session_token format (length={len(session_token)})")
+            url = f"{url}?sessionToken={session_token}"
         start = time.perf_counter()
         resp = self._http.get(url, headers=headers)
         resp.raise_for_status()
         duration_ms = round((time.perf_counter() - start) * 1000, 1)
         data = resp.json()
-        logger.debug("places_get_by_id", duration_ms=duration_ms, place_id=place_id)
+        logger.debug(
+            "places_get_by_id",
+            duration_ms=duration_ms,
+            place_id=place_id,
+            had_session_token=bool(session_token),
+        )
         return self._place_to_resolution(data)
+
+    def autocomplete(
+        self,
+        input_text: str,
+        *,
+        session_token: str | None = None,
+        language: str | None = None,
+        region: str | None = None,
+        location_bias: tuple[float, float, float] | None = None,
+    ) -> list[AutocompleteSuggestion]:
+        """Places API (New) Autocomplete — typeahead suggestions.
+
+        SKU: Autocomplete (New). When ``session_token`` is passed here AND
+        forwarded to a subsequent :meth:`get_place_by_id` call in the same
+        UX flow, Google bills every autocomplete request in the session at
+        the FREE Session Usage SKU. If the user abandons the search (no
+        matching Place Details call), billing falls back to $2.83 / 1000
+        per request (first 10k/mo free).
+
+        The field mask contains only Autocomplete-response tokens
+        (``suggestions.placePrediction.{placeId, structuredFormat, types}``)
+        and NEVER any Place Details field — the AST regression test in
+        ``test_locations_google_preview.py::test_field_masks_contain_no_enterprise_fields``
+        will fail the build if an Enterprise token ever slips in.
+
+        ``location_bias``: optional ``(lat, lng, radius_m)`` tuple that
+        narrows ranking without restricting results.
+        """
+        if not input_text or not input_text.strip():
+            raise ValueError("input_text must not be empty")
+        if session_token is not None and not _SESSION_TOKEN_RE.match(session_token):
+            # Defence-in-depth: Pydantic already validates at the router
+            # boundary. Do not log the raw token in the error message.
+            raise ValueError(f"Invalid session_token format (length={len(session_token)})")
+
+        field_mask = (
+            "suggestions.placePrediction.placeId,"
+            "suggestions.placePrediction.structuredFormat,"
+            "suggestions.placePrediction.types"
+        )
+        headers = {
+            "X-Goog-Api-Key": self._api_key,
+            "X-Goog-FieldMask": field_mask,
+        }
+        payload: dict[str, Any] = {"input": input_text}
+        if session_token:
+            payload["sessionToken"] = session_token
+        if language:
+            payload["languageCode"] = language
+        if region:
+            payload["regionCode"] = region
+        if location_bias:
+            lat, lng, radius = location_bias
+            payload["locationBias"] = {
+                "circle": {
+                    "center": {"latitude": lat, "longitude": lng},
+                    "radius": radius,
+                }
+            }
+
+        start = time.perf_counter()
+        resp = self._http.post(self._AUTOCOMPLETE_URL, json=payload, headers=headers)
+        resp.raise_for_status()
+        duration_ms = round((time.perf_counter() - start) * 1000, 1)
+        data = resp.json()
+
+        suggestions: list[AutocompleteSuggestion] = []
+        for item in data.get("suggestions") or []:
+            pred = item.get("placePrediction")
+            if not pred:
+                continue
+            place_id = str(pred.get("placeId") or "").strip()
+            if not place_id:
+                continue
+            structured = pred.get("structuredFormat") or {}
+            main_text = str(((structured.get("mainText") or {}).get("text")) or "").strip()
+            secondary_raw = (structured.get("secondaryText") or {}).get("text")
+            secondary_text = str(secondary_raw).strip() if secondary_raw else None
+            types_raw = pred.get("types") or []
+            types = [str(t) for t in types_raw if isinstance(t, str)]
+            if not main_text:
+                # A prediction without a name is not renderable; skip.
+                continue
+            suggestions.append(
+                AutocompleteSuggestion(
+                    place_id=place_id,
+                    main_text=main_text,
+                    secondary_text=secondary_text,
+                    types=types,
+                )
+            )
+
+        logger.debug(
+            "places_autocomplete",
+            duration_ms=duration_ms,
+            results=len(suggestions),
+            had_session_token=bool(session_token),
+        )
+        return suggestions
 
     @staticmethod
     def _extract_place_id_from_url(url: str) -> str | None:

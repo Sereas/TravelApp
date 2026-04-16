@@ -32,7 +32,10 @@ import type {
 } from "@/features/itinerary/itinerary-state-types";
 import { ItineraryTab } from "@/components/itinerary/ItineraryTab";
 import { LocationCard } from "@/components/locations/LocationCard";
-import { AddLocationForm } from "@/components/locations/AddLocationForm";
+import {
+  AddLocationForm,
+  type LocationPreviewPayload,
+} from "@/components/locations/AddLocationForm";
 import { SmartLocationInput } from "@/components/locations/SmartLocationInput";
 import { EditLocationRow } from "@/components/locations/EditLocationRow";
 import { PlacesSidebarMapTrigger } from "@/features/trip-view/PlacesSidebarMapTrigger";
@@ -52,7 +55,18 @@ import { EmptyLocationsCTA } from "./EmptyLocationsCTA";
 export type AddingLocationMode =
   | { mode: "manual" }
   | { mode: "link-entry" }
-  | { mode: "prefilled"; googleLink?: string; name?: string };
+  | { mode: "prefilled"; googleLink?: string; name?: string }
+  | {
+      /**
+       * The user picked a Google suggestion in the typeahead dropdown and
+       * the backend already returned the resolved payload. The form opens
+       * with every field pre-populated and skips its own /preview fetch —
+       * that is the ONE mechanism that prevents a second Place Details Pro
+       * call for the same place_id.
+       */
+      mode: "prefilled-from-typeahead";
+      prefill: LocationPreviewPayload;
+    };
 
 export interface TripViewProps {
   // --- data -----------------------------------------------------------------
@@ -80,6 +94,14 @@ export interface TripViewProps {
   onDateRangeSave?: (newStart: string, newEnd: string) => void | Promise<void>;
   onShareClick?: () => void;
   onSmartInputSubmit?: (value: string, isUrl: boolean) => void;
+  /**
+   * Fired when the user picks a Google suggestion from the typeahead
+   * dropdown and the backend resolves it via `/resolve`. The parent should
+   * open the Add Location form in `prefilled-from-typeahead` mode.
+   */
+  onGoogleSuggestionResolved?: (prefill: LocationPreviewPayload) => void;
+  /** Fired when the user clicks an "On list" typeahead suggestion. */
+  onPickExistingLocation?: (locationId: string) => void;
   onStartAddingLocation?: (mode: AddingLocationMode) => void;
   onCancelAddingLocation?: () => void;
   onLocationAdded?: (location: Location, scheduleDayId?: string | null) => void;
@@ -117,6 +139,8 @@ export function TripView({
   onDateRangeSave,
   onShareClick,
   onSmartInputSubmit,
+  onGoogleSuggestionResolved,
+  onPickExistingLocation,
   onStartAddingLocation,
   onCancelAddingLocation,
   onLocationAdded,
@@ -375,6 +399,9 @@ export function TripView({
                   tripId={tripId}
                   onSubmit={onSmartInputSubmit ?? (() => {})}
                   onImported={onRefreshData ?? (() => {})}
+                  existingLocations={locations}
+                  onGoogleResolved={onGoogleSuggestionResolved}
+                  onPickExisting={onPickExistingLocation}
                 />
               )}
 
@@ -419,6 +446,11 @@ export function TripView({
                   initialName={
                     addingLocation.mode === "prefilled"
                       ? addingLocation.name
+                      : undefined
+                  }
+                  initialPrefill={
+                    addingLocation.mode === "prefilled-from-typeahead"
+                      ? addingLocation.prefill
                       : undefined
                   }
                   linkEntryMode={addingLocation.mode === "link-entry"}
