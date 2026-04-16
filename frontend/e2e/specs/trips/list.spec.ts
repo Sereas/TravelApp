@@ -23,10 +23,7 @@ test.describe("Trips list", () => {
     });
   });
 
-  test("delete trip from UI removes from list", async ({
-    page,
-    apiClient,
-  }) => {
+  test("delete trip from UI removes from list", async ({ page, apiClient }) => {
     const tripName = `E2E Delete Test ${Date.now()}`;
     const trip = await apiClient.createTrip({ name: tripName });
     apiClient.registerForTeardown(trip.id);
@@ -47,9 +44,7 @@ test.describe("Trips list", () => {
     await tripCard.hover();
 
     // Click the trash button
-    await page
-      .getByRole("button", { name: `Delete ${tripName}` })
-      .click();
+    await page.getByRole("button", { name: `Delete ${tripName}` }).click();
 
     // Confirmation dialog should appear
     await expect(

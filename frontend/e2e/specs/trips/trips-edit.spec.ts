@@ -200,7 +200,9 @@ test.describe("Trip edit", () => {
     await page.getByRole("button", { name: /Save Changes/i }).click();
 
     // After save the form is dismissed and the trip name button should show the new name
-    await expect(page.getByRole("button", { name: newName })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("button", { name: newName })).toBeVisible({
+      timeout: 10_000,
+    });
   });
 
   test("end date cannot be set before start date in edit form", async ({

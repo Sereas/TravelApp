@@ -24,8 +24,8 @@ All tests use `noAuthPage` — a fresh browser context with no stored session.
 
 ### Required artifacts
 
-| Artifact | Description |
-|----------|-------------|
+| Artifact                   | Description                                                                             |
+| -------------------------- | --------------------------------------------------------------------------------------- |
 | `01-redirect-to-login.png` | Login page after redirect — "Welcome back" heading visible, email/password fields empty |
 
 ---
@@ -55,8 +55,8 @@ All tests use `noAuthPage` — a fresh browser context with no stored session.
 
 ### Required artifacts
 
-| Artifact | Description |
-|----------|-------------|
+| Artifact               | Description                                                         |
+| ---------------------- | ------------------------------------------------------------------- |
 | `02-login-success.png` | Trips list page after successful login — "My Trips" heading visible |
 
 ---
@@ -85,8 +85,8 @@ All tests use `noAuthPage` — a fresh browser context with no stored session.
 
 ### Required artifacts
 
-| Artifact | Description |
-|----------|-------------|
+| Artifact                        | Description                                                                      |
+| ------------------------------- | -------------------------------------------------------------------------------- |
 | `03-login-invalid-password.png` | Login page with error banner visible — "Invalid login credentials" message shown |
 
 ---
@@ -114,6 +114,6 @@ All tests use `noAuthPage` — a fresh browser context with no stored session.
 
 ### Required artifacts
 
-| Artifact | Description |
-|----------|-------------|
+| Artifact                     | Description                                                               |
+| ---------------------------- | ------------------------------------------------------------------------- |
 | `04-google-oauth-prompt.png` | Google account selector / sign-in page after OAuth redirect from Supabase |

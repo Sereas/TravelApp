@@ -196,10 +196,7 @@ test.describe("Create trip", () => {
     await apiClient.deleteTrip(tripId);
   });
 
-  test("end date only — single date on detail", async ({
-    page,
-    apiClient,
-  }) => {
+  test("end date only — single date on detail", async ({ page, apiClient }) => {
     const tripName = `E2E End Only ${Date.now()}`;
     await openCreateDialog(page, tripName);
 

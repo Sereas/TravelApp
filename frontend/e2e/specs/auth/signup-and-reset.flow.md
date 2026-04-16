@@ -34,8 +34,8 @@ All tests start on `/login` with `noAuthPage` and test validation/error paths. N
 
 ### Required artifacts
 
-| Artifact | Description |
-|----------|-------------|
+| Artifact                       | Description                                                |
+| ------------------------------ | ---------------------------------------------------------- |
 | `07-signup-existing-email.png` | Signup form with "already registered" error banner visible |
 
 ---
@@ -68,8 +68,8 @@ All tests start on `/login` with `noAuthPage` and test validation/error paths. N
 
 ### Required artifacts
 
-| Artifact | Description |
-|----------|-------------|
+| Artifact                          | Description                                                    |
+| --------------------------------- | -------------------------------------------------------------- |
 | `08-signup-password-mismatch.png` | Signup form with "Passwords do not match" error banner visible |
 
 ---
@@ -98,8 +98,8 @@ All tests start on `/login` with `noAuthPage` and test validation/error paths. N
 
 ### Required artifacts
 
-| Artifact | Description |
-|----------|-------------|
+| Artifact                    | Description                                                           |
+| --------------------------- | --------------------------------------------------------------------- |
 | `09-forgot-empty-email.png` | Login page with "Enter your email address first" error banner visible |
 
 ---
@@ -127,6 +127,6 @@ All tests start on `/login` with `noAuthPage` and test validation/error paths. N
 
 ### Required artifacts
 
-| Artifact | Description |
-|----------|-------------|
+| Artifact                    | Description                                                                                           |
+| --------------------------- | ----------------------------------------------------------------------------------------------------- |
 | `10-forgot-valid-email.png` | Login page showing either "Password reset link sent" success message or an error banner from Supabase |

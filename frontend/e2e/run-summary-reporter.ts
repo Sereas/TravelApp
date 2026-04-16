@@ -69,7 +69,10 @@ function extractFlowSection(
 
   // Score each section by word overlap with the test title
   const titleWords = new Set(
-    testTitle.toLowerCase().replace(/[^a-z0-9]+/g, " ").split(/\s+/)
+    testTitle
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .split(/\s+/)
   );
   let best: { section: (typeof sections)[0]; score: number } | null = null;
   for (const section of sections) {
@@ -93,7 +96,7 @@ class RunSummaryReporter implements Reporter {
 
   onBegin(config: FullConfig, _suite: Suite) {
     this.outputDir =
-      config.projects[0]?.outputDir ?? config.configFile
+      (config.projects[0]?.outputDir ?? config.configFile)
         ? path.resolve(
             path.dirname(config.configFile!),
             config.projects[0]?.outputDir ?? "e2e/test-results"
@@ -282,7 +285,9 @@ class RunSummaryReporter implements Reporter {
           lines.push("```", r.error, "```");
         }
         if (r.dir) {
-          lines.push(`Details: [${r.dir}/description.md](./${r.dir}/description.md)`);
+          lines.push(
+            `Details: [${r.dir}/description.md](./${r.dir}/description.md)`
+          );
         }
         lines.push("");
       }

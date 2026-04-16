@@ -34,7 +34,7 @@ Uses `page` fixture (authenticated via storageState from global-setup).
 
 ### Required artifacts
 
-| Artifact | Description |
-|----------|-------------|
+| Artifact                   | Description                                                                               |
+| -------------------------- | ----------------------------------------------------------------------------------------- |
 | `05-profile-menu-open.png` | Trips page with profile dropdown open — "Signed in as" text and "Sign out" button visible |
-| `06-signed-out.png` | Login page after sign-out — "Welcome back" heading visible, confirming redirect |
+| `06-signed-out.png`        | Login page after sign-out — "Welcome back" heading visible, confirming redirect           |

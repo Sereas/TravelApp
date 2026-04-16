@@ -3,6 +3,7 @@
 Both tests use the `page` (authenticated) fixture on `/trips`.
 
 **UI references:**
+
 - Trip card: `TripCard.tsx` — `<h3>` with trip name, delete button `aria-label="Delete {name}"` (hidden, revealed on hover)
 - Delete confirm: `ConfirmDialog.tsx` — title "Delete trip?", description includes trip name, buttons "Cancel" / "Delete trip"
 - Delete button visibility: `opacity-0 group-hover:opacity-100` — requires hovering the card to reveal
@@ -16,17 +17,19 @@ Both tests use the `page` (authenticated) fixture on `/trips`.
 **Fixture:** `page` + `testTrip` (auto-created/cleaned via fixture)
 
 **Steps:**
+
 1. Navigate to `/trips`, wait for loaded
 2. Assert: `h3` heading with `testTrip.name` is visible
 3. **Screenshot:** `01-trip-in-list.png` — trips list showing the card
 
 ### Pass criteria
+
 - Trip card with correct name is visible in the list
 
 ### Required artifacts
 
-| Artifact | Description |
-|----------|-------------|
+| Artifact              | Description                                     |
+| --------------------- | ----------------------------------------------- |
 | `01-trip-in-list.png` | Trips list page with the test trip card visible |
 
 ---
@@ -38,6 +41,7 @@ Both tests use the `page` (authenticated) fixture on `/trips`.
 **Fixture:** `page` + `apiClient`
 
 **Steps:**
+
 1. Create trip via API, register for teardown
 2. Navigate to `/trips`, wait for loaded
 3. Assert: trip card with name is visible
@@ -52,14 +56,15 @@ Both tests use the `page` (authenticated) fixture on `/trips`.
 12. **Screenshot:** `04-trip-deleted.png` — trips list without the deleted card
 
 ### Pass criteria
+
 - Confirmation dialog shows correct title and description
 - After confirming, the trip card disappears without page reload
 - No orphaned trips (registered for teardown as safety net)
 
 ### Required artifacts
 
-| Artifact | Description |
-|----------|-------------|
-| `02-trip-before-delete.png` | Trips list with the trip card visible |
-| `03-delete-confirmation.png` | "Delete trip?" confirmation dialog open |
-| `04-trip-deleted.png` | Trips list after deletion — card is gone |
+| Artifact                     | Description                              |
+| ---------------------------- | ---------------------------------------- |
+| `02-trip-before-delete.png`  | Trips list with the trip card visible    |
+| `03-delete-confirmation.png` | "Delete trip?" confirmation dialog open  |
+| `04-trip-deleted.png`        | Trips list after deletion — card is gone |

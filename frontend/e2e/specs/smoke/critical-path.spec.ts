@@ -101,9 +101,9 @@ test("@slow full critical path — create → schedule → share → view → de
   const itinerary = new ItineraryPage(page);
   await detail.switchToItineraryTab();
 
-  await expect(
-    page.getByRole("button", { name: /Generate/i })
-  ).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("button", { name: /Generate/i })).toBeVisible({
+    timeout: 10_000,
+  });
 
   await test.info().attach("04-itinerary-generate-button.png", {
     body: await page.screenshot(),

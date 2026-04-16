@@ -1,4 +1,8 @@
-import { defineConfig, devices, type ReporterDescription } from "@playwright/test";
+import {
+  defineConfig,
+  devices,
+  type ReporterDescription,
+} from "@playwright/test";
 import * as dotenv from "dotenv";
 import * as path from "path";
 

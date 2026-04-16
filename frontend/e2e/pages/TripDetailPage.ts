@@ -89,9 +89,7 @@ export class TripDetailPage {
       'input[placeholder*="Add a location"]'
     );
 
-    if (
-      await addManually.isVisible({ timeout: 3_000 }).catch(() => false)
-    ) {
+    if (await addManually.isVisible({ timeout: 3_000 }).catch(() => false)) {
       await addManually.click();
     } else if (
       await smartInput.isVisible({ timeout: 1_000 }).catch(() => false)

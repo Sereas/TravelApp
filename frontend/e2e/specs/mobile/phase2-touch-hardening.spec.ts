@@ -119,7 +119,7 @@ test.describe("iPhone 12 (390×844, touch)", () => {
 
     // The schedule popover should fit inside the 390px viewport
     const popoverContent = page
-      .locator('[data-radix-popper-content-wrapper]')
+      .locator("[data-radix-popper-content-wrapper]")
       .first();
     const box = await popoverContent.boundingBox();
 

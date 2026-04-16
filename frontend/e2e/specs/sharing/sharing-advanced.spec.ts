@@ -143,7 +143,9 @@ test.describe("Sharing advanced", () => {
     await detail.goto(trip.id);
 
     // Verify we are on the trip detail page (trip name is a button in authenticated view)
-    await expect(page.getByRole("button", { name: tripName })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("button", { name: tripName })).toBeVisible({
+      timeout: 10_000,
+    });
 
     // Click "Edit trip" to open the EditTripForm dialog
     await detail.getEditTripButton().click();
