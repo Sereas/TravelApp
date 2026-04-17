@@ -6,7 +6,9 @@ import {
   CalendarCheck,
   CalendarPlus,
   Camera,
+  Check,
   Clock,
+  Copy,
   ExternalLink,
   Info,
   Link2,
@@ -81,15 +83,47 @@ function BookingBadge({ status }: { status: string }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+        "inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm",
         isBooked
-          ? "bg-emerald-50/90 text-emerald-700 backdrop-blur-sm"
-          : "bg-amber-50/90 text-amber-700 backdrop-blur-sm"
+          ? "bg-booking-done-bg/90 text-booking-done-text"
+          : "bg-booking-pending-bg/90 text-booking-pending-text"
       )}
     >
       <Ticket size={10} className="shrink-0" />
       {isBooked ? "Booked \u2713" : "Booking needed"}
     </span>
+  );
+}
+
+function CopyButton({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => () => clearTimeout(timerRef.current), []);
+
+  return (
+    <button
+      type="button"
+      onClick={async (e) => {
+        e.stopPropagation();
+        try {
+          await navigator.clipboard.writeText(text);
+          setCopied(true);
+          clearTimeout(timerRef.current);
+          timerRef.current = setTimeout(() => setCopied(false), 1500);
+        } catch {
+          /* clipboard unavailable */
+        }
+      }}
+      className="shrink-0 rounded p-0.5 text-muted-foreground/70 transition-colors hover:text-foreground"
+      aria-label={copied ? "Copied!" : `Copy ${label}`}
+    >
+      {copied ? (
+        <Check size={11} className="text-brand" />
+      ) : (
+        <Copy size={11} />
+      )}
+    </button>
   );
 }
 
@@ -256,6 +290,7 @@ function InlineEditableField({
   readOnly,
   multiline,
   inputType = "text",
+  copyable,
 }: {
   field: EditableField;
   value: string | null | undefined;
@@ -266,6 +301,7 @@ function InlineEditableField({
   readOnly: boolean;
   multiline?: boolean;
   inputType?: "text" | "url";
+  copyable?: boolean;
 }) {
   const isEditing = editState.editingField === field;
   const canEdit = !readOnly && editState.editingField === null;
@@ -348,9 +384,9 @@ function InlineEditableField({
         <button
           type="button"
           onClick={() => editState.startEdit(field, "")}
-          className="flex items-center gap-1.5 text-[11px] text-muted-foreground/50 transition-colors hover:text-muted-foreground"
+          className="flex items-center gap-1.5 text-xs text-muted-foreground/60 transition-colors hover:text-muted-foreground"
         >
-          {Icon && <Icon size={11} className="shrink-0" />}
+          {Icon && <Icon size={12} className="shrink-0" />}
           <span className="italic">Add {label.toLowerCase()}…</span>
         </button>
       );
@@ -361,7 +397,7 @@ function InlineEditableField({
   return (
     <div
       className={cn(
-        "group/field flex items-start gap-1.5 text-[11px] text-muted-foreground/70",
+        "group/field flex items-start gap-1.5 text-xs text-muted-foreground",
         canEdit &&
           "cursor-pointer rounded-md transition-colors hover:bg-muted/50"
       )}
@@ -385,13 +421,15 @@ function InlineEditableField({
           : undefined
       }
     >
-      {Icon && <Icon size={11} className="mt-[2px] shrink-0" />}
-      <span className="break-words">{value}</span>
-      {canEdit && (
-        <Pencil
-          size={10}
-          className="ml-auto mt-[2px] shrink-0 opacity-0 transition-opacity group-hover/field:opacity-50"
-        />
+      {Icon && <Icon size={12} className="mt-[1px] shrink-0" />}
+      <span className="min-w-0 break-words">{value}</span>
+      {(copyable || canEdit) && (
+        <span className="ml-auto flex shrink-0 items-center gap-1 mt-[1px] opacity-0 transition-opacity hover-none:opacity-100 group-hover/field:opacity-100">
+          {copyable && value && (
+            <CopyButton text={value} label={label} />
+          )}
+          {canEdit && <Pencil size={11} className="shrink-0 opacity-60" />}
+        </span>
       )}
     </div>
   );
@@ -498,10 +536,8 @@ export function LocationCard({
     >
       <div
         className={cn(
-          "card-flip-inner h-full rounded-xl border bg-card transition-shadow hover:shadow-md",
-          inItinerary
-            ? "border-l-4 border-brand shadow-sm shadow-brand/5"
-            : "border-border",
+          "card-flip-inner h-full rounded-xl border border-border bg-card transition-shadow hover:shadow-md",
+          inItinerary && "ring-1 ring-brand/25 shadow-sm shadow-brand/5",
           isHighlighted && "animate-location-highlight",
           flipped && "flipped"
         )}
@@ -542,7 +578,7 @@ export function LocationCard({
               <div
                 className={cn(
                   "flex h-full w-full items-center justify-center bg-gradient-to-br",
-                  catMeta?.gradient ?? "from-gray-100 to-gray-50"
+                  catMeta?.gradient ?? "from-muted to-background"
                 )}
                 data-testid="image-placeholder"
               >
@@ -553,7 +589,7 @@ export function LocationCard({
                     className="opacity-20"
                   />
                 ) : (
-                  <MapPin size={40} className="text-gray-400 opacity-20" />
+                  <MapPin size={40} className="text-muted-foreground opacity-20" />
                 )}
               </div>
             )}
@@ -638,7 +674,7 @@ export function LocationCard({
                   <div
                     ref={noteRef}
                     className={cn(
-                      "rounded-lg border-l-2 border-primary/30 bg-primary/[0.04] py-1.5 pl-2.5 pr-2 text-xs leading-relaxed text-foreground/80 break-words",
+                      "rounded-lg bg-primary/[0.06] py-1.5 px-2.5 text-xs leading-relaxed text-foreground/80 break-words",
                       !noteExpanded && "line-clamp-2",
                       !readOnly &&
                         tripId &&
@@ -655,6 +691,18 @@ export function LocationCard({
                     }
                     role={!readOnly && tripId ? "button" : undefined}
                     tabIndex={!readOnly && tripId ? 0 : undefined}
+                    onKeyDown={
+                      !readOnly && tripId
+                        ? (e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              if (!hasTextSelection())
+                                editState.startEdit("note", eNote!);
+                            }
+                          }
+                        : undefined
+                    }
                   >
                     {eNote}
                   </div>
@@ -678,9 +726,9 @@ export function LocationCard({
                     e.stopPropagation();
                     editState.startEdit("note", "");
                   }}
-                  className="flex items-center gap-1.5 text-[11px] italic text-muted-foreground/50 transition-colors hover:text-muted-foreground"
+                  className="flex items-center gap-1.5 text-xs italic text-muted-foreground/60 transition-colors hover:text-muted-foreground"
                 >
-                  <MessageSquare size={11} className="shrink-0" />
+                  <MessageSquare size={12} className="shrink-0" />
                   Add note…
                 </button>
               ) : null}
@@ -738,7 +786,7 @@ export function LocationCard({
                       </PopoverContent>
                     </Popover>
                   ) : (
-                    <span className="inline-flex items-center gap-1 text-muted-foreground/50">
+                    <span className="inline-flex items-center gap-1 text-muted-foreground/60">
                       <CalendarCheck size={12} className="shrink-0" />
                       <span>Not scheduled</span>
                     </span>
@@ -760,7 +808,7 @@ export function LocationCard({
                 </button>
               </div>
               {!readOnly && added_by_email && (
-                <p className="text-[11px] text-muted-foreground/50">
+                <p className="text-xs text-muted-foreground/60">
                   Added by {added_by_email}
                 </p>
               )}
@@ -813,7 +861,7 @@ export function LocationCard({
                 !readOnly && tripId ? (
                   <button
                     type="button"
-                    className="block text-left text-[11px] text-muted-foreground rounded transition-colors hover:text-foreground"
+                    className="block text-left text-xs text-muted-foreground rounded transition-colors hover:text-foreground"
                     onClick={() => {
                       if (!hasTextSelection())
                         editState.startEdit("city", eCity);
@@ -822,13 +870,13 @@ export function LocationCard({
                     {eCity}
                   </button>
                 ) : (
-                  <p className="text-[11px] text-muted-foreground">{eCity}</p>
+                  <p className="text-xs text-muted-foreground">{eCity}</p>
                 )
               ) : !readOnly && tripId ? (
                 <button
                   type="button"
                   onClick={() => editState.startEdit("city", "")}
-                  className="text-[11px] italic text-muted-foreground/50 transition-colors hover:text-muted-foreground"
+                  className="text-xs italic text-muted-foreground/60 transition-colors hover:text-muted-foreground"
                 >
                   Add city…
                 </button>
@@ -849,10 +897,10 @@ export function LocationCard({
           </div>
 
           {/* Scrollable content */}
-          <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-3.5 py-3">
+          <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-3.5 py-3">
             {/* Location section */}
-            <div className="flex flex-col gap-1.5">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Location
               </p>
               <InlineEditableField
@@ -863,23 +911,29 @@ export function LocationCard({
                 editState={editState}
                 readOnly={readOnly}
                 placeholder="Full address"
+                copyable
               />
               {google_link && (
-                <a
-                  href={google_link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex w-fit items-center gap-1 rounded-md text-[11px] text-primary transition-colors hover:text-primary-strong"
-                >
-                  <ExternalLink size={10} />
-                  Open in Google Maps
-                </a>
+                <div className="group/gmaps flex items-center gap-1">
+                  <a
+                    href={google_link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex w-fit items-center gap-1 rounded-md text-xs text-primary transition-colors hover:text-primary-strong"
+                  >
+                    <ExternalLink size={11} />
+                    Open in Google Maps
+                  </a>
+                  <span className="opacity-0 transition-opacity hover-none:opacity-100 group-hover/gmaps:opacity-100">
+                    <CopyButton text={google_link} label="Google Maps link" />
+                  </span>
+                </div>
               )}
             </div>
 
             {/* Info section */}
-            <div className="flex flex-col gap-1.5 border-t border-border/50 pt-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+            <div className="flex flex-col gap-2 border-t border-border/50 pt-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Info
               </p>
 
@@ -908,6 +962,21 @@ export function LocationCard({
                       ? () => {
                           if (!hasTextSelection())
                             editState.startEdit("working_hours", eWorkingHours);
+                        }
+                      : undefined
+                  }
+                  role={!readOnly && tripId ? "button" : undefined}
+                  tabIndex={!readOnly && tripId ? 0 : undefined}
+                  onKeyDown={
+                    !readOnly && tripId
+                      ? (e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            editState.startEdit(
+                              "working_hours",
+                              eWorkingHours
+                            );
+                          }
                         }
                       : undefined
                   }
@@ -941,7 +1010,7 @@ export function LocationCard({
                               <div
                                 key={i}
                                 className={cn(
-                                  "flex items-center justify-between px-2.5 py-1 text-[11px]",
+                                  "flex items-center justify-between px-2.5 py-1 text-xs",
                                   i > 0 && "border-t border-border/60"
                                 )}
                               >
@@ -974,9 +1043,9 @@ export function LocationCard({
                 <button
                   type="button"
                   onClick={() => editState.startEdit("working_hours", "")}
-                  className="flex items-center gap-1.5 text-[11px] italic text-muted-foreground/50 transition-colors hover:text-muted-foreground"
+                  className="flex items-center gap-1.5 text-xs italic text-muted-foreground/60 transition-colors hover:text-muted-foreground"
                 >
-                  <Clock size={11} className="shrink-0" />
+                  <Clock size={12} className="shrink-0" />
                   Add hours…
                 </button>
               ) : null}
@@ -1009,14 +1078,26 @@ export function LocationCard({
                         }
                       : undefined
                   }
+                  role={!readOnly && tripId ? "button" : undefined}
+                  tabIndex={!readOnly && tripId ? 0 : undefined}
+                  onKeyDown={
+                    !readOnly && tripId
+                      ? (e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            editState.startEdit("useful_link", eUsefulLink!);
+                          }
+                        }
+                      : undefined
+                  }
                 >
-                  <Link2 size={11} className="shrink-0 text-muted-foreground" />
+                  <Link2 size={12} className="shrink-0 text-muted-foreground" />
                   <a
                     href={eUsefulLink}
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(e) => e.stopPropagation()}
-                    className="truncate text-[11px] text-primary transition-colors hover:text-primary-strong"
+                    className="truncate text-xs text-primary transition-colors hover:text-primary-strong"
                   >
                     {domainFromUrl(eUsefulLink)}
                     <ExternalLink size={9} className="ml-0.5 inline" />
@@ -1032,9 +1113,9 @@ export function LocationCard({
                 <button
                   type="button"
                   onClick={() => editState.startEdit("useful_link", "")}
-                  className="flex items-center gap-1.5 text-[11px] italic text-muted-foreground/50 transition-colors hover:text-muted-foreground"
+                  className="flex items-center gap-1.5 text-xs italic text-muted-foreground/60 transition-colors hover:text-muted-foreground"
                 >
-                  <Link2 size={11} className="shrink-0" />
+                  <Link2 size={12} className="shrink-0" />
                   Add useful link…
                 </button>
               ) : null}
@@ -1043,10 +1124,14 @@ export function LocationCard({
               {!readOnly && tripId ? (
                 <div className="mt-1 grid grid-cols-2 gap-2">
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-medium text-muted-foreground/70">
+                    <label
+                      htmlFor={`cat-select-${id}`}
+                      className="text-xs font-medium text-muted-foreground"
+                    >
                       Category
                     </label>
                     <select
+                      id={`cat-select-${id}`}
                       value={eCategory ?? ""}
                       onChange={(e) => {
                         void editState.saveSelect(
@@ -1054,8 +1139,7 @@ export function LocationCard({
                           e.target.value || null
                         );
                       }}
-                      className="rounded-md border border-border bg-background px-2 py-1.5 text-[11px] text-foreground outline-none transition-colors focus:ring-1 focus:ring-primary/30"
-                      aria-label="Category"
+                      className="rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none transition-colors focus:ring-1 focus:ring-primary/30"
                     >
                       <option value="">None</option>
                       {CATEGORY_OPTIONS.map((cat: string) => (
@@ -1066,10 +1150,14 @@ export function LocationCard({
                     </select>
                   </div>
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-medium text-muted-foreground/70">
+                    <label
+                      htmlFor={`booking-select-${id}`}
+                      className="text-xs font-medium text-muted-foreground"
+                    >
                       Booking
                     </label>
                     <select
+                      id={`booking-select-${id}`}
                       value={eBooking ?? "no"}
                       onChange={(e) => {
                         void editState.saveSelect(
@@ -1077,8 +1165,7 @@ export function LocationCard({
                           e.target.value
                         );
                       }}
-                      className="rounded-md border border-border bg-background px-2 py-1.5 text-[11px] text-foreground outline-none transition-colors focus:ring-1 focus:ring-primary/30"
-                      aria-label="Booking status"
+                      className="rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none transition-colors focus:ring-1 focus:ring-primary/30"
                     >
                       {REQUIRES_BOOKING_OPTIONS.map((opt) => (
                         <option key={opt.value} value={opt.value}>
@@ -1099,17 +1186,17 @@ export function LocationCard({
               ) : (
                 <div className="mt-1 flex flex-wrap gap-1.5">
                   {eCategory && (
-                    <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
                       {eCategory}
                     </span>
                   )}
                   {eBooking && eBooking !== "no" && (
                     <span
                       className={cn(
-                        "rounded-full px-2 py-0.5 text-[10px] font-medium",
+                        "rounded-full px-2 py-0.5 text-xs font-medium",
                         eBooking === "yes_done"
-                          ? "bg-emerald-50 text-emerald-700"
-                          : "bg-amber-50 text-amber-700"
+                          ? "bg-booking-done-bg text-booking-done-text"
+                          : "bg-booking-pending-bg text-booking-pending-text"
                       )}
                     >
                       {eBooking === "yes_done" ? "Booked" : "Booking needed"}
@@ -1121,12 +1208,12 @@ export function LocationCard({
 
             {/* Schedule section */}
             {inItinerary && itineraryDayLabel && (
-              <div className="flex flex-col gap-1 border-t border-border/50 pt-3">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+              <div className="flex flex-col gap-1.5 border-t border-border/50 pt-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Schedule
                 </p>
-                <div className="flex items-start gap-1.5 text-[11px] text-brand">
-                  <CalendarCheck size={11} className="mt-[2px] shrink-0" />
+                <div className="flex items-start gap-1.5 text-xs text-brand">
+                  <CalendarCheck size={12} className="mt-[1px] shrink-0" />
                   <span className="font-medium leading-relaxed">
                     {itineraryDayLabel}
                   </span>
