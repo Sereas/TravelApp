@@ -154,6 +154,24 @@ $$;
 
 ALTER FUNCTION public.batch_upsert_segment_cache(p_rows jsonb) OWNER TO postgres;
 
+CREATE FUNCTION public.bump_google_usage(p_user_id uuid, p_endpoint text, p_daily_cap integer) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    AS $$
+DECLARE
+    new_count integer;
+BEGIN
+    INSERT INTO google_api_usage (user_id, date, endpoint, count)
+    VALUES (p_user_id, CURRENT_DATE, p_endpoint, 1)
+    ON CONFLICT (user_id, date, endpoint) DO UPDATE
+    RETURNING count INTO new_count;
+    RETURN new_count <= p_daily_cap;
+END;
+$$;
+
+ALTER FUNCTION public.bump_google_usage(p_user_id uuid, p_endpoint text, p_daily_cap integer) OWNER TO postgres;
+
+COMMENT ON FUNCTION public.bump_google_usage(p_user_id uuid, p_endpoint text, p_daily_cap integer) IS 'Atomically increment per-user per-day per-endpoint counter and return whether the post-increment count is within the caller-supplied cap. Used by backend/app/core/google_guard.py::bump_google_quota.';
+
 CREATE FUNCTION public.create_route_with_stops(p_option_id uuid, p_transport_mode character varying, p_label character varying, p_option_location_ids uuid[]) RETURNS json
     LANGUAGE plpgsql SECURITY DEFINER
     AS $$
@@ -957,6 +975,19 @@ $$;
 
 ALTER FUNCTION public.verify_resource_chain(p_trip_id uuid, p_user_id uuid, p_day_id uuid, p_option_id uuid) OWNER TO postgres;
 
+CREATE TABLE public.google_api_usage (
+    user_id uuid NOT NULL,
+    date date DEFAULT CURRENT_DATE NOT NULL,
+    endpoint text NOT NULL,
+    count integer DEFAULT 0 NOT NULL
+);
+
+ALTER TABLE public.google_api_usage OWNER TO postgres;
+
+COMMENT ON TABLE public.google_api_usage IS 'Per-user per-day counter for Google-billing endpoints. Bumped atomically via bump_google_usage RPC; enforces daily cap via the RPC''s returned boolean. Accessed only through the SECURITY DEFINER RPC — no direct reads.';
+
+COMMENT ON COLUMN public.google_api_usage.count IS 'Monotonic counter for (user_id, date, endpoint). Never decremented — housekeeping should DELETE rows older than ~32 days in a future migration.';
+
 CREATE TABLE public.locations (
     location_id uuid DEFAULT gen_random_uuid() NOT NULL,
     trip_id uuid NOT NULL,
@@ -1091,6 +1122,9 @@ ALTER TABLE ONLY public.day_options
 ALTER TABLE ONLY public.day_options
     ADD CONSTRAINT day_options_pkey PRIMARY KEY (option_id);
 
+ALTER TABLE ONLY public.google_api_usage
+    ADD CONSTRAINT google_api_usage_pkey PRIMARY KEY (user_id, date, endpoint);
+
 ALTER TABLE ONLY public.locations
     ADD CONSTRAINT locations_pkey PRIMARY KEY (location_id);
 
@@ -1128,6 +1162,8 @@ ALTER TABLE ONLY public.trips
     ADD CONSTRAINT trips_pkey PRIMARY KEY (trip_id);
 
 CREATE INDEX idx_day_options_day_id ON public.day_options USING btree (day_id);
+
+CREATE INDEX idx_google_api_usage_date ON public.google_api_usage USING btree (date);
 
 CREATE INDEX idx_locations_google_place_id ON public.locations USING btree (google_place_id) WHERE (google_place_id IS NOT NULL);
 
@@ -1237,6 +1273,8 @@ CREATE POLICY day_options_update_own_trip ON public.day_options FOR UPDATE USING
    FROM (public.trip_days d
      JOIN public.trips t ON ((t.trip_id = d.trip_id)))
   WHERE ((d.day_id = day_options.day_id) AND (t.user_id = ( SELECT auth.uid() AS uid))))));
+
+ALTER TABLE public.google_api_usage ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE public.locations ENABLE ROW LEVEL SECURITY;
 
@@ -1379,6 +1417,10 @@ REVOKE ALL ON FUNCTION public.batch_upsert_segment_cache(p_rows jsonb) FROM PUBL
 GRANT ALL ON FUNCTION public.batch_upsert_segment_cache(p_rows jsonb) TO authenticated;
 GRANT ALL ON FUNCTION public.batch_upsert_segment_cache(p_rows jsonb) TO service_role;
 
+REVOKE ALL ON FUNCTION public.bump_google_usage(p_user_id uuid, p_endpoint text, p_daily_cap integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.bump_google_usage(p_user_id uuid, p_endpoint text, p_daily_cap integer) TO authenticated;
+GRANT ALL ON FUNCTION public.bump_google_usage(p_user_id uuid, p_endpoint text, p_daily_cap integer) TO service_role;
+
 GRANT ALL ON FUNCTION public.create_route_with_stops(p_option_id uuid, p_transport_mode character varying, p_label character varying, p_option_location_ids uuid[]) TO authenticated;
 GRANT ALL ON FUNCTION public.create_route_with_stops(p_option_id uuid, p_transport_mode character varying, p_label character varying, p_option_location_ids uuid[]) TO service_role;
 
@@ -1460,6 +1502,8 @@ GRANT ALL ON FUNCTION public.update_route_with_stops(p_route_id uuid, p_option_i
 
 GRANT ALL ON FUNCTION public.verify_resource_chain(p_trip_id uuid, p_user_id uuid, p_day_id uuid, p_option_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.verify_resource_chain(p_trip_id uuid, p_user_id uuid, p_day_id uuid, p_option_id uuid) TO service_role;
+
+GRANT ALL ON TABLE public.google_api_usage TO service_role;
 
 GRANT ALL ON TABLE public.locations TO authenticated;
 GRANT ALL ON TABLE public.locations TO service_role;
