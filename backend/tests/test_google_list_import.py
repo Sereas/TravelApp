@@ -37,7 +37,7 @@ def _make_resolution(place_id: str, name: str) -> PlaceResolution:
 
 
 def _mock_supabase(existing_place_ids: list[str] | None = None):
-    """Build a mock Supabase client with trip ownership + existing locations."""
+    """Build a mock Supabase client with trip ownership + existing locations + cache."""
     sb = MagicMock()
 
     trip_row = {"trip_id": TRIP_ID, "user_id": str(USER_ID)}
@@ -60,6 +60,11 @@ def _mock_supabase(existing_place_ids: list[str] | None = None):
                 return m
 
             t.insert.side_effect = _insert
+        elif name == "place_detail_cache":
+            # Cache lookups always miss (no cached places in tests)
+            t.select.return_value.eq.return_value.execute.return_value = MagicMock(data=[])
+            # Cache writes succeed
+            t.upsert.return_value.execute.return_value = MagicMock(data=[{}])
         return t
 
     sb.table.side_effect = _table
@@ -95,15 +100,20 @@ def test_import_happy_path_mix_of_new_and_existing(client: TestClient):
         ScrapedPlace(name="Place C", latitude=1.30, longitude=103.87),
     ]
 
-    def fake_search(text, *, latitude=None, longitude=None, radius_m=None):
+    def fake_id_search(text, *, latitude=None, longitude=None, radius_m=None):
         if "Place A" in text:
-            return _make_resolution("existing_place_1", "Place A")
+            return "existing_place_1"
         if "Place B" in text:
-            return _make_resolution("new_place_2", "Place B")
-        return _make_resolution("new_place_3", "Place C")
+            return "new_place_2"
+        return "new_place_3"
+
+    def fake_get_by_id(place_id, **kw):
+        names = {"new_place_2": "Place B", "new_place_3": "Place C"}
+        return _make_resolution(place_id, names.get(place_id, "Unknown"))
 
     mock_client = MagicMock()
-    mock_client._search_place_by_text.side_effect = fake_search
+    mock_client.search_place_id_by_text.side_effect = fake_id_search
+    mock_client.get_place_by_id.side_effect = fake_get_by_id
     _setup_overrides(sb, places_client=mock_client)
 
     with patch("backend.app.services.google_list_import.GoogleListScraper") as MockScraper:
@@ -135,13 +145,13 @@ def test_import_all_duplicates(client: TestClient):
         ScrapedPlace(name="Place B", latitude=1.29, longitude=103.86),
     ]
 
-    def fake_search(text, *, latitude=None, longitude=None, radius_m=None):
+    def fake_id_search(text, *, latitude=None, longitude=None, radius_m=None):
         if "Place A" in text:
-            return _make_resolution("p1", "Place A")
-        return _make_resolution("p2", "Place B")
+            return "p1"
+        return "p2"
 
     mock_client = MagicMock()
-    mock_client._search_place_by_text.side_effect = fake_search
+    mock_client.search_place_id_by_text.side_effect = fake_id_search
     _setup_overrides(sb, places_client=mock_client)
 
     with patch("backend.app.services.google_list_import.GoogleListScraper") as MockScraper:
@@ -171,14 +181,15 @@ def test_import_partial_resolve_failures(client: TestClient):
         ScrapedPlace(name="Bad Place", latitude=1.29, longitude=103.86),
     ]
 
-    def fake_search(text, *, latitude=None, longitude=None, radius_m=None):
+    def fake_id_search(text, *, latitude=None, longitude=None, radius_m=None):
         if "Bad" in text:
             raise RuntimeError("Places search returned no candidates")
-        return _make_resolution("good_place", "Good Place")
+        return "good_place"
 
     mock_client = MagicMock()
-    mock_client._search_place_by_text.side_effect = fake_search
-    mock_client._search_place_nearby.side_effect = RuntimeError("Nearby search also failed")
+    mock_client.search_place_id_by_text.side_effect = fake_id_search
+    mock_client.search_place_id_nearby.side_effect = RuntimeError("Nearby search also failed")
+    mock_client.get_place_by_id.return_value = _make_resolution("good_place", "Good Place")
     _setup_overrides(sb, places_client=mock_client)
 
     with patch("backend.app.services.google_list_import.GoogleListScraper") as MockScraper:
@@ -251,13 +262,18 @@ def test_import_passes_notes_to_db(client: TestClient):
         ScrapedPlace(name="No Note Place", latitude=48.87, longitude=2.35),
     ]
 
-    def fake_search(text, *, latitude=None, longitude=None, radius_m=None):
+    def fake_id_search(text, *, latitude=None, longitude=None, radius_m=None):
         if "Pierre" in text:
-            return _make_resolution("place_1", "Café Pierre Hermé")
-        return _make_resolution("place_2", "No Note Place")
+            return "place_1"
+        return "place_2"
+
+    def fake_get_by_id(place_id, **kw):
+        names = {"place_1": "Café Pierre Hermé", "place_2": "No Note Place"}
+        return _make_resolution(place_id, names.get(place_id, "Unknown"))
 
     mock_client = MagicMock()
-    mock_client._search_place_by_text.side_effect = fake_search
+    mock_client.search_place_id_by_text.side_effect = fake_id_search
+    mock_client.get_place_by_id.side_effect = fake_get_by_id
     _setup_overrides(sb, places_client=mock_client)
 
     with patch("backend.app.services.google_list_import.GoogleListScraper") as MockScraper:
@@ -292,7 +308,8 @@ def test_import_deduplicates_within_batch(client: TestClient):
     ]
 
     mock_client = MagicMock()
-    mock_client._search_place_by_text.return_value = _make_resolution("same_id", "Same Place")
+    mock_client.search_place_id_by_text.return_value = "same_id"
+    mock_client.get_place_by_id.return_value = _make_resolution("same_id", "Same Place")
     _setup_overrides(sb, places_client=mock_client)
 
     with patch("backend.app.services.google_list_import.GoogleListScraper") as MockScraper:

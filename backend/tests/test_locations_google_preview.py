@@ -128,12 +128,17 @@ def test_extract_city_standalone_postcode_segment():
 
 
 class _DummySupabase:
-    def table(self, name):  # pragma: no cover - preview does not touch DB
+    def table(self, name):
+        if name == "place_detail_cache":
+            m = MagicMock()
+            # Cache lookup returns miss so /preview falls through to API
+            m.select.return_value.eq.return_value.execute.return_value = MagicMock(data=[])
+            # Cache write (background task) succeeds
+            m.upsert.return_value.execute.return_value = MagicMock(data=[{}])
+            return m
         raise AssertionError(f"Preview should not access table {name}")
 
     def rpc(self, name, params=None):
-        # Preview now bumps `bump_google_usage` via the shared cost guard.
-        # Any other RPC is still unexpected.
         if name == "bump_google_usage":
             m = MagicMock()
             m.execute.return_value = MagicMock(data=True)
@@ -154,20 +159,20 @@ def test_preview_location_from_google_link_returns_200(client: TestClient, monke
     user_id = uuid4()
     _override_auth_and_supabase(client, user_id)
 
-    def fake_resolve_from_link(_link: str) -> PlaceResolution:
-        return PlaceResolution(
-            place_id="ChIJCzYy5IS16lQRQrfeQ5K5Oxw",
-            name="Louvre Museum",
-            formatted_address="Rue de Rivoli, 75001 Paris, France",
-            latitude=48.8606111,
-            longitude=2.337644,
-            types=["museum", "tourist_attraction"],
-            first_photo_resource="places/ChIJCzYy5IS16lQR/photos/AXCi2Q6abc",
-        )
-
     class FakeClient:
-        def resolve_from_link(self, _link: str) -> PlaceResolution:
-            return fake_resolve_from_link(_link)
+        def resolve_place_id_from_link(self, _link: str) -> str:
+            return "ChIJCzYy5IS16lQRQrfeQ5K5Oxw"
+
+        def get_place_by_id(self, place_id: str, **kw) -> PlaceResolution:
+            return PlaceResolution(
+                place_id="ChIJCzYy5IS16lQRQrfeQ5K5Oxw",
+                name="Louvre Museum",
+                formatted_address="Rue de Rivoli, 75001 Paris, France",
+                latitude=48.8606111,
+                longitude=2.337644,
+                types=["museum", "tourist_attraction"],
+                first_photo_resource="places/ChIJCzYy5IS16lQR/photos/AXCi2Q6abc",
+            )
 
     app.dependency_overrides[get_google_places_client] = lambda: FakeClient()
     try:
@@ -304,7 +309,10 @@ def test_preview_returns_place_name_as_city_when_place_is_a_town(client: TestCli
     _override_auth_and_supabase(client, user_id)
 
     class FakeClient:
-        def resolve_from_link(self, _link: str) -> PlaceResolution:
+        def resolve_place_id_from_link(self, _link: str) -> str:
+            return "ChIJ_etretat"
+
+        def get_place_by_id(self, place_id: str, **kw) -> PlaceResolution:
             return PlaceResolution(
                 place_id="ChIJ_etretat",
                 name="Étretat",
@@ -337,8 +345,8 @@ def test_preview_location_missing_google_link_returns_422(client: TestClient, mo
 
     # Provide a dummy client; the handler should reject empty links before using it
     class DummyClient:
-        def resolve_from_link(self, _link: str):
-            raise AssertionError("resolve_from_link should not be called for empty link")
+        def resolve_place_id_from_link(self, _link: str):
+            raise AssertionError("resolve should not be called for empty link")
 
     app.dependency_overrides[get_google_places_client] = lambda: DummyClient()
     try:
@@ -420,18 +428,26 @@ def test_preview_respects_daily_cap(client: TestClient):
             raise AssertionError(f"Unexpected RPC: {name!r}")
 
         def table(self, name):
+            if name == "place_detail_cache":
+                # Cache miss — forces the code to attempt bump_google_quota
+                m = MagicMock()
+                m.select.return_value.eq.return_value.execute.return_value = MagicMock(data=[])
+                return m
             raise AssertionError(f"Should not access table {name!r}")
 
     async def override_user():
         return user_id
 
-    class ShouldNotBeCalledClient:
-        def resolve_from_link(self, _link: str):
-            raise AssertionError("Places API must not be called when daily cap is exceeded")
+    class CapTestClient:
+        def resolve_place_id_from_link(self, _link: str) -> str:
+            return "ChIJ_test_place"  # Free call succeeds
+
+        def get_place_by_id(self, *a, **kw):
+            raise AssertionError("get_place_by_id must not be called when daily cap is exceeded")
 
     app.dependency_overrides[get_current_user_id] = override_user
     app.dependency_overrides[get_supabase_client] = lambda: _CapExceededSupabase()
-    app.dependency_overrides[get_google_places_client] = lambda: ShouldNotBeCalledClient()
+    app.dependency_overrides[get_google_places_client] = lambda: CapTestClient()
     try:
         r = client.post(
             "/api/v1/locations/google/preview",

@@ -20,6 +20,10 @@ from backend.app.routers.locations_google import (
     _resolve_city,
     _suggest_category,
 )
+from backend.app.services.place_detail_cache import (
+    lookup_cached_place,
+    write_place_to_cache,
+)
 from backend.app.services.place_photos import ensure_place_photo
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger("google_list_import_service")
@@ -133,10 +137,11 @@ def _build_row(
     }
 
 
-async def _resolve_place(places_client, place, *, display_name: str, has_coords: bool):
-    """Attempt Places API resolution with text→nearby fallback.
+async def _find_place_id(places_client, place, *, display_name: str, has_coords: bool):
+    """Find a Google place_id using FREE search (IDs Only) with fallback.
 
-    Returns (resolved, used_nearby) or (None, False).
+    Returns ``(place_id, used_nearby)`` or ``(None, False)``.
+    Does NOT call Place Details — the caller checks the cache first.
     """
     from backend.app.clients.google_places import GooglePlacesClient
 
@@ -144,21 +149,21 @@ async def _resolve_place(places_client, place, *, display_name: str, has_coords:
     name_is_coords = place.name and is_coord_slug(place.name)
     search_name = None if name_is_coords else (place.name or None)
 
-    resolved = None
+    place_id = None
     used_nearby = False
 
     try:
         if search_name:
-            resolved = await asyncio.to_thread(
-                places_client._search_place_by_text,
+            place_id = await asyncio.to_thread(
+                places_client.search_place_id_by_text,
                 search_name,
                 latitude=place.latitude if has_coords else None,
                 longitude=place.longitude if has_coords else None,
                 radius_m=500.0 if has_coords else None,
             )
         elif has_coords:
-            resolved = await asyncio.to_thread(
-                places_client._search_place_nearby,
+            place_id = await asyncio.to_thread(
+                places_client.search_place_id_nearby,
                 place.latitude,
                 place.longitude,
             )
@@ -167,21 +172,21 @@ async def _resolve_place(places_client, place, *, display_name: str, has_coords:
         # Text search failed — retry without location bias
         if search_name and has_coords:
             with contextlib.suppress(Exception):
-                resolved = await asyncio.to_thread(
-                    places_client._search_place_by_text,
+                place_id = await asyncio.to_thread(
+                    places_client.search_place_id_by_text,
                     search_name,
                 )
         # Still nothing — fall back to nearby coords
-        if resolved is None and has_coords and search_name:
+        if place_id is None and has_coords and search_name:
             with contextlib.suppress(Exception):
-                resolved = await asyncio.to_thread(
-                    places_client._search_place_nearby,
+                place_id = await asyncio.to_thread(
+                    places_client.search_place_id_nearby,
                     place.latitude,
                     place.longitude,
                 )
                 used_nearby = True
 
-    return resolved, used_nearby
+    return place_id, used_nearby
 
 
 # ---------------------------------------------------------------------------
@@ -239,16 +244,17 @@ async def import_google_list_iter(
     seen_place_ids: set[str] = set()
     skipped_names: list[str] = []
 
-    # Phase 2: Enrichment
+    # Phase 2: Enrichment — free search → cache check → paid details on miss
     for i, place in enumerate(scraped_places, 1):
         display_name = place.name or f"({place.latitude}, {place.longitude})"
         has_coords = place.latitude != 0.0 and place.longitude != 0.0
 
-        resolved, used_nearby = await _resolve_place(
+        # Step 1: FREE search to find place_id
+        place_id, used_nearby = await _find_place_id(
             places_client, place, display_name=display_name, has_coords=has_coords
         )
 
-        if resolved is None:
+        if place_id is None:
             logger.warning(
                 "google_list_enrichment_failed",
                 place_name=display_name,
@@ -258,10 +264,40 @@ async def import_google_list_iter(
             yield EnrichingItem(index=i, name=display_name, status="failed")
             continue
 
-        if resolved.place_id in existing_place_ids or resolved.place_id in seen_place_ids:
-            skipped_names.append(resolved.name or display_name)
-            yield EnrichingItem(index=i, name=resolved.name or display_name, status="existing")
+        if place_id in existing_place_ids or place_id in seen_place_ids:
+            skipped_names.append(display_name)
+            yield EnrichingItem(index=i, name=display_name, status="existing")
             continue
+
+        # Step 2: cache check before the $17/1k call
+        resolved = await asyncio.to_thread(lookup_cached_place, supabase, place_id)
+
+        # Step 3: cache miss → paid Place Details call
+        if resolved is None:
+            try:
+                resolved = await asyncio.to_thread(places_client.get_place_by_id, place_id)
+            except Exception:
+                logger.warning(
+                    "google_list_enrichment_failed",
+                    place_name=display_name,
+                    place_id=place_id,
+                    error_category="external_api",
+                    exc_info=True,
+                )
+                skipped_names.append(display_name)
+                yield EnrichingItem(index=i, name=display_name, status="failed")
+                continue
+
+            # Write to cache for future lookups
+            row_city = _resolve_city(resolved)
+            row_category = _suggest_category(resolved.types)
+            await asyncio.to_thread(
+                write_place_to_cache,
+                supabase,
+                resolved,
+                city=row_city,
+                suggested_category=row_category,
+            )
 
         seen_place_ids.add(resolved.place_id)
         row = _build_row(

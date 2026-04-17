@@ -18,7 +18,7 @@ import time
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
 from backend.app.clients.google_places import GooglePlacesClient, PlaceResolution
@@ -37,6 +37,10 @@ from backend.app.models.schemas import (
     AutocompleteSuggestionDTO,
     LocationPreviewResponse,
     ResolvePlaceRequest,
+)
+from backend.app.services.place_detail_cache import (
+    lookup_cached_place,
+    write_place_to_cache,
 )
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger("locations-google")
@@ -175,27 +179,24 @@ class GoogleLinkPreviewBody(BaseModel):
 async def preview_location_from_google_link(
     request: Request,
     body: GoogleLinkPreviewBody,
+    background_tasks: BackgroundTasks,
     user_id: UUID = Depends(get_current_user_id),
     supabase=Depends(get_supabase_client),
     places_client: GooglePlacesClient = Depends(get_google_places_client),
 ):
     """Resolve a Google Maps link into normalized location data (no DB write).
 
-    - Requires a valid JWT (same auth as other app endpoints).
-    - In the common case, issues two sequential Google Places calls: a free
-      Text Search / Nearby Search (IDs Only) to find the place_id, followed
-      by a Place Details Pro lookup ($17/1k) for the user-facing fields.
-      When the URL already contains an explicit ``place_id:``, only the
-      Place Details call is made.
-    - Returns data the UI can use to pre-fill trip location fields. The
-      ``photo_resource_name`` is echoed back so that a later ``POST
-      /trips/{trip_id}/locations`` can trigger one lazy photo-bytes fetch
-      without calling Google Places again.
+    Split into two phases so ``place_detail_cache`` can sit in between:
+
+    1. **Free phase** — follow redirects, parse the URL, run a free
+       Text/Nearby Search (IDs Only) to discover the ``place_id``.
+    2. **Cache check** — if the ``place_id`` is already cached, return
+       instantly without calling Place Details or bumping the daily quota.
+    3. **Paid phase (cache miss only)** — call Place Details Pro ($17/1k),
+       bump quota, write result to cache in the background.
     """
-    # Cost guards — same contract as autocomplete/resolve/list-import.
     settings = get_settings()
     ensure_google_allowed(settings, "preview")
-    await bump_google_quota(supabase, user_id, "preview", settings.google_daily_cap_preview)
 
     google_link = (body.google_link or "").strip()
     if not google_link:
@@ -203,8 +204,40 @@ async def preview_location_from_google_link(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="google_link must not be empty",
         )
+
+    # Phase 1: resolve URL → place_id (FREE)
     try:
-        resolved = places_client.resolve_from_link(google_link)
+        place_id = places_client.resolve_place_id_from_link(google_link)
+    except Exception as exc:
+        logger.warning("google_preview_failed", error=str(exc), error_category="external_api")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not resolve Google Maps link",
+        ) from exc
+
+    # Phase 2: cache check
+    cached = lookup_cached_place(supabase, place_id)
+    if cached is not None:
+        logger.info(
+            "google_preview_cache_hit",
+            place_id=cached.place_id,
+            name=cached.name,
+        )
+        return LocationPreviewResponse(
+            name=cached.name,
+            address=cached.formatted_address,
+            city=_resolve_city(cached),
+            latitude=cached.latitude,
+            longitude=cached.longitude,
+            google_place_id=cached.place_id,
+            suggested_category=_suggest_category(cached.types),
+            photo_resource_name=cached.first_photo_resource,
+        )
+
+    # Phase 3: cache miss — paid Place Details call
+    await bump_google_quota(supabase, user_id, "preview", settings.google_daily_cap_preview)
+    try:
+        resolved = places_client.get_place_by_id(place_id)
     except Exception as exc:
         logger.warning("google_preview_failed", error=str(exc), error_category="external_api")
         raise HTTPException(
@@ -219,7 +252,17 @@ async def preview_location_from_google_link(
         "google_preview_succeeded",
         place_id=resolved.place_id,
         name=resolved.name,
+        cache_hit=False,
     )
+
+    background_tasks.add_task(
+        write_place_to_cache,
+        supabase,
+        resolved,
+        city=city,
+        suggested_category=suggested_category,
+    )
+
     return LocationPreviewResponse(
         name=resolved.name,
         address=resolved.formatted_address,
@@ -338,24 +381,46 @@ async def autocomplete_locations(
 async def resolve_place(
     request: Request,
     body: ResolvePlaceRequest,
+    background_tasks: BackgroundTasks,
     user_id: UUID = Depends(get_current_user_id),
     supabase=Depends(get_supabase_client),
     places_client: GooglePlacesClient = Depends(get_google_places_client),
 ):
     """Resolve a Google place_id into ``LocationPreviewResponse``.
 
-    SKU: Place Details (New) Pro — same field mask as ``/preview``'s
-    second call. $17 / 1000 (first 5k/mo free). This is the ONE paid Google
-    call in the typeahead flow; forwarding ``session_token`` makes all
-    preceding autocomplete requests in the session FREE.
+    Checks ``place_detail_cache`` first — on hit, returns cached data
+    without calling Google or bumping the daily quota.  On miss, calls
+    Place Details Pro and lazily writes the result to cache.
 
-    Returns the exact same shape as ``/preview`` so the frontend
-    ``AddLocationForm`` prefill path is identical regardless of entry.
+    SKU (on cache miss): Place Details (New) Pro — $17/1000 (first
+    5k/mo free).  Forwarding ``session_token`` makes preceding
+    autocomplete requests FREE.  On cache hit the session token is NOT
+    forwarded, so autocomplete is billed standalone ($2.83/1k); net
+    savings is still $14.17/1k.
     """
     settings = get_settings()
-    # /resolve is the second half of the typeahead UX — blocked by the
-    # autocomplete kill switch as well as the master switch.
     ensure_google_allowed(settings, "resolve")
+
+    # --- Cache check (before quota bump) ---
+    cached = lookup_cached_place(supabase, body.place_id)
+    if cached is not None:
+        logger.info(
+            "places_resolve_cache_hit",
+            place_id=cached.place_id,
+            had_session_token=body.session_token is not None,
+        )
+        return LocationPreviewResponse(
+            name=cached.name,
+            address=cached.formatted_address,
+            city=_resolve_city(cached),
+            latitude=cached.latitude,
+            longitude=cached.longitude,
+            google_place_id=cached.place_id,
+            suggested_category=_suggest_category(cached.types),
+            photo_resource_name=cached.first_photo_resource,
+        )
+
+    # --- Cache miss: call Google API ---
     await bump_google_quota(supabase, user_id, "resolve", settings.google_daily_cap_resolve)
 
     start = time.perf_counter()
@@ -379,15 +444,23 @@ async def resolve_place(
     suggested_category = _suggest_category(resolved.types)
     city = _resolve_city(resolved)
 
-    # `had_session_token` is the single field that lets us audit in prod
-    # whether autocomplete traffic is being billed FREE (true) or per
-    # request (false). See ADR on Places API cost reduction.
     logger.info(
         "places_resolve_done",
         place_id=resolved.place_id,
         duration_ms=duration_ms,
         had_session_token=body.session_token is not None,
+        cache_hit=False,
     )
+
+    # Lazy cache write — runs after response is sent
+    background_tasks.add_task(
+        write_place_to_cache,
+        supabase,
+        resolved,
+        city=city,
+        suggested_category=suggested_category,
+    )
+
     return LocationPreviewResponse(
         name=resolved.name,
         address=resolved.formatted_address,

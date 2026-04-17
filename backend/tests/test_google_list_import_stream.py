@@ -73,6 +73,11 @@ def _mock_supabase(existing_place_ids: list[str] | None = None):
                 return m
 
             t.insert.side_effect = _insert
+        elif name == "place_detail_cache":
+            # Cache lookups always miss (no cached places in tests)
+            t.select.return_value.eq.return_value.execute.return_value = MagicMock(data=[])
+            # Cache writes succeed
+            t.upsert.return_value.execute.return_value = MagicMock(data=[{}])
         return t
 
     sb.table.side_effect = _table
@@ -139,13 +144,18 @@ def test_stream_happy_path_event_sequence(client: TestClient):
         ScrapedPlace(name="Place B", latitude=48.87, longitude=2.35),
     ]
 
-    def fake_search(text, *, latitude=None, longitude=None, radius_m=None):
+    def fake_id_search(text, *, latitude=None, longitude=None, radius_m=None):
         if "Place A" in text:
-            return _make_resolution("place_a_id", "Place A")
-        return _make_resolution("place_b_id", "Place B")
+            return "place_a_id"
+        return "place_b_id"
+
+    def fake_get_by_id(place_id, **kw):
+        names = {"place_a_id": "Place A", "place_b_id": "Place B"}
+        return _make_resolution(place_id, names.get(place_id, "Unknown"))
 
     mock_places = MagicMock()
-    mock_places._search_place_by_text.side_effect = fake_search
+    mock_places.search_place_id_by_text.side_effect = fake_id_search
+    mock_places.get_place_by_id.side_effect = fake_get_by_id
     _setup_overrides(sb, places_client=mock_places)
 
     with patch("backend.app.services.google_list_import.GoogleListScraper") as MockScraper:
@@ -352,17 +362,22 @@ def test_stream_enrichment_failure_continues(client: TestClient):
         ScrapedPlace(name="Good Two", latitude=1.2, longitude=2.2),
     ]
 
-    def fake_search(text, *, latitude=None, longitude=None, radius_m=None):
+    def fake_id_search(text, *, latitude=None, longitude=None, radius_m=None):
         if "Bad One" in text:
             raise RuntimeError("Places API exploded")
         if "Good One" in text:
-            return _make_resolution("good_one_id", "Good One")
-        return _make_resolution("good_two_id", "Good Two")
+            return "good_one_id"
+        return "good_two_id"
+
+    def fake_get_by_id(place_id, **kw):
+        names = {"good_one_id": "Good One", "good_two_id": "Good Two"}
+        return _make_resolution(place_id, names.get(place_id, "Unknown"))
 
     mock_places = MagicMock()
-    mock_places._search_place_by_text.side_effect = fake_search
+    mock_places.search_place_id_by_text.side_effect = fake_id_search
     # Nearby fallback must also fail for the "Bad One" place
-    mock_places._search_place_nearby.side_effect = RuntimeError("Nearby search also failed")
+    mock_places.search_place_id_nearby.side_effect = RuntimeError("Nearby search also failed")
+    mock_places.get_place_by_id.side_effect = fake_get_by_id
     _setup_overrides(sb, places_client=mock_places)
 
     with patch("backend.app.services.google_list_import.GoogleListScraper") as MockScraper:
@@ -478,15 +493,20 @@ def test_list_import_stops_on_daily_cap_mid_stream(client: TestClient):
         ScrapedPlace(name="Place C", latitude=48.88, longitude=2.36),
     ]
 
-    def fake_search(text, *, latitude=None, longitude=None, radius_m=None):
+    def fake_id_search(text, *, latitude=None, longitude=None, radius_m=None):
         if "Place A" in text:
-            return _make_resolution("place_a_id", "Place A")
+            return "place_a_id"
         if "Place B" in text:
-            return _make_resolution("place_b_id", "Place B")
-        return _make_resolution("place_c_id", "Place C")
+            return "place_b_id"
+        return "place_c_id"
+
+    def fake_get_by_id(place_id, **kw):
+        names = {"place_a_id": "Place A", "place_b_id": "Place B", "place_c_id": "Place C"}
+        return _make_resolution(place_id, names.get(place_id, "Unknown"))
 
     mock_places = MagicMock()
-    mock_places._search_place_by_text.side_effect = fake_search
+    mock_places.search_place_id_by_text.side_effect = fake_id_search
+    mock_places.get_place_by_id.side_effect = fake_get_by_id
 
     # Quota supabase: counts bump calls and returns False starting at the 3rd call
     class _QuotaSupabase:
@@ -525,6 +545,9 @@ def test_list_import_stops_on_daily_cap_mid_stream(client: TestClient):
                     return m
 
                 t.insert.side_effect = _insert
+            elif name == "place_detail_cache":
+                t.select.return_value.eq.return_value.execute.return_value = MagicMock(data=[])
+                t.upsert.return_value.execute.return_value = MagicMock(data=[{}])
             return t
 
     quota_sb = _QuotaSupabase()
@@ -595,9 +618,7 @@ def test_stream_all_duplicates_no_saving_event(client: TestClient):
     ]
 
     mock_places = MagicMock()
-    mock_places._search_place_by_text.return_value = _make_resolution(
-        existing_place_id, "Already There"
-    )
+    mock_places.search_place_id_by_text.return_value = existing_place_id
     _setup_overrides(sb, places_client=mock_places)
 
     with patch("backend.app.services.google_list_import.GoogleListScraper") as MockScraper:

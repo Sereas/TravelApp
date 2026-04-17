@@ -91,11 +91,19 @@ def _make_supabase(trip_id: str, existing_place_ids: list[str] | None = None):
             # select google_place_id
             return type("R", (), {"data": [{"google_place_id": p} for p in existing]})()
 
-    class _EmptyTable:
+    class _CacheTable:
+        """Mock for place_detail_cache (always miss) and place_photos."""
+
         def select(self, *_):
             return self
 
+        def eq(self, *_):
+            return self
+
         def in_(self, *_):
+            return self
+
+        def upsert(self, *_, **__):
             return self
 
         def execute(self):
@@ -105,22 +113,37 @@ def _make_supabase(trip_id: str, existing_place_ids: list[str] | None = None):
         def table(self, name):
             if name == "locations":
                 return _LocTable()
-            return _EmptyTable()
+            return _CacheTable()
 
     return _SB(), inserted_rows
 
 
 def _make_places_client(resolutions: dict[str, _FakeResolved]):
-    """Fake google places client; keyed by place name."""
+    """Fake google places client; keyed by place name.
+
+    Mocks the split 2-call pattern:
+    - search_place_id_by_text → returns place_id (str)
+    - get_place_by_id → returns _FakeResolved
+    """
     client = MagicMock()
 
-    def _text_search(name, **kwargs):
-        if name in resolutions:
-            return resolutions[name]
+    # name → place_id mapping
+    _by_name = {name: r.place_id for name, r in resolutions.items()}
+    _by_id = {r.place_id: r for r in resolutions.values()}
+
+    def _id_search(name, **kwargs):
+        if name in _by_name:
+            return _by_name[name]
         raise ValueError(f"No mock for {name}")
 
-    client._search_place_by_text.side_effect = _text_search
-    client._search_place_nearby.side_effect = lambda lat, lng: None
+    def _get_by_id(place_id, **kwargs):
+        if place_id in _by_id:
+            return _by_id[place_id]
+        raise ValueError(f"No mock for place_id {place_id}")
+
+    client.search_place_id_by_text.side_effect = _id_search
+    client.search_place_id_nearby.side_effect = lambda lat, lng: None
+    client.get_place_by_id.side_effect = _get_by_id
     client._is_coordinate_style_place_slug = lambda n: False
 
     return client

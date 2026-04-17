@@ -517,17 +517,15 @@ class GooglePlacesClient:
             first_photo_resource=first_photo,
         )
 
-    def _search_place_nearby(self, latitude: float, longitude: float) -> PlaceResolution:
-        """Resolve a map pin using Nearby Search (no text query).
+    # ------------------------------------------------------------------
+    # ID-only search methods (FREE SKU) — return just the place_id
+    # ------------------------------------------------------------------
 
-        Cost-optimized 2-call pattern:
-          1. ``places:searchNearby`` with ``field_mask="places.id"`` → billed at
-             the *Nearby Search Essentials (IDs Only)* SKU (**FREE**, unlimited).
-          2. Delegate to :meth:`get_place_by_id` → billed at *Place Details Pro*
-             ($17/1k) for the actual fields we need.
+    def search_place_id_nearby(self, latitude: float, longitude: float) -> str:
+        """Nearby Search (IDs Only) — FREE, unlimited.
 
-        Net cost per resolve: ~$17/1k, vs ~$35/1k for a single Enterprise-tier
-        Nearby Search call with a rich field mask.
+        Returns just the ``place_id`` string without calling Place Details.
+        Callers can check a cache before deciding to call :meth:`get_place_by_id`.
         """
         field_mask = "places.id"
         headers = {
@@ -563,27 +561,21 @@ class GooglePlacesClient:
                 place_id = str(places[0].get("id") or "")
                 if not place_id:
                     raise RuntimeError("Places nearby search returned a result without a place_id")
-                return self.get_place_by_id(place_id)
+                return place_id
         raise RuntimeError("Places nearby search returned no candidates near coordinates")
 
-    def _search_place_by_text(
+    def search_place_id_by_text(
         self,
         text_query: str,
         *,
         latitude: float | None = None,
         longitude: float | None = None,
         radius_m: float | None = None,
-    ) -> PlaceResolution:
-        """Search by text using places:searchText, optionally with locationBias.
+    ) -> str:
+        """Text Search (IDs Only) — FREE, unlimited.
 
-        Cost-optimized 2-call pattern (per Google's "Cost optimization"
-        guidance):
-          1. ``places:searchText`` with ``field_mask="places.id"`` → billed at
-             the *Text Search Essentials (IDs Only)* SKU (**FREE**, unlimited).
-             This replaces the old single-call approach that requested rich
-             fields and was billed at the Enterprise tier (~$35/1k).
-          2. Delegate to :meth:`get_place_by_id` → billed at *Place Details Pro*
-             ($17/1k) for the actual fields we need.
+        Returns just the ``place_id`` string without calling Place Details.
+        Callers can check a cache before deciding to call :meth:`get_place_by_id`.
         """
         field_mask = "places.id"
         headers = {
@@ -625,4 +617,97 @@ class GooglePlacesClient:
         place_id = str(places[0].get("id") or "")
         if not place_id:
             raise RuntimeError("Places search returned a result without a place_id")
+        return place_id
+
+    # ------------------------------------------------------------------
+    # Bundled search methods (FREE search + paid Details in one call)
+    # ------------------------------------------------------------------
+
+    def _search_place_nearby(self, latitude: float, longitude: float) -> PlaceResolution:
+        """Nearby Search → Place Details Pro. Net ~$17/1k."""
+        place_id = self.search_place_id_nearby(latitude, longitude)
         return self.get_place_by_id(place_id)
+
+    def _search_place_by_text(
+        self,
+        text_query: str,
+        *,
+        latitude: float | None = None,
+        longitude: float | None = None,
+        radius_m: float | None = None,
+    ) -> PlaceResolution:
+        """Text Search → Place Details Pro. Net ~$17/1k."""
+        place_id = self.search_place_id_by_text(
+            text_query, latitude=latitude, longitude=longitude, radius_m=radius_m
+        )
+        return self.get_place_by_id(place_id)
+
+    # ------------------------------------------------------------------
+    # Link resolution — ID-only variant for cache intercept
+    # ------------------------------------------------------------------
+
+    def resolve_place_id_from_link(self, google_link: str) -> str:
+        """Resolve a Google Maps URL to a ``place_id`` (FREE, no Place Details call).
+
+        Same logic as :meth:`resolve_from_link` — redirects, URL parsing,
+        free text/nearby search — but returns just the ``place_id`` string
+        so the caller can check a cache before the paid Details call.
+        """
+        start = time.perf_counter()
+        logger.info(
+            "places_resolve_id_start",
+            link_host=urlparse(google_link).netloc,
+        )
+
+        # Fast path: URL contains an explicit place_id
+        pid = self._extract_place_id_from_url(google_link)
+        if pid:
+            if not _PLACE_ID_RE.match(pid):
+                raise ValueError(f"Invalid place_id format: {pid!r}")
+            logger.info("places_resolve_id_ok", place_id=pid, method="url_extract")
+            return pid
+
+        long_url = self._follow_redirects_if_needed(google_link)
+
+        pid = self._extract_place_id_from_url(long_url)
+        if pid:
+            if not _PLACE_ID_RE.match(pid):
+                raise ValueError(f"Invalid place_id format: {pid!r}")
+            logger.info("places_resolve_id_ok", place_id=pid, method="url_extract_after_redirect")
+            return pid
+
+        name, lat, lng = self._extract_name_and_location_from_url(long_url)
+        if name and self._is_coordinate_style_place_slug(name):
+            name = None
+        logger.info(
+            "places_resolve_branch",
+            has_name=name is not None,
+            has_coords=(lat is not None and lng is not None),
+        )
+        try:
+            if name and lat is not None and lng is not None:
+                pid = self.search_place_id_by_text(
+                    name, latitude=lat, longitude=lng, radius_m=500.0
+                )
+            elif name:
+                pid = self.search_place_id_by_text(name)
+            elif lat is not None and lng is not None:
+                pid = self.search_place_id_nearby(lat, lng)
+            else:
+                pid = self.search_place_id_by_text(self._truncate_text_query(long_url))
+        except Exception:
+            duration_ms = round((time.perf_counter() - start) * 1000, 1)
+            logger.warning(
+                "places_resolve_id_failed",
+                duration_ms=duration_ms,
+                error_category="external_api",
+                exc_info=True,
+            )
+            raise
+        duration_ms = round((time.perf_counter() - start) * 1000, 1)
+        logger.info(
+            "places_resolve_id_ok",
+            duration_ms=duration_ms,
+            place_id=pid,
+        )
+        return pid
