@@ -170,7 +170,9 @@ export function TripView({
   const [groupBy, setGroupBy] = useState<"city" | "category" | "person" | null>(
     null
   );
-  const [locationNameSearch, setLocationNameSearch] = useState("");
+  const [scheduleFilter, setScheduleFilter] = useState<
+    "all" | "scheduled" | "unscheduled"
+  >("all");
   const [placesMapSheetOpen, setPlacesMapSheetOpen] = useState(false);
 
   const { itinerary, availableDays, itineraryLocationMap } = itineraryState;
@@ -194,7 +196,8 @@ export function TripView({
     return Object.entries(counts).sort(([a], [b]) => a.localeCompare(b));
   }, [locations, cityFilter, personFilter]);
 
-  const filteredLocations = useMemo(() => {
+  // Locations filtered by everything EXCEPT schedule — used for schedule tab counts
+  const filteredByNonSchedule = useMemo(() => {
     let list = locations;
     if (categoryFilter) {
       list = list.filter(
@@ -209,12 +212,24 @@ export function TripView({
         (loc) => (loc.added_by_email || "Unknown") === personFilter
       );
     }
-    if (locationNameSearch.trim()) {
-      const q = locationNameSearch.trim().toLowerCase();
-      list = list.filter((loc) => (loc.name ?? "").toLowerCase().includes(q));
-    }
     return list;
-  }, [locations, categoryFilter, cityFilter, personFilter, locationNameSearch]);
+  }, [locations, categoryFilter, cityFilter, personFilter]);
+
+  const scheduledCount = useMemo(
+    () =>
+      filteredByNonSchedule.filter((loc) => itineraryLocationMap.has(loc.id))
+        .length,
+    [filteredByNonSchedule, itineraryLocationMap]
+  );
+
+  const filteredLocations = useMemo(() => {
+    if (scheduleFilter === "all") return filteredByNonSchedule;
+    return filteredByNonSchedule.filter((loc) =>
+      scheduleFilter === "scheduled"
+        ? itineraryLocationMap.has(loc.id)
+        : !itineraryLocationMap.has(loc.id)
+    );
+  }, [filteredByNonSchedule, scheduleFilter, itineraryLocationMap]);
 
   const groupedLocations = useMemo(() => {
     if (!groupBy) return null;
@@ -405,15 +420,7 @@ export function TripView({
                 />
               )}
 
-              {/* Heading row */}
-              {locations.length > 0 && (
-                <h2 className="mb-3 text-lg font-semibold text-foreground">
-                  {filteredLocations.length}{" "}
-                  {filteredLocations.length === 1 ? "Place" : "Places"}
-                </h2>
-              )}
-
-              {/* Toolbar row */}
+              {/* Filter toolbar (includes schedule tabs as heading) */}
               {locations.length > 0 && (
                 <LocationsFilterToolbar
                   locations={locations}
@@ -422,14 +429,16 @@ export function TripView({
                   cityFilter={cityFilter}
                   personFilter={personFilter}
                   groupBy={groupBy}
-                  locationNameSearch={locationNameSearch}
+                  scheduleFilter={scheduleFilter}
                   onCategoryChange={setCategoryFilter}
                   onCityChange={setCityFilter}
                   onPersonChange={setPersonFilter}
                   onGroupByChange={setGroupBy}
-                  onSearchChange={setLocationNameSearch}
+                  onScheduleFilterChange={setScheduleFilter}
                   onMapOpen={() => setPlacesMapSheetOpen(true)}
                   categoryOptions={categoryOptions}
+                  totalFiltered={filteredByNonSchedule.length}
+                  scheduledCount={scheduledCount}
                 />
               )}
 
@@ -485,7 +494,7 @@ export function TripView({
                   filteredLocations={filteredLocations}
                   groupBy={groupBy}
                   groupedLocations={groupedLocations}
-                  locationNameSearch={locationNameSearch}
+                  scheduleFilter={scheduleFilter}
                   categoryFilter={categoryFilter}
                   cityFilter={cityFilter}
                   personFilter={personFilter}

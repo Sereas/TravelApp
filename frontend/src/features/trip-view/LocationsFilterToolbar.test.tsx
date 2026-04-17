@@ -1,8 +1,8 @@
 /// <reference types="vitest/globals" />
 /**
- * LocationsFilterToolbar — search pill + map button + three filter pills.
+ * LocationsFilterToolbar — schedule tabs + map button + filter pills.
  */
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { sampleLocations } from "./__fixtures__/trip-view.fixtures";
 import type { Location } from "@/lib/api";
@@ -18,53 +18,70 @@ function renderToolbar(
     cityFilter: null,
     personFilter: null,
     groupBy: null,
-    locationNameSearch: "",
+    scheduleFilter: "all",
     onCategoryChange: vi.fn(),
     onCityChange: vi.fn(),
     onPersonChange: vi.fn(),
     onGroupByChange: vi.fn(),
-    onSearchChange: vi.fn(),
+    onScheduleFilterChange: vi.fn(),
     onMapOpen: vi.fn(),
     categoryOptions: [
       ["Temple", 1],
       ["Viewpoint", 1],
       ["Market", 1],
     ],
+    totalFiltered: 3,
+    scheduledCount: 1,
   };
   return render(<LocationsFilterToolbar {...defaults} {...overrides} />);
 }
 
-describe("LocationsFilterToolbar — search pill", () => {
-  it("renders a search button by default (collapsed state)", () => {
+describe("LocationsFilterToolbar — schedule filter", () => {
+  it("renders All, Scheduled, Unscheduled radio buttons", () => {
     renderToolbar();
-    expect(screen.getByRole("button", { name: /search/i })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /all/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("radio", { name: /^scheduled/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("radio", { name: /^unscheduled/i })
+    ).toBeInTheDocument();
   });
 
-  it("search button has touch-target class", () => {
-    renderToolbar();
-    expect(screen.getByRole("button", { name: /search/i }).className).toContain(
-      "touch-target"
+  it("shows correct counts: All=3, Scheduled=1, Unscheduled=2", () => {
+    renderToolbar({ totalFiltered: 3, scheduledCount: 1 });
+    expect(screen.getByRole("radio", { name: /all/i })).toHaveTextContent("3");
+    expect(
+      screen.getByRole("radio", { name: /^scheduled/i })
+    ).toHaveTextContent("1");
+    expect(
+      screen.getByRole("radio", { name: /unscheduled/i })
+    ).toHaveTextContent("2");
+  });
+
+  it("clicking a schedule option calls onScheduleFilterChange", async () => {
+    const onScheduleFilterChange = vi.fn();
+    renderToolbar({ onScheduleFilterChange });
+    await userEvent.click(screen.getByRole("radio", { name: /^scheduled/i }));
+    expect(onScheduleFilterChange).toHaveBeenCalledWith("scheduled");
+  });
+
+  it("active option has aria-checked=true", () => {
+    renderToolbar({ scheduleFilter: "unscheduled" });
+    expect(screen.getByRole("radio", { name: /unscheduled/i })).toHaveAttribute(
+      "aria-checked",
+      "true"
+    );
+    expect(screen.getByRole("radio", { name: /all/i })).toHaveAttribute(
+      "aria-checked",
+      "false"
     );
   });
 
-  it("clicking search button reveals search input", async () => {
+  it("schedule radio buttons have touch-target class", () => {
     renderToolbar();
-    await userEvent.click(screen.getByRole("button", { name: /search/i }));
-    expect(screen.getByRole("searchbox")).toBeInTheDocument();
-  });
-
-  it("typing in search input calls onSearchChange", async () => {
-    const onSearchChange = vi.fn();
-    renderToolbar({ onSearchChange });
-    await userEvent.click(screen.getByRole("button", { name: /search/i }));
-    await userEvent.type(screen.getByRole("searchbox"), "temple");
-    expect(onSearchChange).toHaveBeenCalled();
-  });
-
-  it("shows search in expanded state when locationNameSearch is non-empty", () => {
-    renderToolbar({ locationNameSearch: "temple" });
-    // When there's a search value, the input should be immediately visible
-    expect(screen.getByRole("searchbox")).toBeInTheDocument();
+    const allBtn = screen.getByRole("radio", { name: /all/i });
+    expect(allBtn.className).toContain("touch-target");
   });
 });
 

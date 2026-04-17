@@ -209,12 +209,13 @@ describe("SharedTripPage", () => {
     expect(await screen.findByText("Tokyo Adventure")).toBeInTheDocument();
   });
 
-  it("renders the locations count heading on success", async () => {
+  it("renders the locations count in schedule tab on success", async () => {
     mockGetSharedTrip.mockResolvedValueOnce(sharedTripData);
     render(<SharedTripPage />);
     await screen.findByText("Tokyo Adventure");
-    // Should display "2 places" (or equivalent).
-    expect(screen.getByText(/2\s*place/i)).toBeInTheDocument();
+    // The "All" schedule tab shows the total location count.
+    const allTab = screen.getByRole("radio", { name: /all/i });
+    expect(allTab).toHaveTextContent("2");
   });
 
   it("renders the Itinerary tab without crashing when clicked", async () => {

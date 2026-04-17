@@ -8,7 +8,7 @@ export interface LocationsGridProps {
   filteredLocations: Location[];
   groupBy: "city" | "category" | "person" | null;
   groupedLocations: [string, Location[]][] | null;
-  locationNameSearch: string;
+  scheduleFilter: "all" | "scheduled" | "unscheduled";
   categoryFilter: string | null;
   cityFilter: string | null;
   personFilter: string | null;
@@ -19,14 +19,14 @@ export function LocationsGrid({
   filteredLocations,
   groupBy,
   groupedLocations,
-  locationNameSearch,
+  scheduleFilter,
   categoryFilter,
   cityFilter,
   personFilter,
   renderLocationCard,
 }: LocationsGridProps) {
   const hasActiveFilter =
-    !!locationNameSearch.trim() ||
+    scheduleFilter !== "all" ||
     !!categoryFilter ||
     !!cityFilter ||
     !!personFilter;

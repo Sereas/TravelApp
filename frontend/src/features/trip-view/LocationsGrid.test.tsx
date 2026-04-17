@@ -24,7 +24,7 @@ function renderGrid(
     filteredLocations: sampleLocations,
     groupBy: null,
     groupedLocations: null,
-    locationNameSearch: "",
+    scheduleFilter: "all",
     categoryFilter: null,
     cityFilter: null,
     personFilter: null,
@@ -100,10 +100,10 @@ describe("LocationsGrid — empty/filter states", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders 'no match' message when search produces empty results", () => {
+  it("renders 'no match' message when schedule filter produces empty results", () => {
     renderGrid({
       filteredLocations: [],
-      locationNameSearch: "xyz",
+      scheduleFilter: "scheduled",
     });
     expect(
       screen.getByText(/no locations match the current filters/i)
@@ -116,7 +116,7 @@ describe("LocationsGrid — empty/filter states", () => {
       categoryFilter: null,
       cityFilter: null,
       personFilter: null,
-      locationNameSearch: "",
+      scheduleFilter: "all",
     });
     expect(screen.queryByTestId("location-card")).not.toBeInTheDocument();
     expect(screen.queryByText(/no locations match/i)).not.toBeInTheDocument();

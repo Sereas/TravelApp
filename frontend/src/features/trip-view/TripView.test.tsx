@@ -181,21 +181,11 @@ describe("TripView — edit mode", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders 'N Places' heading with correct count", () => {
+  it("renders schedule tabs with total count", () => {
     renderTripView();
-    // Heading shows the count of locations passed in.
-    expect(
-      screen.getByText(new RegExp(`${sampleLocations.length}\\s*place`, "i"))
-    ).toBeInTheDocument();
-  });
-
-  it("renders filter toolbar: search input", async () => {
-    renderTripView();
-    // Search input is behind an expand-on-click button for compactness.
-    await userEvent.click(screen.getByRole("button", { name: /search/i }));
-    expect(
-      screen.getByRole("searchbox", { name: /search/i })
-    ).toBeInTheDocument();
+    // The "All" schedule tab shows the total location count.
+    const allTab = screen.getByRole("radio", { name: /all/i });
+    expect(allTab).toHaveTextContent(String(sampleLocations.length));
   });
 
   it("renders filter toolbar: city popover trigger", () => {
@@ -377,19 +367,10 @@ describe("TripView — read-only mode (shared view)", () => {
     expect(screen.getByText(/planning/i)).toBeInTheDocument();
   });
 
-  it("still renders the 'N Places' heading", () => {
+  it("still renders schedule tabs with total count", () => {
     renderReadOnly();
-    expect(
-      screen.getByText(new RegExp(`${sampleLocations.length}\\s*place`, "i"))
-    ).toBeInTheDocument();
-  });
-
-  it("still renders the search input (filtering is a read op)", async () => {
-    renderReadOnly();
-    await userEvent.click(screen.getByRole("button", { name: /search/i }));
-    expect(
-      screen.getByRole("searchbox", { name: /search/i })
-    ).toBeInTheDocument();
+    const allTab = screen.getByRole("radio", { name: /all/i });
+    expect(allTab).toHaveTextContent(String(sampleLocations.length));
   });
 
   it("still renders the city filter popover", () => {
@@ -480,26 +461,18 @@ describe("TripView — mode parity (same trip, same locations)", () => {
     expect(editPillText).toEqual(roPillText);
   });
 
-  it("both modes render the same 'N Places' count when locations > 0", () => {
-    const re = new RegExp(`${sampleLocations.length}\\s*place`, "i");
-
+  it("both modes render the same schedule tab counts", () => {
     const { unmount } = renderTripView({ readOnly: false });
-    expect(screen.getByText(re)).toBeInTheDocument();
+    const editAllText = screen
+      .getByRole("radio", { name: /all/i })
+      .textContent?.trim();
     unmount();
 
     renderTripView({ readOnly: true });
-    expect(screen.getByText(re)).toBeInTheDocument();
-  });
-
-  it("both modes render the same filter toolbar search button", () => {
-    const { unmount } = renderTripView({ readOnly: false });
-    const editBtn = screen.getByRole("button", { name: /search/i });
-    const editText = editBtn.textContent?.trim();
-    unmount();
-
-    renderTripView({ readOnly: true });
-    const roBtn = screen.getByRole("button", { name: /search/i });
-    expect(roBtn.textContent?.trim()).toEqual(editText);
+    const roAllText = screen
+      .getByRole("radio", { name: /all/i })
+      .textContent?.trim();
+    expect(roAllText).toEqual(editAllText);
   });
 });
 
@@ -560,12 +533,6 @@ describe("TripView — Phase 2 touch hardening", () => {
   // -------------------------------------------------------------------------
   // Contract 3: Filter pill buttons have touch-target class
   // -------------------------------------------------------------------------
-
-  it("Search filter pill button has touch-target class", () => {
-    renderTripView();
-    const searchBtn = screen.getByRole("button", { name: /search/i });
-    expect(searchBtn.className).toContain("touch-target");
-  });
 
   it("City filter pill button has touch-target class", () => {
     renderTripView();
@@ -716,12 +683,13 @@ describe("TripView — Phase 3 mobile bottom-sheet sidebar", () => {
     expect(mapButtons.length).toBeGreaterThanOrEqual(1);
   });
 
-  it("mobile Map button is in the filter toolbar (sibling of Search/City/Category buttons)", () => {
-    const { container } = renderTripView();
-    // The filter toolbar is the flex-wrap row containing Search, City, Category, Added-by pills.
-    // The Map button should be in the same row.
-    const searchBtn = screen.getByRole("button", { name: /search/i });
-    const toolbar = searchBtn.closest(".flex.flex-wrap");
+  it("mobile Map button is in the filter toolbar (sibling of City/Category buttons)", () => {
+    renderTripView();
+    // The filter toolbar has a flex-wrap row containing City, Category, Added-by pills.
+    // The Map button should be in the same row. Use exact match for "City" to avoid
+    // ambiguity with location address text.
+    const cityBtn = screen.getByRole("button", { name: "City" });
+    const toolbar = cityBtn.closest(".flex.flex-wrap");
     expect(toolbar).not.toBeNull();
     const mapBtn = within(toolbar as HTMLElement)
       .getAllByRole("button", { name: /map/i })

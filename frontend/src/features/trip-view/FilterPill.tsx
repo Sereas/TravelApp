@@ -13,6 +13,8 @@ export interface FilterPillOption {
   value: string;
   label: string;
   count?: number;
+  /** Tailwind bg class for a small indicator dot (e.g. "bg-orange-700"). */
+  colorDot?: string;
 }
 
 export interface FilterPillProps {
@@ -133,9 +135,22 @@ export function FilterPill({
               setOpen(false);
             }}
           >
-            <span className="truncate">{opt.label}</span>
+            <span className="flex items-center gap-2 truncate">
+              {opt.colorDot && (
+                <span
+                  className={cn(
+                    "inline-block h-2.5 w-2.5 shrink-0 rounded-full",
+                    opt.colorDot
+                  )}
+                  aria-hidden
+                />
+              )}
+              {opt.label}
+            </span>
             {opt.count != null && (
-              <span className="text-xs text-muted-foreground">{opt.count}</span>
+              <span className="ml-2 text-xs tabular-nums text-muted-foreground">
+                {opt.count}
+              </span>
             )}
           </button>
         ))}

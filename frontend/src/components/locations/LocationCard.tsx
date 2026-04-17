@@ -118,11 +118,7 @@ function CopyButton({ text, label }: { text: string; label: string }) {
       className="shrink-0 rounded p-0.5 text-muted-foreground/70 transition-colors hover:text-foreground"
       aria-label={copied ? "Copied!" : `Copy ${label}`}
     >
-      {copied ? (
-        <Check size={11} className="text-brand" />
-      ) : (
-        <Copy size={11} />
-      )}
+      {copied ? <Check size={11} className="text-brand" /> : <Copy size={11} />}
     </button>
   );
 }
@@ -425,9 +421,7 @@ function InlineEditableField({
       <span className="min-w-0 break-words">{value}</span>
       {(copyable || canEdit) && (
         <span className="ml-auto flex shrink-0 items-center gap-1 mt-[1px] opacity-0 transition-opacity hover-none:opacity-100 group-hover/field:opacity-100">
-          {copyable && value && (
-            <CopyButton text={value} label={label} />
-          )}
+          {copyable && value && <CopyButton text={value} label={label} />}
           {canEdit && <Pencil size={11} className="shrink-0 opacity-60" />}
         </span>
       )}
@@ -589,7 +583,10 @@ export function LocationCard({
                     className="opacity-20"
                   />
                 ) : (
-                  <MapPin size={40} className="text-muted-foreground opacity-20" />
+                  <MapPin
+                    size={40}
+                    className="text-muted-foreground opacity-20"
+                  />
                 )}
               </div>
             )}
@@ -972,10 +969,7 @@ export function LocationCard({
                       ? (e) => {
                           if (e.key === "Enter" || e.key === " ") {
                             e.preventDefault();
-                            editState.startEdit(
-                              "working_hours",
-                              eWorkingHours
-                            );
+                            editState.startEdit("working_hours", eWorkingHours);
                           }
                         }
                       : undefined
