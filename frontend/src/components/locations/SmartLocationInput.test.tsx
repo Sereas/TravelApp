@@ -675,10 +675,11 @@ describe("SmartLocationInput — typeahead behaviour (Red phase)", () => {
 
   // --- Name-substring fallback for legacy locations ---
 
-  it("shows an 'On list' pill for a legacy location matched by name substring when google_place_id is null", async () => {
+  it("shows an 'On list' pill for a location matched by exact name when place_id differs", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
     // Override autocomplete to return "Louvre Museum" as a suggestion
+    // with a different place_id than the existing location.
     mockAutocomplete.mockResolvedValue({
       suggestions: [
         {
@@ -701,7 +702,6 @@ describe("SmartLocationInput — typeahead behaviour (Red phase)", () => {
     );
 
     const input = screen.getByRole("combobox");
-    // Type "Lou" — matches the legacy location "Louvre Palace" by name
     await user.type(input, "Lou");
 
     await act(async () => {
@@ -712,12 +712,54 @@ describe("SmartLocationInput — typeahead behaviour (Red phase)", () => {
       expect(screen.getByRole("listbox")).toBeInTheDocument();
     });
 
-    // The suggestion "Louvre Museum" has google_place_id "ChIJ_louvre_google" which
-    // does NOT match EXISTING_LOCATIONS[0]'s place_id "ChIJ_louvre", but the name
-    // "Louvre Museum" should match the existing location[0]'s name "Louvre Museum"
-    // by case-insensitive substring. The "On list" pill must still appear.
+    // The suggestion "Louvre Museum" has place_id "ChIJ_louvre_google" which
+    // does NOT match EXISTING_LOCATIONS[0]'s place_id "ChIJ_louvre", but the
+    // exact name "Louvre Museum" matches — the "On list" pill must appear.
+    // (Substring matching was removed to prevent false positives like
+    // "Eiffel Tower" matching "Eiffel Tower Bahria Town Lahore".)
     await waitFor(() => {
       expect(screen.getByText(/on list/i)).toBeInTheDocument();
     });
+  });
+
+  it("does NOT show 'On list' for a suggestion whose name only partially matches an existing location", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    // "Eiffel Tower Bahria Town Lahore" is a different place than "Eiffel Tower"
+    mockAutocomplete.mockResolvedValue({
+      suggestions: [
+        {
+          place_id: "ChIJ_lahore_eiffel",
+          main_text: "Eiffel Tower Bahria Town Lahore",
+          secondary_text: "Lahore, Pakistan",
+          types: ["tourist_attraction"],
+        },
+      ],
+    });
+
+    render(
+      <SmartLocationInput
+        tripId={tripId}
+        onSubmit={onSubmit}
+        onImported={onImported}
+        existingLocations={EXISTING_LOCATIONS}
+        onPickExisting={onPickExisting}
+      />
+    );
+
+    await user.type(screen.getByRole("combobox"), "Eiff");
+
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("listbox")).toBeInTheDocument();
+    });
+
+    // The existing location "Eiffel Tower" must NOT match "Eiffel Tower
+    // Bahria Town Lahore" — substring matching was the root cause of this
+    // false positive.
+    expect(screen.queryByText(/on list/i)).not.toBeInTheDocument();
   });
 });

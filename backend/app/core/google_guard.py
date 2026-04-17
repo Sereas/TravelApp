@@ -89,13 +89,13 @@ def ensure_google_allowed(settings, endpoint: str) -> None:
         )
 
 
-async def bump_google_quota(
+def bump_google_quota_sync(
     supabase,
     user_id: UUID | str,
     endpoint: str,
     daily_cap: int,
 ) -> None:
-    """Increment the per-user daily counter; raise 429 if over cap.
+    """Synchronous quota check — suitable for ``asyncio.to_thread``.
 
     The ``bump_google_usage`` RPC performs an atomic upsert + increment and
     returns ``TRUE`` if the new count is within ``p_daily_cap``, ``FALSE``
@@ -131,3 +131,18 @@ async def bump_google_quota(
                 f"(limit {daily_cap}/day). Try again after midnight UTC."
             ),
         )
+
+
+async def bump_google_quota(
+    supabase,
+    user_id: UUID | str,
+    endpoint: str,
+    daily_cap: int,
+) -> None:
+    """Async wrapper around :func:`bump_google_quota_sync`.
+
+    All existing callers ``await`` this function. The autocomplete endpoint
+    uses the sync variant directly via ``asyncio.to_thread`` for parallel
+    execution with the Places API call.
+    """
+    bump_google_quota_sync(supabase, user_id, endpoint, daily_cap)

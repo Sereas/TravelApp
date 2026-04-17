@@ -12,6 +12,7 @@ All three funnel through the shared kill-switch + daily-quota guard in
 ``backend.app.core.google_guard`` so cost exposure is centrally capped.
 """
 
+import asyncio
 import re as _re
 import time
 from uuid import UUID
@@ -22,7 +23,11 @@ from pydantic import BaseModel
 
 from backend.app.clients.google_places import GooglePlacesClient, PlaceResolution
 from backend.app.core.config import get_settings
-from backend.app.core.google_guard import bump_google_quota, ensure_google_allowed
+from backend.app.core.google_guard import (
+    bump_google_quota,
+    bump_google_quota_sync,
+    ensure_google_allowed,
+)
 from backend.app.core.rate_limit import limiter
 from backend.app.db.supabase import get_supabase_client
 from backend.app.dependencies import get_current_user_id, get_google_places_client
@@ -101,21 +106,28 @@ _POSTCODE_PREFIX_RE = _re.compile(r"^\d{3,}\s")
 def _extract_city(address: str | None) -> str | None:
     """Extract city name from a Google formatted address, stripping postcodes.
 
-    Handles three shapes of 2-part addresses:
+    Handles four shapes of addresses:
 
+    - ``"<street>, <postcode> <city>, <country>"`` — postcode inline, e.g.
+      ``"10 Rue X, 75001 Paris, France"`` → "Paris".
+    - ``"<street>, <city>, <postcode>, <country>"`` — postcode as separate
+      segment, e.g. ``"Main Blvd, Lahore, 54000, Pakistan"`` → "Lahore".
     - ``"<postcode> <town>, <country>"`` — postcode in parts[0], e.g.
-      ``"37150 Chenonceaux, France"`` → "Chenonceaux". (Small towns where
-      Google elides the street segment.)
-    - ``"<street>, <postcode> <city>"`` — postcode in parts[-1], e.g.
-      ``"Pl. du Casino, 98000 Monaco"`` → "Monaco". (City-states with street.)
+      ``"37150 Chenonceaux, France"`` → "Chenonceaux".
     - ``"<venue>, <city-state>"`` — no postcode at all, e.g.
-      ``"Victoria Peak, Hong Kong"`` → "Hong Kong". (Fallback.)
+      ``"Victoria Peak, Hong Kong"`` → "Hong Kong".
     """
     if not address:
         return None
     parts = [p.strip() for p in address.split(",")]
     if len(parts) >= 3:
         city_part = parts[-2]
+        city = _re.sub(r"^\d[\d\s-]*\s*", "", city_part).strip()
+        # If parts[-2] was a standalone postcode (e.g. "54000" in South
+        # Asian / Middle Eastern addresses), fall back to parts[-3].
+        if not city and len(parts) >= 4:
+            city = parts[-3].strip()
+        return city or None
     elif len(parts) == 2:
         # If parts[0] carries the postcode, the city is in the first segment
         # ("37150 Chenonceaux, France"). Otherwise fall back to parts[-1]
@@ -125,9 +137,9 @@ def _extract_city(address: str | None) -> str | None:
         # expected to be short-circuited earlier by ``_resolve_city`` via
         # Google's locality types.
         city_part = parts[0] if _POSTCODE_PREFIX_RE.match(parts[0]) else parts[-1]
+        return _re.sub(r"^\d[\d\s-]*\s*", "", city_part).strip() or None
     else:
         return None
-    return _re.sub(r"^\d[\d\s-]*\s*", "", city_part).strip() or None
 
 
 def _resolve_city(resolved: PlaceResolution) -> str | None:
@@ -247,12 +259,6 @@ async def autocomplete_locations(
     """
     settings = get_settings()
     ensure_google_allowed(settings, "autocomplete")
-    await bump_google_quota(
-        supabase,
-        user_id,
-        "autocomplete",
-        settings.google_daily_cap_autocomplete,
-    )
 
     location_bias_tuple: tuple[float, float, float] | None = None
     if body.location_bias:
@@ -262,30 +268,50 @@ async def autocomplete_locations(
             body.location_bias.radius_m,
         )
 
+    # Run quota check and Places API call concurrently to shave ~150-200ms
+    # off every typeahead response. Uses return_exceptions=True so that a
+    # 429 from the quota thread doesn't leave the Places thread's exception
+    # as an unraisable warning in the thread pool.
     start = time.perf_counter()
-    try:
-        raw_suggestions = places_client.autocomplete(
+    quota_result, places_result = await asyncio.gather(
+        asyncio.to_thread(
+            bump_google_quota_sync,
+            supabase,
+            user_id,
+            "autocomplete",
+            settings.google_daily_cap_autocomplete,
+        ),
+        asyncio.to_thread(
+            places_client.autocomplete,
             body.input,
             session_token=body.session_token,
             language=body.language,
             region=body.region,
             location_bias=location_bias_tuple,
-        )
-    except Exception as exc:
+        ),
+        return_exceptions=True,
+    )
+    # Quota failure takes priority (429); Places failure is a 400.
+    if isinstance(quota_result, HTTPException):
+        raise quota_result
+    if isinstance(quota_result, BaseException):
+        raise quota_result
+    if isinstance(places_result, BaseException):
         logger.warning(
             "places_autocomplete_failed",
-            error=str(exc),
+            error=str(places_result),
             error_category="external_api",
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Autocomplete request failed",
-        ) from exc
+        ) from places_result
+    raw_suggestions = places_result
     duration_ms = round((time.perf_counter() - start) * 1000, 1)
 
     logger.info(
         "places_autocomplete_done",
-        session_prefix=body.session_token[:8],
+        had_session_token=True,
         duration_ms=duration_ms,
         results=len(raw_suggestions),
         query_length=len(body.input),

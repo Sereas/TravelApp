@@ -40,9 +40,10 @@ function looksLikeGoogleMapsUrl(text: string): boolean {
  * Build the suggestion list shown under the input. The list contains only
  * Google suggestions; the "On list" pill is added when a Google suggestion
  * already has a saved equivalent in the trip. We match on `place_id`
- * (preferred, O(1) hash lookup) and fall back to a case-insensitive name
- * substring match so legacy locations without a `google_place_id` still
- * show the pill.
+ * (preferred, O(1) hash lookup) and fall back to exact case-insensitive
+ * name equality so legacy locations without a `google_place_id` still
+ * show the pill. Substring matching was removed to prevent false positives
+ * (e.g. "Eiffel Tower" matching "Eiffel Tower Bahria Town Lahore").
  */
 function buildSuggestionItems(
   googleSuggestions: {
@@ -62,24 +63,16 @@ function buildSuggestionItems(
     // Primary match: exact place_id (cheap, definitive).
     let matchedLocationId: string | null = byPlaceId.get(s.place_id) ?? null;
 
-    // Fallback: case-insensitive name-substring match against ALL existing
-    // locations. Catches two realistic cases:
-    //   (a) Legacy locations added before the Places integration which
-    //       have `google_place_id = null`.
-    //   (b) Manually entered / URL-pasted locations whose persisted
-    //       place_id differs from what Autocomplete now returns for the
-    //       same place (Google occasionally returns multiple place_ids
-    //       for the same venue).
+    // Fallback: exact case-insensitive name match against existing
+    // locations. Catches legacy locations added before the Places
+    // integration which have `google_place_id = null`. Only exact
+    // equality — substring matching caused false positives (e.g.
+    // "Eiffel Tower" matching "Eiffel Tower Bahria Town Lahore").
     if (matchedLocationId === null && s.main_text) {
       const suggestionLower = s.main_text.toLowerCase();
       const fallback = existingLocations.find((loc) => {
         const name = (loc.name ?? "").toLowerCase();
-        if (!name) return false;
-        return (
-          name === suggestionLower ||
-          suggestionLower.includes(name) ||
-          name.includes(suggestionLower)
-        );
+        return name !== "" && name === suggestionLower;
       });
       if (fallback) matchedLocationId = fallback.id;
     }

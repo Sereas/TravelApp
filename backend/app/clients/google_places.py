@@ -262,7 +262,7 @@ class GooglePlacesClient:
             if not pred:
                 continue
             place_id = str(pred.get("placeId") or "").strip()
-            if not place_id:
+            if not place_id or not _PLACE_ID_RE.match(place_id):
                 continue
             structured = pred.get("structuredFormat") or {}
             main_text = str(((structured.get("mainText") or {}).get("text")) or "").strip()

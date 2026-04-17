@@ -557,7 +557,12 @@ _LANGUAGE_REGION_PATTERN = r"^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$"
 class AutocompleteRequest(BaseModel):
     """Request body for POST /locations/google/autocomplete."""
 
-    input: str = Field(..., min_length=1, max_length=100)
+    input: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        pattern=r"^[^\x00-\x08\x0b\x0c\x0e-\x1f]*$",
+    )
     session_token: str = Field(
         ...,
         min_length=16,
@@ -572,9 +577,9 @@ class AutocompleteRequest(BaseModel):
 class AutocompleteSuggestionDTO(BaseModel):
     """One suggestion row rendered in the typeahead dropdown."""
 
-    place_id: str
-    main_text: str
-    secondary_text: str | None = None
+    place_id: str = Field(..., min_length=1, max_length=512)
+    main_text: str = Field(..., min_length=1, max_length=512)
+    secondary_text: str | None = Field(None, max_length=512)
     types: list[str] = Field(default_factory=list)
 
 

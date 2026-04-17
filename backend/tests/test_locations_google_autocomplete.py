@@ -6,9 +6,6 @@ Pattern mirrors test_locations_google_preview.py:
 - app.dependency_overrides.clear() in every finally block
 - _DummySupabase for DB isolation
 - monkeypatch settings for kill-switch tests
-
-These tests are in the RED phase: the endpoints do not exist yet.
-Every test is expected to FAIL until the implementation lands.
 """
 
 from __future__ import annotations

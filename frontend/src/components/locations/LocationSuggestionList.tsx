@@ -125,7 +125,7 @@ export function LocationSuggestionList({
             </div>
             {onList && (
               <span
-                className="ml-auto inline-flex shrink-0 items-center rounded-full bg-teal-500 px-2 py-0.5 text-xs font-medium text-white"
+                className="ml-auto inline-flex shrink-0 items-center rounded-full bg-brand-muted px-2 py-0.5 text-xs font-medium text-brand-strong"
                 aria-label="Already on this trip"
               >
                 On list

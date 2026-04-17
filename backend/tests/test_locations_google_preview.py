@@ -111,6 +111,22 @@ def test_extract_city_2part_postcode_prefix():
     assert _extract_city("Victoria Peak, Hong Kong") == "Hong Kong"
 
 
+def test_extract_city_standalone_postcode_segment():
+    """Postcode as a separate comma segment (South Asian, Middle Eastern)."""
+    from backend.app.routers.locations_google import _extract_city
+
+    # Pakistan: "..., Lahore, 54000, Pakistan"
+    assert (
+        _extract_city("Bahria Town Main Blvd, Violet Block Bahria Town, Lahore, 54000, Pakistan")
+        == "Lahore"
+    )
+    # India: "..., Mumbai, 400001, India"
+    assert _extract_city("Gateway of India, Colaba, Mumbai, 400001, India") == "Mumbai"
+    # Standard 3-part format still works
+    assert _extract_city("10 Rue X, 75001 Paris, France") == "Paris"
+    assert _extract_city("Av. Gustave Eiffel, 75007 Paris, France") == "Paris"
+
+
 class _DummySupabase:
     def table(self, name):  # pragma: no cover - preview does not touch DB
         raise AssertionError(f"Preview should not access table {name}")

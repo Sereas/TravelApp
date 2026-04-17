@@ -4,9 +4,6 @@ Tests the two public functions:
 - ensure_google_allowed(settings, endpoint) — kill-switch checks
 - async bump_google_quota(supabase, user_id, endpoint, daily_cap) — per-user quota
 
-These tests are in the RED phase: google_guard.py does not exist yet.
-Every test is expected to FAIL until the implementation lands.
-
 Async tests use pytest-asyncio (same as test_route_calculation_concurrency.py).
 """
 
