@@ -476,6 +476,7 @@ export function LocationCard({
 
   return (
     <div
+      id={`loc-card-${id}`}
       data-location-id={id}
       className={cn(
         "card-flip-container group h-full",

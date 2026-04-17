@@ -19,6 +19,8 @@ from fastapi import (
 from starlette.responses import StreamingResponse
 
 from backend.app.clients.google_places import GooglePlacesClient
+from backend.app.core.config import get_settings
+from backend.app.core.google_guard import bump_google_quota, ensure_google_allowed
 from backend.app.core.rate_limit import limiter
 from backend.app.db.supabase import get_supabase_client
 from backend.app.dependencies import (
@@ -507,8 +509,18 @@ async def import_google_list_stream(
     frontend to show a real-time progress bar. Delegates all import logic
     to google_list_import service — this function only handles SSE formatting
     and pre-stream HTTP error checks.
+
+    Cost controls:
+    * Kill switch (``GOOGLE_APIS_DISABLED`` or ``GOOGLE_LIST_IMPORT_DISABLED``)
+      is checked BEFORE the stream starts → HTTP 503.
+    * Per-resolved-place daily quota is checked inside the SSE loop via
+      ``bump_google_quota``. When the cap is hit mid-stream the handler
+      emits an ``error`` SSE event and closes the stream. This is the
+      biggest cost surface in the codebase (Place Details Pro per place).
     """
     # Pre-stream checks (return proper HTTP errors, not SSE events)
+    settings = get_settings()
+    ensure_google_allowed(settings, "list_import")
     _ensure_resource_chain(supabase, trip_id, user_id)
 
     if places_client is None:
@@ -542,6 +554,33 @@ async def import_google_list_stream(
                 if isinstance(event, _ScrapingDone):
                     total_items = event.total_items
                 elif isinstance(event, _EnrichingItem):
+                    # Every EnrichingItem represents one billable Places
+                    # call the service already made. Bump the counter
+                    # atomically; if the cap is hit, yield an error and
+                    # close — preventing subsequent places from being
+                    # processed.
+                    try:
+                        await bump_google_quota(
+                            supabase,
+                            user_id,
+                            "list_import",
+                            settings.google_daily_cap_list_import,
+                        )
+                    except HTTPException as quota_exc:
+                        if quota_exc.status_code == status.HTTP_429_TOO_MANY_REQUESTS:
+                            logger.warning(
+                                "list_import_quota_exceeded",
+                                trip_id=str(trip_id),
+                                user_id=str(user_id),
+                            )
+                            yield _sse_event(
+                                {
+                                    "event": "error",
+                                    "message": str(quota_exc.detail),
+                                }
+                            )
+                            return
+                        raise
                     if event.status == "existing":
                         existing_count += 1
                         existing_items.append(

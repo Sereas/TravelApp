@@ -54,12 +54,37 @@ const iconClass = "shrink-0 text-primary/50";
 
 /* ── Component ───────────────────────────────────────────────── */
 
+/**
+ * Response shape shared by `api.google.previewLocationFromLink` and
+ * `api.google.resolvePlace`. Keeping this as an exported type lets
+ * `SmartLocationInput` pass a typeahead-resolved payload directly into
+ * `initialPrefill` below without a second `/preview` fetch.
+ */
+export interface LocationPreviewPayload {
+  name: string;
+  address: string | null;
+  city?: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  google_place_id: string;
+  suggested_category: string | null;
+  photo_resource_name: string | null;
+}
+
 interface AddLocationFormProps {
   tripId: string;
   existingLocations: Location[];
   availableDays?: DayChoice[];
   initialGoogleLink?: string;
   initialName?: string;
+  /**
+   * When provided, the form uses this payload to prefill itself directly
+   * and skips the `api.google.previewLocationFromLink` fetch entirely.
+   * Supplied by the typeahead flow after `api.google.resolvePlace` — this
+   * is what prevents a duplicate Place Details Pro call (~$17/1k saved per
+   * typeahead pick).
+   */
+  initialPrefill?: LocationPreviewPayload;
   /** When true, show only a link input first; reveal full form after preview. */
   linkEntryMode?: boolean;
   onAdded: (location: Location, scheduleDayId?: string | null) => void;
@@ -72,35 +97,57 @@ export function AddLocationForm({
   availableDays,
   initialGoogleLink,
   initialName,
+  initialPrefill,
   linkEntryMode,
   onAdded,
   onCancel,
 }: AddLocationFormProps) {
-  const [name, setName] = useState(initialName ?? "");
-  const [address, setAddress] = useState("");
-  const [googleLink, setGoogleLink] = useState(initialGoogleLink ?? "");
+  const [name, setName] = useState(initialPrefill?.name ?? initialName ?? "");
+  const [address, setAddress] = useState(initialPrefill?.address ?? "");
+  const [googleLink, setGoogleLink] = useState(
+    initialPrefill?.google_place_id
+      ? `https://www.google.com/maps/place/?q=place_id:${initialPrefill.google_place_id}`
+      : (initialGoogleLink ?? "")
+  );
   const [note, setNote] = useState("");
-  const [city, setCity] = useState("");
+  const [city, setCity] = useState(initialPrefill?.city ?? "");
   const [workingHours, setWorkingHours] = useState("");
   const [requiresBooking, setRequiresBooking] = useState("no");
-  const [category, setCategory] = useState("Other");
+  const [category, setCategory] = useState(
+    initialPrefill?.suggested_category ?? "Other"
+  );
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewed, setPreviewed] = useState(false);
+  // When we have a prefill payload, treat the form as already previewed —
+  // the data was resolved server-side via /resolve.
+  const [previewed, setPreviewed] = useState(Boolean(initialPrefill));
 
-  const [googlePlaceId, setGooglePlaceId] = useState<string | null>(null);
-  const [photoResourceName, setPhotoResourceName] = useState<string | null>(
-    null
+  const [googlePlaceId, setGooglePlaceId] = useState<string | null>(
+    initialPrefill?.google_place_id ?? null
   );
-  const [previewLat, setPreviewLat] = useState<number | null>(null);
-  const [previewLng, setPreviewLng] = useState<number | null>(null);
-  const [duplicateName, setDuplicateName] = useState<string | null>(null);
+  const [photoResourceName, setPhotoResourceName] = useState<string | null>(
+    initialPrefill?.photo_resource_name ?? null
+  );
+  const [previewLat, setPreviewLat] = useState<number | null>(
+    initialPrefill?.latitude ?? null
+  );
+  const [previewLng, setPreviewLng] = useState<number | null>(
+    initialPrefill?.longitude ?? null
+  );
+  const [duplicateName, setDuplicateName] = useState<string | null>(() => {
+    if (!initialPrefill) return null;
+    const existing = existingLocations.find(
+      (loc) => loc.google_place_id === initialPrefill.google_place_id
+    );
+    return existing?.name ?? null;
+  });
   const [scheduleDayId, setScheduleDayId] = useState("");
 
-  // Link-entry phase: when linkEntryMode, start in "link" phase until preview completes
+  // Link-entry phase: when linkEntryMode, start in "link" phase until preview completes.
+  // When initialPrefill is supplied we're already past the link phase.
   const [linkPhase, setLinkPhase] = useState<"link" | "form">(
-    linkEntryMode && !initialGoogleLink ? "link" : "form"
+    linkEntryMode && !initialGoogleLink && !initialPrefill ? "link" : "form"
   );
   const [linkInput, setLinkInput] = useState("");
 
@@ -170,10 +217,14 @@ export function AddLocationForm({
   }
 
   useEffect(() => {
+    // Skip the preview fetch when we already have a typeahead-resolved
+    // payload — that would be a second Place Details Pro call for the
+    // same place_id.
+    if (initialPrefill) return;
     if (initialGoogleLink) {
       void triggerPreview(initialGoogleLink);
     }
-    // Run once on mount — initialGoogleLink is a string prop that doesn't change.
+    // Run once on mount — initialGoogleLink / initialPrefill are stable props.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

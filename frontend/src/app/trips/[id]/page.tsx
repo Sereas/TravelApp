@@ -298,6 +298,27 @@ export default function TripDetailPage() {
     );
   }
 
+  function handleGoogleSuggestionResolved(
+    prefill: Parameters<typeof setAddingLocation>[0] extends infer _
+      ? Extract<
+          AddingLocationMode,
+          { mode: "prefilled-from-typeahead" }
+        >["prefill"]
+      : never
+  ) {
+    // The typeahead hook has already called /resolve; reuse the resolved
+    // payload directly to open the form without a second Places call.
+    setAddingLocation({ mode: "prefilled-from-typeahead", prefill });
+  }
+
+  function handlePickExistingLocation(locationId: string) {
+    // Scroll the existing LocationCard into view and highlight it. No
+    // Google call is made because the place is already saved.
+    const el = document.getElementById(`loc-card-${locationId}`);
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setFocusedLocation({ id: locationId, seq: focusSeqRef.current++ });
+  }
+
   function handleLocationAdded(
     location: Location,
     scheduleDayId?: string | null
@@ -424,6 +445,8 @@ export default function TripDetailPage() {
         onDateRangeSave={handleDateRangeSave}
         onShareClick={() => setShareDialogOpen(true)}
         onSmartInputSubmit={handleSmartInputSubmit}
+        onGoogleSuggestionResolved={handleGoogleSuggestionResolved}
+        onPickExistingLocation={handlePickExistingLocation}
         onStartAddingLocation={setAddingLocation}
         onCancelAddingLocation={() => setAddingLocation(null)}
         onLocationAdded={handleLocationAdded}

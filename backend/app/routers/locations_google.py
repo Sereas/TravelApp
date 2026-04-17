@@ -1,11 +1,20 @@
-"""Google-powered location helpers (preview, later autocomplete).
+"""Google-powered location helpers: preview, autocomplete, resolve.
 
-These endpoints never write to the database. They are used by the UI to
-resolve a Google Maps link (and later free-text queries) into normalized
-location data that can be passed to the existing trip locations endpoints.
+Three endpoints, all read-only against Supabase (quota bump only) and
+pass-through to the Places API (New):
+
+* ``/preview`` — URL-paste flow (unchanged legacy behaviour).
+* ``/autocomplete`` — typeahead suggestions (Autocomplete (New) SKU, FREE
+  when session completes, $2.83/1000 if abandoned).
+* ``/resolve`` — on-pick resolution (Place Details (New) Pro, $17/1000).
+
+All three funnel through the shared kill-switch + daily-quota guard in
+``backend.app.core.google_guard`` so cost exposure is centrally capped.
 """
 
+import asyncio
 import re as _re
+import time
 from uuid import UUID
 
 import structlog
@@ -13,9 +22,22 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
 from backend.app.clients.google_places import GooglePlacesClient, PlaceResolution
+from backend.app.core.config import get_settings
+from backend.app.core.google_guard import (
+    bump_google_quota,
+    bump_google_quota_sync,
+    ensure_google_allowed,
+)
 from backend.app.core.rate_limit import limiter
+from backend.app.db.supabase import get_supabase_client
 from backend.app.dependencies import get_current_user_id, get_google_places_client
-from backend.app.models.schemas import LocationPreviewResponse
+from backend.app.models.schemas import (
+    AutocompleteRequest,
+    AutocompleteResponse,
+    AutocompleteSuggestionDTO,
+    LocationPreviewResponse,
+    ResolvePlaceRequest,
+)
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger("locations-google")
 
@@ -84,21 +106,28 @@ _POSTCODE_PREFIX_RE = _re.compile(r"^\d{3,}\s")
 def _extract_city(address: str | None) -> str | None:
     """Extract city name from a Google formatted address, stripping postcodes.
 
-    Handles three shapes of 2-part addresses:
+    Handles four shapes of addresses:
 
+    - ``"<street>, <postcode> <city>, <country>"`` — postcode inline, e.g.
+      ``"10 Rue X, 75001 Paris, France"`` → "Paris".
+    - ``"<street>, <city>, <postcode>, <country>"`` — postcode as separate
+      segment, e.g. ``"Main Blvd, Lahore, 54000, Pakistan"`` → "Lahore".
     - ``"<postcode> <town>, <country>"`` — postcode in parts[0], e.g.
-      ``"37150 Chenonceaux, France"`` → "Chenonceaux". (Small towns where
-      Google elides the street segment.)
-    - ``"<street>, <postcode> <city>"`` — postcode in parts[-1], e.g.
-      ``"Pl. du Casino, 98000 Monaco"`` → "Monaco". (City-states with street.)
+      ``"37150 Chenonceaux, France"`` → "Chenonceaux".
     - ``"<venue>, <city-state>"`` — no postcode at all, e.g.
-      ``"Victoria Peak, Hong Kong"`` → "Hong Kong". (Fallback.)
+      ``"Victoria Peak, Hong Kong"`` → "Hong Kong".
     """
     if not address:
         return None
     parts = [p.strip() for p in address.split(",")]
     if len(parts) >= 3:
         city_part = parts[-2]
+        city = _re.sub(r"^\d[\d\s-]*\s*", "", city_part).strip()
+        # If parts[-2] was a standalone postcode (e.g. "54000" in South
+        # Asian / Middle Eastern addresses), fall back to parts[-3].
+        if not city and len(parts) >= 4:
+            city = parts[-3].strip()
+        return city or None
     elif len(parts) == 2:
         # If parts[0] carries the postcode, the city is in the first segment
         # ("37150 Chenonceaux, France"). Otherwise fall back to parts[-1]
@@ -108,9 +137,9 @@ def _extract_city(address: str | None) -> str | None:
         # expected to be short-circuited earlier by ``_resolve_city`` via
         # Google's locality types.
         city_part = parts[0] if _POSTCODE_PREFIX_RE.match(parts[0]) else parts[-1]
+        return _re.sub(r"^\d[\d\s-]*\s*", "", city_part).strip() or None
     else:
         return None
-    return _re.sub(r"^\d[\d\s-]*\s*", "", city_part).strip() or None
 
 
 def _resolve_city(resolved: PlaceResolution) -> str | None:
@@ -146,7 +175,8 @@ class GoogleLinkPreviewBody(BaseModel):
 async def preview_location_from_google_link(
     request: Request,
     body: GoogleLinkPreviewBody,
-    _: UUID = Depends(get_current_user_id),
+    user_id: UUID = Depends(get_current_user_id),
+    supabase=Depends(get_supabase_client),
     places_client: GooglePlacesClient = Depends(get_google_places_client),
 ):
     """Resolve a Google Maps link into normalized location data (no DB write).
@@ -162,6 +192,11 @@ async def preview_location_from_google_link(
       /trips/{trip_id}/locations`` can trigger one lazy photo-bytes fetch
       without calling Google Places again.
     """
+    # Cost guards — same contract as autocomplete/resolve/list-import.
+    settings = get_settings()
+    ensure_google_allowed(settings, "preview")
+    await bump_google_quota(supabase, user_id, "preview", settings.google_daily_cap_preview)
+
     google_link = (body.google_link or "").strip()
     if not google_link:
         raise HTTPException(
@@ -184,6 +219,174 @@ async def preview_location_from_google_link(
         "google_preview_succeeded",
         place_id=resolved.place_id,
         name=resolved.name,
+    )
+    return LocationPreviewResponse(
+        name=resolved.name,
+        address=resolved.formatted_address,
+        city=city,
+        latitude=resolved.latitude,
+        longitude=resolved.longitude,
+        google_place_id=resolved.place_id,
+        suggested_category=suggested_category,
+        photo_resource_name=resolved.first_photo_resource,
+    )
+
+
+@router.post(
+    "/autocomplete",
+    response_model=AutocompleteResponse,
+    status_code=status.HTTP_200_OK,
+)
+@limiter.limit("60/minute")
+async def autocomplete_locations(
+    request: Request,
+    body: AutocompleteRequest,
+    user_id: UUID = Depends(get_current_user_id),
+    supabase=Depends(get_supabase_client),
+    places_client: GooglePlacesClient = Depends(get_google_places_client),
+):
+    """Typeahead autocomplete for the Add-a-location input.
+
+    SKU: Autocomplete (New). Billed FREE as *Session Usage* when the
+    caller subsequently invokes :func:`resolve_place` with the same
+    ``session_token``. Otherwise billed per request at $2.83/1000 (first
+    10k/mo free). The autocomplete response carries no Place Details data —
+    ``main_text`` + ``secondary_text`` + ``types`` come directly from
+    Google's structured prediction format and are free to render.
+
+    Rate-limit: 60/min/user (SlowAPI burst) plus a daily cap enforced via
+    ``bump_google_usage`` to bound sustained cost exposure.
+    """
+    settings = get_settings()
+    ensure_google_allowed(settings, "autocomplete")
+
+    location_bias_tuple: tuple[float, float, float] | None = None
+    if body.location_bias:
+        location_bias_tuple = (
+            body.location_bias.lat,
+            body.location_bias.lng,
+            body.location_bias.radius_m,
+        )
+
+    # Run quota check and Places API call concurrently to shave ~150-200ms
+    # off every typeahead response. Uses return_exceptions=True so that a
+    # 429 from the quota thread doesn't leave the Places thread's exception
+    # as an unraisable warning in the thread pool.
+    start = time.perf_counter()
+    quota_result, places_result = await asyncio.gather(
+        asyncio.to_thread(
+            bump_google_quota_sync,
+            supabase,
+            user_id,
+            "autocomplete",
+            settings.google_daily_cap_autocomplete,
+        ),
+        asyncio.to_thread(
+            places_client.autocomplete,
+            body.input,
+            session_token=body.session_token,
+            language=body.language,
+            region=body.region,
+            location_bias=location_bias_tuple,
+        ),
+        return_exceptions=True,
+    )
+    # Quota failure takes priority (429); Places failure is a 400.
+    if isinstance(quota_result, HTTPException):
+        raise quota_result
+    if isinstance(quota_result, BaseException):
+        raise quota_result
+    if isinstance(places_result, BaseException):
+        logger.warning(
+            "places_autocomplete_failed",
+            error=str(places_result),
+            error_category="external_api",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Autocomplete request failed",
+        ) from places_result
+    raw_suggestions = places_result
+    duration_ms = round((time.perf_counter() - start) * 1000, 1)
+
+    logger.info(
+        "places_autocomplete_done",
+        had_session_token=True,
+        duration_ms=duration_ms,
+        results=len(raw_suggestions),
+        query_length=len(body.input),
+    )
+    return AutocompleteResponse(
+        suggestions=[
+            AutocompleteSuggestionDTO(
+                place_id=s.place_id,
+                main_text=s.main_text,
+                secondary_text=s.secondary_text,
+                types=s.types,
+            )
+            for s in raw_suggestions
+        ]
+    )
+
+
+@router.post(
+    "/resolve",
+    response_model=LocationPreviewResponse,
+    status_code=status.HTTP_200_OK,
+)
+@limiter.limit("20/minute")
+async def resolve_place(
+    request: Request,
+    body: ResolvePlaceRequest,
+    user_id: UUID = Depends(get_current_user_id),
+    supabase=Depends(get_supabase_client),
+    places_client: GooglePlacesClient = Depends(get_google_places_client),
+):
+    """Resolve a Google place_id into ``LocationPreviewResponse``.
+
+    SKU: Place Details (New) Pro — same field mask as ``/preview``'s
+    second call. $17 / 1000 (first 5k/mo free). This is the ONE paid Google
+    call in the typeahead flow; forwarding ``session_token`` makes all
+    preceding autocomplete requests in the session FREE.
+
+    Returns the exact same shape as ``/preview`` so the frontend
+    ``AddLocationForm`` prefill path is identical regardless of entry.
+    """
+    settings = get_settings()
+    # /resolve is the second half of the typeahead UX — blocked by the
+    # autocomplete kill switch as well as the master switch.
+    ensure_google_allowed(settings, "resolve")
+    await bump_google_quota(supabase, user_id, "resolve", settings.google_daily_cap_resolve)
+
+    start = time.perf_counter()
+    try:
+        resolved = places_client.get_place_by_id(
+            body.place_id,
+            session_token=body.session_token,
+        )
+    except Exception as exc:
+        logger.warning(
+            "places_resolve_failed",
+            error=str(exc),
+            error_category="external_api",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not resolve place",
+        ) from exc
+    duration_ms = round((time.perf_counter() - start) * 1000, 1)
+
+    suggested_category = _suggest_category(resolved.types)
+    city = _resolve_city(resolved)
+
+    # `had_session_token` is the single field that lets us audit in prod
+    # whether autocomplete traffic is being billed FREE (true) or per
+    # request (false). See ADR on Places API cost reduction.
+    logger.info(
+        "places_resolve_done",
+        place_id=resolved.place_id,
+        duration_ms=duration_ms,
+        had_session_token=body.session_token is not None,
     )
     return LocationPreviewResponse(
         name=resolved.name,
