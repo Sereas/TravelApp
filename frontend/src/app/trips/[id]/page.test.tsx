@@ -313,7 +313,7 @@ describe("TripDetailPage", () => {
     await screen.findByRole("heading", { name: "Eiffel Tower" });
     expect(
       screen.getByPlaceholderText(
-        /add a location.*paste a google maps link or type a name/i
+        /search a place.*paste a google maps link/i
       )
     ).toBeInTheDocument();
   });
@@ -326,7 +326,7 @@ describe("TripDetailPage", () => {
     await screen.findByText(/ready to build your/i);
     expect(
       screen.queryByPlaceholderText(
-        /add a location.*paste a google maps link or type a name/i
+        /search a place.*paste a google maps link/i
       )
     ).not.toBeInTheDocument();
   });
@@ -351,7 +351,7 @@ describe("TripDetailPage", () => {
 
     await screen.findByText("Paris Summer");
     const smartInput = screen.getByPlaceholderText(
-      /add a location.*paste a google maps link or type a name/i
+      /search a place.*paste a google maps link/i
     );
     await userEvent.type(smartInput, "Arc de Triomphe{Enter}");
 
@@ -367,7 +367,7 @@ describe("TripDetailPage", () => {
 
     await screen.findByText("Paris Summer");
     const smartInput = screen.getByPlaceholderText(
-      /add a location.*paste a google maps link or type a name/i
+      /search a place.*paste a google maps link/i
     );
     await userEvent.type(
       smartInput,
@@ -387,7 +387,7 @@ describe("TripDetailPage", () => {
 
     await screen.findByText("Paris Summer");
     const smartInput = screen.getByPlaceholderText(
-      /add a location.*paste a google maps link or type a name/i
+      /search a place.*paste a google maps link/i
     );
     await userEvent.type(smartInput, "Louvre{Enter}");
 
@@ -396,7 +396,7 @@ describe("TripDetailPage", () => {
 
     // Smart input reappears empty
     const freshInput = screen.getByPlaceholderText(
-      /add a location.*paste a google maps link or type a name/i
+      /search a place.*paste a google maps link/i
     ) as HTMLInputElement;
     expect(freshInput.value).toBe("");
   });
@@ -415,7 +415,7 @@ describe("TripDetailPage", () => {
 
     await screen.findByText("Paris Summer");
     const smartInput = screen.getByPlaceholderText(
-      /add a location.*paste a google maps link or type a name/i
+      /search a place.*paste a google maps link/i
     );
     await userEvent.type(smartInput, "Arc de Triomphe{Enter}");
 

@@ -65,7 +65,8 @@ router = APIRouter(prefix="/trips", tags=["trips-locations"])
 _LOCATIONS_SELECT = (
     "location_id, trip_id, name, address, google_link, google_place_id, "
     "google_source_type, added_by_email, note, added_by_user_id, city, "
-    "working_hours, useful_link, requires_booking, category, latitude, longitude, user_image_url"
+    "working_hours, useful_link, requires_booking, category, "
+    "latitude, longitude, user_image_url, created_at"
 )
 
 
@@ -94,6 +95,7 @@ def _loc_to_response(loc: dict) -> LocationResponse:
         user_image_url=loc.get("user_image_url"),
         attribution_name=loc.get("attribution_name"),
         attribution_uri=loc.get("attribution_uri"),
+        created_at=loc.get("created_at"),
     )
 
 

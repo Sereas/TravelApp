@@ -1,11 +1,29 @@
 "use client";
 
-import { useMemo } from "react";
-import { Building2, Map as MapIcon, Tag, User } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Building2, ChevronDown, Map as MapIcon, Tag, User } from "lucide-react";
 import type { Location } from "@/lib/api";
 import { CATEGORY_META, type CategoryKey } from "@/lib/location-constants";
 import { FilterPill } from "./FilterPill";
 import { cn } from "@/lib/utils";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+
+export type ScheduleFilterKey =
+  | "all"
+  | "scheduled"
+  | "unscheduled"
+  | "needs_booking";
+
+export type SortKey = "recently_added" | "name_asc";
+
+export const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: "recently_added", label: "Recently added" },
+  { key: "name_asc", label: "Name A–Z" },
+];
 
 export interface LocationsFilterToolbarProps {
   locations: Location[];
@@ -14,24 +32,29 @@ export interface LocationsFilterToolbarProps {
   cityFilter: string | null;
   personFilter: string | null;
   groupBy: "city" | "category" | "person" | null;
-  scheduleFilter: "all" | "scheduled" | "unscheduled";
+  scheduleFilter: ScheduleFilterKey;
+  sortBy: SortKey;
   onCategoryChange: (value: string | null) => void;
   onCityChange: (value: string | null) => void;
   onPersonChange: (value: string | null) => void;
   onGroupByChange: (value: "city" | "category" | "person" | null) => void;
-  onScheduleFilterChange: (value: "all" | "scheduled" | "unscheduled") => void;
+  onScheduleFilterChange: (value: ScheduleFilterKey) => void;
+  onSortChange: (value: SortKey) => void;
   onMapOpen: () => void;
   categoryOptions: [string, number][];
   /** Total locations matching non-schedule filters (for "All" tab count). */
   totalFiltered: number;
   /** Scheduled locations matching non-schedule filters. */
   scheduledCount: number;
+  /** Locations that need booking (requires_booking === "yes"). */
+  needsBookingCount: number;
 }
 
-const SCHEDULE_TABS = [
-  { key: "all" as const, label: "All" },
-  { key: "scheduled" as const, label: "Scheduled" },
-  { key: "unscheduled" as const, label: "Unscheduled" },
+const SCHEDULE_TABS: { key: ScheduleFilterKey; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "scheduled", label: "Scheduled" },
+  { key: "unscheduled", label: "Unscheduled" },
+  { key: "needs_booking", label: "Needs booking" },
 ];
 
 export function LocationsFilterToolbar({
@@ -42,15 +65,18 @@ export function LocationsFilterToolbar({
   personFilter,
   groupBy,
   scheduleFilter,
+  sortBy,
   onCategoryChange,
   onCityChange,
   onPersonChange,
   onGroupByChange,
   onScheduleFilterChange,
+  onSortChange,
   onMapOpen,
   categoryOptions,
   totalFiltered,
   scheduledCount,
+  needsBookingCount,
 }: LocationsFilterToolbarProps) {
   const cities = useMemo(() => {
     const set = new Set<string>();
@@ -99,41 +125,91 @@ export function LocationsFilterToolbar({
 
   const unscheduledCount = totalFiltered - scheduledCount;
 
-  const tabCounts: Record<string, number> = {
+  const tabCounts: Record<ScheduleFilterKey, number> = {
     all: totalFiltered,
     scheduled: scheduledCount,
     unscheduled: unscheduledCount,
+    needs_booking: needsBookingCount,
   };
+
+  const [sortOpen, setSortOpen] = useState(false);
+  const currentSortLabel =
+    SORT_OPTIONS.find((o) => o.key === sortBy)?.label ?? "Recently added";
 
   return (
     <div className="mb-4 space-y-2.5">
-      {/* Schedule status filter — serves as heading + primary filter */}
-      <div
-        role="radiogroup"
-        aria-label="Filter by schedule status"
-        className="flex items-center gap-1"
-      >
-        {SCHEDULE_TABS.map(({ key, label }) => {
-          const isActive = scheduleFilter === key;
-          const count = tabCounts[key];
-          return (
-            <button
-              key={key}
-              role="radio"
-              type="button"
-              aria-checked={isActive}
-              className={cn(
-                "touch-target rounded-full px-3 py-1 text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-brand-muted text-brand-strong"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-              onClick={() => onScheduleFilterChange(key)}
+      {/* Schedule status tabs + sort dropdown */}
+      <div className="flex items-center gap-2">
+        <div
+          role="radiogroup"
+          aria-label="Filter by schedule status"
+          className="flex items-center gap-1.5"
+        >
+          {SCHEDULE_TABS.map(({ key, label }) => {
+            const isActive = scheduleFilter === key;
+            const count = tabCounts[key];
+            return (
+              <button
+                key={key}
+                role="radio"
+                type="button"
+                aria-checked={isActive}
+                className={cn(
+                  "touch-target rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+                  isActive
+                    ? "bg-primary text-primary-foreground"
+                    : "border border-border text-muted-foreground hover:border-primary/30 hover:text-foreground"
+                )}
+                onClick={() => onScheduleFilterChange(key)}
+              >
+                {label}{" "}
+                <span className="tabular-nums">{count}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Sort dropdown — right-aligned */}
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Sort</span>
+          <Popover open={sortOpen} onOpenChange={setSortOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                aria-expanded={sortOpen}
+                aria-haspopup="true"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+              >
+                {currentSortLabel}
+                <ChevronDown size={14} className="opacity-50" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              className="w-auto min-w-[10rem] p-1.5"
+              align="end"
+              sideOffset={6}
             >
-              {label} <span className="tabular-nums">{count}</span>
-            </button>
-          );
-        })}
+              {SORT_OPTIONS.map((opt) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  className={cn(
+                    "flex w-full items-center rounded-md px-2.5 py-1.5 text-sm transition-colors",
+                    sortBy === opt.key
+                      ? "bg-brand-muted font-medium text-brand-strong"
+                      : "text-foreground hover:bg-muted"
+                  )}
+                  onClick={() => {
+                    onSortChange(opt.key);
+                    setSortOpen(false);
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </PopoverContent>
+          </Popover>
+        </div>
       </div>
 
       {/* Filter pills row */}
@@ -160,6 +236,8 @@ export function LocationsFilterToolbar({
               onCityChange(val);
               if (val) {
                 onCategoryChange(null);
+                onGroupByChange(null);
+              } else if (groupBy === "city") {
                 onGroupByChange(null);
               }
             }}
@@ -188,7 +266,7 @@ export function LocationsFilterToolbar({
             selected={categoryFilter}
             onChange={(val) => {
               onCategoryChange(val);
-              if (val) onGroupByChange(null);
+              if (val || groupBy === "category") onGroupByChange(null);
             }}
             allLabel="All categories"
             groupBy={!isReadOnly ? "category" : undefined}
@@ -214,7 +292,7 @@ export function LocationsFilterToolbar({
             selected={personFilter}
             onChange={(val) => {
               onPersonChange(val);
-              if (val) onGroupByChange(null);
+              if (val || groupBy === "person") onGroupByChange(null);
             }}
             allLabel="Everyone"
             groupBy="person"

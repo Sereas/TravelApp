@@ -16,7 +16,7 @@ import { MapPin } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-export interface SuggestionItem {
+export interface GoogleSuggestion {
   kind: "google";
   placeId: string;
   mainText: string;
@@ -29,6 +29,15 @@ export interface SuggestionItem {
    */
   matchedLocationId: string | null;
 }
+
+export interface ExistingSuggestion {
+  kind: "existing";
+  locationId: string;
+  mainText: string;
+  secondaryText: string | null;
+}
+
+export type SuggestionItem = GoogleSuggestion | ExistingSuggestion;
 
 export interface LocationSuggestionListProps {
   suggestions: SuggestionItem[];
@@ -80,6 +89,65 @@ export function LocationSuggestionList({
 }: LocationSuggestionListProps) {
   if (suggestions.length === 0) return null;
 
+  // Find the boundary between existing and google sections for the separator.
+  const firstGoogleIdx = suggestions.findIndex((s) => s.kind === "google");
+  const hasExisting = suggestions.some((s) => s.kind === "existing");
+  const showSeparator = hasExisting && firstGoogleIdx > 0;
+
+  function renderItem(item: SuggestionItem, idx: number) {
+    const highlighted = idx === highlightedIndex;
+    const onList =
+      item.kind === "existing" ||
+      (item.kind === "google" && item.matchedLocationId !== null);
+    const itemKey =
+      item.kind === "existing"
+        ? `existing-${item.locationId}`
+        : `google-${item.placeId}-${idx}`;
+
+    return (
+      <li
+        key={itemKey}
+        role="option"
+        id={`loc-suggestion-${idx}`}
+        aria-selected={highlighted}
+        data-highlighted={highlighted || undefined}
+        className={cn(
+          "flex cursor-pointer items-center gap-2.5 px-3 py-2 text-sm transition-colors",
+          highlighted ? "bg-primary/10" : "hover:bg-primary/[0.06]"
+        )}
+        onMouseEnter={() => onHover(idx)}
+        onMouseDown={(e) => {
+          e.preventDefault();
+        }}
+        onClick={() => onSelect(item)}
+      >
+        <MapPin
+          size={16}
+          className="shrink-0 text-muted-foreground"
+          strokeWidth={2}
+        />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate text-foreground">
+            <BoldMatch text={item.mainText} query={query} />
+          </span>
+          {item.secondaryText && (
+            <span className="truncate text-xs text-muted-foreground">
+              {item.secondaryText}
+            </span>
+          )}
+        </div>
+        {onList && (
+          <span
+            className="ml-auto inline-flex shrink-0 items-center rounded-full bg-brand-muted px-2 py-0.5 text-xs font-medium text-brand-strong"
+            aria-label="Already on this trip"
+          >
+            On list
+          </span>
+        )}
+      </li>
+    );
+  }
+
   return (
     <ul
       role="listbox"
@@ -87,52 +155,19 @@ export function LocationSuggestionList({
       className="absolute left-0 right-0 top-full z-50 mt-1 max-h-80 overflow-y-auto rounded-2xl border-2 border-primary/25 bg-popover py-1 shadow-lg"
     >
       {suggestions.map((item, idx) => {
-        const highlighted = idx === highlightedIndex;
-        const onList = item.matchedLocationId !== null;
-        return (
-          <li
-            key={`${item.placeId}-${idx}`}
-            role="option"
-            id={`loc-suggestion-${idx}`}
-            aria-selected={highlighted}
-            data-highlighted={highlighted || undefined}
-            className={cn(
-              "flex cursor-pointer items-center gap-2.5 px-3 py-2 text-sm transition-colors",
-              highlighted ? "bg-primary/10" : "hover:bg-primary/[0.06]"
-            )}
-            onMouseEnter={() => onHover(idx)}
-            onMouseDown={(e) => {
-              // Prevent the input from losing focus (which would close the
-              // dropdown before the click handler fires).
-              e.preventDefault();
-            }}
-            onClick={() => onSelect(item)}
-          >
-            <MapPin
-              size={16}
-              className="shrink-0 text-muted-foreground"
-              strokeWidth={2}
+        const nodes = [];
+        if (showSeparator && idx === firstGoogleIdx) {
+          nodes.push(
+            <li
+              key="section-separator"
+              role="presentation"
+              aria-hidden
+              className="my-0.5 border-t border-border/40"
             />
-            <div className="flex min-w-0 flex-1 flex-col">
-              <span className="truncate text-foreground">
-                <BoldMatch text={item.mainText} query={query} />
-              </span>
-              {item.secondaryText && (
-                <span className="truncate text-xs text-muted-foreground">
-                  {item.secondaryText}
-                </span>
-              )}
-            </div>
-            {onList && (
-              <span
-                className="ml-auto inline-flex shrink-0 items-center rounded-full bg-brand-muted px-2 py-0.5 text-xs font-medium text-brand-strong"
-                aria-label="Already on this trip"
-              >
-                On list
-              </span>
-            )}
-          </li>
-        );
+          );
+        }
+        nodes.push(renderItem(item, idx));
+        return nodes;
       })}
     </ul>
   );

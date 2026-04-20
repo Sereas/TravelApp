@@ -184,6 +184,7 @@ class LocationResponse(BaseModel):
     user_image_url: str | None = None
     attribution_name: str | None = None
     attribution_uri: str | None = None
+    created_at: str | None = None
 
 
 class UpdateTripBody(BaseModel):

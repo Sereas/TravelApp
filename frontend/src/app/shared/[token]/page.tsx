@@ -56,6 +56,7 @@ function toLocations(shared: SharedLocationSummary[]): Location[] {
     google_place_id: null,
     added_by_user_id: null,
     added_by_email: null,
+    created_at: null,
   }));
 }
 

@@ -1,5 +1,5 @@
 /// <reference types="vitest/globals" />
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SmartLocationInput } from "./SmartLocationInput";
 
@@ -23,9 +23,7 @@ describe("SmartLocationInput", () => {
       />
     );
     expect(
-      screen.getByPlaceholderText(
-        /add a location.*paste a google maps link or type a name/i
-      )
+      screen.getByPlaceholderText(/search a place.*paste a google maps link/i)
     ).toBeInTheDocument();
   });
 
@@ -712,13 +710,12 @@ describe("SmartLocationInput — typeahead behaviour (Red phase)", () => {
       expect(screen.getByRole("listbox")).toBeInTheDocument();
     });
 
-    // The suggestion "Louvre Museum" has place_id "ChIJ_louvre_google" which
-    // does NOT match EXISTING_LOCATIONS[0]'s place_id "ChIJ_louvre", but the
-    // exact name "Louvre Museum" matches — the "On list" pill must appear.
-    // (Substring matching was removed to prevent false positives like
-    // "Eiffel Tower" matching "Eiffel Tower Bahria Town Lahore".)
+    // Both "Louvre Museum" and "Louvre Palace" match the "Lou" query as
+    // existing trip locations, so they appear first with "On list" pills.
+    // The Google suggestion "Louvre Museum" is deduped (its matchedLocationId
+    // is already shown in the existing section).
     await waitFor(() => {
-      expect(screen.getByText(/on list/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/on list/i).length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -757,9 +754,123 @@ describe("SmartLocationInput — typeahead behaviour (Red phase)", () => {
       expect(screen.getByRole("listbox")).toBeInTheDocument();
     });
 
-    // The existing location "Eiffel Tower" must NOT match "Eiffel Tower
-    // Bahria Town Lahore" — substring matching was the root cause of this
-    // false positive.
-    expect(screen.queryByText(/on list/i)).not.toBeInTheDocument();
+    // The existing "Eiffel Tower" appears first with "On list" (partial
+    // match on "Eiff"). The Google suggestion "Eiffel Tower Bahria Town
+    // Lahore" must NOT have the "On list" pill — it's a different place.
+    // Use secondary text to find the Google suggestion row (BoldMatch
+    // duplicates main_text across sr-only and aria-hidden spans).
+    const lahoreRow = screen
+      .getByText("Lahore, Pakistan")
+      .closest("[role='option']") as HTMLElement;
+    expect(lahoreRow).toBeTruthy();
+    expect(within(lahoreRow).queryByText(/on list/i)).not.toBeInTheDocument();
+  });
+
+  // --- Existing-first ordering ---
+
+  it("shows existing location matches above Google suggestions for partial query", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    render(
+      <SmartLocationInput
+        tripId={tripId}
+        onSubmit={onSubmit}
+        onImported={onImported}
+        existingLocations={EXISTING_LOCATIONS}
+        onPickExisting={onPickExisting}
+      />
+    );
+
+    const input = screen.getByRole("combobox");
+    await user.type(input, "Ei");
+
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("listbox")).toBeInTheDocument();
+    });
+
+    const options = screen.getAllByRole("option");
+    // First item: existing "Eiffel Tower" (partial match on "Ei")
+    expect(within(options[0]).getByText(/Eiffel Tower/i)).toBeInTheDocument();
+    expect(within(options[0]).getByText(/on list/i)).toBeInTheDocument();
+
+    // Google suggestions follow (Eiffel Tower deduped, so Eiffelstraße and Eiffel Square)
+    expect(within(options[1]).getByText(/Eiffelstraße/i)).toBeInTheDocument();
+    expect(within(options[1]).queryByText(/on list/i)).not.toBeInTheDocument();
+  });
+
+  it("deduplicates Google suggestions already shown as existing matches", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    render(
+      <SmartLocationInput
+        tripId={tripId}
+        onSubmit={onSubmit}
+        onImported={onImported}
+        existingLocations={EXISTING_LOCATIONS}
+        onPickExisting={onPickExisting}
+      />
+    );
+
+    const input = screen.getByRole("combobox");
+    await user.type(input, "Ei");
+
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("listbox")).toBeInTheDocument();
+    });
+
+    // Google returns 3 suggestions, but "Eiffel Tower" (ChIJ_eiffel)
+    // matches existing loc-existing-2 and is deduped. Only 3 total items:
+    // 1 existing + 2 Google.
+    const options = screen.getAllByRole("option");
+    expect(options).toHaveLength(3);
+  });
+
+  it("shows existing matches immediately before Google results arrive", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    // Delay the Google response so we can observe existing-only state
+    mockAutocomplete.mockImplementation(
+      () =>
+        new Promise((resolve) =>
+          setTimeout(
+            () => resolve(AUTOCOMPLETE_RESPONSE_THREE_SUGGESTIONS),
+            500
+          )
+        )
+    );
+
+    render(
+      <SmartLocationInput
+        tripId={tripId}
+        onSubmit={onSubmit}
+        onImported={onImported}
+        existingLocations={EXISTING_LOCATIONS}
+        onPickExisting={onPickExisting}
+      />
+    );
+
+    const input = screen.getByRole("combobox");
+    await user.type(input, "Eiffel");
+
+    // Existing match shows immediately — no need to wait for Google
+    await waitFor(() => {
+      expect(screen.getByRole("listbox")).toBeInTheDocument();
+    });
+
+    const options = screen.getAllByRole("option");
+    expect(options).toHaveLength(1);
+    expect(within(options[0]).getByText(/Eiffel Tower/i)).toBeInTheDocument();
+    expect(within(options[0]).getByText(/on list/i)).toBeInTheDocument();
+
+    // Google results haven't arrived yet
+    expect(mockAutocomplete).not.toHaveBeenCalled(); // debounce hasn't fired
   });
 });

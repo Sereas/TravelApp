@@ -32,6 +32,7 @@ const sampleLocation = {
   user_image_url: null,
   attribution_name: null,
   attribution_uri: null,
+  created_at: null,
 };
 
 describe("EditLocationRow", () => {
@@ -176,6 +177,7 @@ describe("EditLocationRow", () => {
       user_image_url: null,
       attribution_name: null,
       attribution_uri: null,
+      created_at: null,
     };
 
     render(

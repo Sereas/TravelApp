@@ -47,6 +47,7 @@ export interface Location {
   user_image_url: string | null;
   attribution_name: string | null;
   attribution_uri: string | null;
+  created_at: string | null;
 }
 
 /** Minimal location info embedded in itinerary tree. */

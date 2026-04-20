@@ -43,7 +43,11 @@ import { cn } from "@/lib/utils";
 import { useReadOnly } from "@/lib/read-only-context";
 
 import { TripHeader } from "./TripHeader";
-import { LocationsFilterToolbar } from "./LocationsFilterToolbar";
+import {
+  LocationsFilterToolbar,
+  type ScheduleFilterKey,
+  type SortKey,
+} from "./LocationsFilterToolbar";
 import { LocationsGrid } from "./LocationsGrid";
 import { EmptyLocationsCTA } from "./EmptyLocationsCTA";
 
@@ -170,9 +174,9 @@ export function TripView({
   const [groupBy, setGroupBy] = useState<"city" | "category" | "person" | null>(
     null
   );
-  const [scheduleFilter, setScheduleFilter] = useState<
-    "all" | "scheduled" | "unscheduled"
-  >("all");
+  const [scheduleFilter, setScheduleFilter] =
+    useState<ScheduleFilterKey>("all");
+  const [sortBy, setSortBy] = useState<SortKey>("recently_added");
   const [placesMapSheetOpen, setPlacesMapSheetOpen] = useState(false);
 
   const { itinerary, availableDays, itineraryLocationMap } = itineraryState;
@@ -222,14 +226,44 @@ export function TripView({
     [filteredByNonSchedule, itineraryLocationMap]
   );
 
+  const needsBookingCount = useMemo(
+    () =>
+      filteredByNonSchedule.filter(
+        (loc) => loc.requires_booking === "yes"
+      ).length,
+    [filteredByNonSchedule]
+  );
+
   const filteredLocations = useMemo(() => {
-    if (scheduleFilter === "all") return filteredByNonSchedule;
-    return filteredByNonSchedule.filter((loc) =>
-      scheduleFilter === "scheduled"
-        ? itineraryLocationMap.has(loc.id)
-        : !itineraryLocationMap.has(loc.id)
-    );
-  }, [filteredByNonSchedule, scheduleFilter, itineraryLocationMap]);
+    let list: Location[];
+    if (scheduleFilter === "all") {
+      list = filteredByNonSchedule;
+    } else if (scheduleFilter === "needs_booking") {
+      list = filteredByNonSchedule.filter(
+        (loc) => loc.requires_booking === "yes"
+      );
+    } else {
+      list = filteredByNonSchedule.filter((loc) =>
+        scheduleFilter === "scheduled"
+          ? itineraryLocationMap.has(loc.id)
+          : !itineraryLocationMap.has(loc.id)
+      );
+    }
+
+    // Apply sort
+    if (sortBy === "recently_added") {
+      list = [...list].sort((a, b) => {
+        if (!a.created_at && !b.created_at) return 0;
+        if (!a.created_at) return 1;
+        if (!b.created_at) return -1;
+        return b.created_at.localeCompare(a.created_at);
+      });
+    } else if (sortBy === "name_asc") {
+      list = [...list].sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    return list;
+  }, [filteredByNonSchedule, scheduleFilter, itineraryLocationMap, sortBy]);
 
   const groupedLocations = useMemo(() => {
     if (!groupBy) return null;
@@ -430,15 +464,18 @@ export function TripView({
                   personFilter={personFilter}
                   groupBy={groupBy}
                   scheduleFilter={scheduleFilter}
+                  sortBy={sortBy}
                   onCategoryChange={setCategoryFilter}
                   onCityChange={setCityFilter}
                   onPersonChange={setPersonFilter}
                   onGroupByChange={setGroupBy}
                   onScheduleFilterChange={setScheduleFilter}
+                  onSortChange={setSortBy}
                   onMapOpen={() => setPlacesMapSheetOpen(true)}
                   categoryOptions={categoryOptions}
                   totalFiltered={filteredByNonSchedule.length}
                   scheduledCount={scheduledCount}
+                  needsBookingCount={needsBookingCount}
                 />
               )}
 

@@ -536,6 +536,7 @@ describe("locationSummaryFromLocation", () => {
       attribution_uri: "https://example.com/",
       added_by_user_id: "user-1",
       added_by_email: "user@example.com",
+      created_at: null,
     };
   }
 

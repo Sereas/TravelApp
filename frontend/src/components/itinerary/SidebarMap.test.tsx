@@ -115,6 +115,7 @@ const tripLocations: Location[] = [
     user_image_url: null,
     attribution_name: null,
     attribution_uri: null,
+    created_at: null,
   },
   {
     id: "loc-2",
@@ -136,6 +137,7 @@ const tripLocations: Location[] = [
     user_image_url: null,
     attribution_name: null,
     attribution_uri: null,
+    created_at: null,
   },
 ];
 

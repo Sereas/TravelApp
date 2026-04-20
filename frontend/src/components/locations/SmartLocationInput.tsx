@@ -15,18 +15,21 @@ import { api } from "@/lib/api";
 import type { LocationPreviewPayload } from "@/components/locations/AddLocationForm";
 import { useAutocomplete } from "@/features/locations/useAutocomplete";
 
-/** Subset of Location fields needed to annotate Google suggestions with
- * the "On list" pill. Narrowed from `Location` so tests (and future
- * callers) don't have to construct full Location objects. */
+/** Subset of Location fields needed to match existing locations against
+ * the user's query and annotate Google suggestions. Narrowed from
+ * `Location` so tests don't need full objects. */
 type ExistingLocationSummary = {
   id: string;
   name: string;
   google_place_id: string | null;
+  city?: string | null;
 };
 
 import { ImportGoogleListDialog } from "./ImportGoogleListDialog";
 import {
   LocationSuggestionList,
+  type ExistingSuggestion,
+  type GoogleSuggestion,
   type SuggestionItem,
 } from "./LocationSuggestionList";
 
@@ -37,29 +40,50 @@ function looksLikeGoogleMapsUrl(text: string): boolean {
 }
 
 /**
- * Build the suggestion list shown under the input. The list contains only
- * Google suggestions; the "On list" pill is added when a Google suggestion
- * already has a saved equivalent in the trip. We match on `place_id`
- * (preferred, O(1) hash lookup) and fall back to exact case-insensitive
- * name equality so legacy locations without a `google_place_id` still
- * show the pill. Substring matching was removed to prevent false positives
- * (e.g. "Eiffel Tower" matching "Eiffel Tower Bahria Town Lahore").
+ * Build the "existing" section: trip locations whose name partially
+ * matches the user's query (case-insensitive). These appear above Google
+ * suggestions so the user sees their own saved places first.
  */
-function buildSuggestionItems(
+function buildExistingMatches(
+  query: string,
+  existingLocations: ExistingLocationSummary[]
+): ExistingSuggestion[] {
+  if (!query || query.length < 2) return [];
+  const lowerQuery = query.toLowerCase();
+  return existingLocations
+    .filter((loc) => (loc.name ?? "").toLowerCase().includes(lowerQuery))
+    .map((loc) => ({
+      kind: "existing" as const,
+      locationId: loc.id,
+      mainText: loc.name,
+      secondaryText: loc.city ?? null,
+    }));
+}
+
+/**
+ * Build the "google" section: Google autocomplete suggestions, annotated
+ * with `matchedLocationId` when a suggestion matches an existing trip
+ * location by place_id or exact name. Suggestions whose matched location
+ * is already shown in the existing section are filtered out to avoid
+ * visual duplication.
+ */
+function buildGoogleSuggestionItems(
   googleSuggestions: {
     place_id: string;
     main_text: string;
     secondary_text: string | null;
     types: string[];
   }[],
-  existingLocations: ExistingLocationSummary[]
-): SuggestionItem[] {
+  existingLocations: ExistingLocationSummary[],
+  shownLocationIds: Set<string>
+): GoogleSuggestion[] {
   const byPlaceId = new Map<string, string>();
   for (const loc of existingLocations) {
     if (loc.google_place_id) byPlaceId.set(loc.google_place_id, loc.id);
   }
 
-  return googleSuggestions.map((s) => {
+  const results: GoogleSuggestion[] = [];
+  for (const s of googleSuggestions) {
     // Primary match: exact place_id (cheap, definitive).
     let matchedLocationId: string | null = byPlaceId.get(s.place_id) ?? null;
 
@@ -76,15 +100,21 @@ function buildSuggestionItems(
       });
       if (fallback) matchedLocationId = fallback.id;
     }
-    return {
+
+    // Skip if this location is already shown in the existing-matches
+    // section above — prevents the same place appearing twice.
+    if (matchedLocationId && shownLocationIds.has(matchedLocationId)) continue;
+
+    results.push({
       kind: "google" as const,
       placeId: s.place_id,
       mainText: s.main_text,
       secondaryText: s.secondary_text,
       types: s.types,
       matchedLocationId,
-    };
-  });
+    });
+  }
+  return results;
 }
 
 interface SmartLocationInputProps {
@@ -157,10 +187,16 @@ export function SmartLocationInput({
     setQuery(searchQuery);
   }, [searchQuery, setQuery]);
 
-  const items = useMemo(
-    () => buildSuggestionItems(suggestions, existingLocations ?? []),
-    [suggestions, existingLocations]
-  );
+  const items = useMemo(() => {
+    const existing = buildExistingMatches(trimmed, existingLocations ?? []);
+    const shownIds = new Set(existing.map((e) => e.locationId));
+    const google = buildGoogleSuggestionItems(
+      suggestions,
+      existingLocations ?? [],
+      shownIds
+    );
+    return [...existing, ...google] as SuggestionItem[];
+  }, [trimmed, suggestions, existingLocations]);
 
   // Derived open-state — synchronous, no extra render from an effect-chain.
   // Closed whenever: read-only, the input is a URL, too few chars, nothing
@@ -203,8 +239,17 @@ export function SmartLocationInput({
 
   const handlePickSuggestion = useCallback(
     async (item: SuggestionItem) => {
+      // Existing trip location — scroll to it, no Google call.
+      if (item.kind === "existing") {
+        setForceClosed(true);
+        setValue("");
+        resetSession();
+        onPickExisting?.(item.locationId);
+        return;
+      }
+
+      // Google suggestion that matches an existing location.
       if (item.matchedLocationId) {
-        // Already on the list — scroll to existing card, no Google call.
         setForceClosed(true);
         setValue("");
         resetSession();
@@ -230,11 +275,10 @@ export function SmartLocationInput({
         if (onGoogleResolved) {
           onGoogleResolved(resolved);
         } else {
-          // No upstream prefill handler wired — pass the resolved name
-          // through the existing text-submit path so the form still opens
-          // (the AddLocationForm will run its own preview unnecessarily,
-          // but this branch is only used in isolated tests or callers
-          // that haven't upgraded to the prefill-aware mode).
+          // No upstream prefill handler — pass the resolved name through
+          // the text-submit path (AddLocationForm will run its own
+          // /preview, but this only happens in isolated tests or callers
+          // that haven't upgraded to prefill-aware mode).
           onSubmit(resolved.name, false);
         }
       } catch (err: unknown) {
@@ -307,7 +351,7 @@ export function SmartLocationInput({
           type="text"
           role="combobox"
           autoComplete="off"
-          placeholder="Add a location — paste a Google Maps link or type a name..."
+          placeholder="Search a place, paste a Google Maps link..."
           value={value}
           disabled={readOnly}
           readOnly={readOnly}

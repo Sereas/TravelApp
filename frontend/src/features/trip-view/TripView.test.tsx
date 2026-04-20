@@ -151,7 +151,7 @@ describe("TripView — edit mode", () => {
     // SmartLocationInput uses a placeholder matching the pattern from existing tests.
     expect(
       screen.getByPlaceholderText(
-        /add a location.*paste a google maps link or type a name/i
+        /search a place.*paste a google maps link/i
       )
     ).toBeInTheDocument();
   });
@@ -160,7 +160,7 @@ describe("TripView — edit mode", () => {
     renderTripView({ locations: emptyLocations });
     expect(
       screen.queryByPlaceholderText(
-        /add a location.*paste a google maps link or type a name/i
+        /search a place.*paste a google maps link/i
       )
     ).not.toBeInTheDocument();
   });
@@ -280,7 +280,7 @@ describe("TripView — read-only mode (shared view)", () => {
     renderReadOnly();
     expect(
       screen.queryByPlaceholderText(
-        /add a location.*paste a google maps link or type a name/i
+        /search a place.*paste a google maps link/i
       )
     ).not.toBeInTheDocument();
   });

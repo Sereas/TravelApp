@@ -19,11 +19,13 @@ function renderToolbar(
     personFilter: null,
     groupBy: null,
     scheduleFilter: "all",
+    sortBy: "recently_added",
     onCategoryChange: vi.fn(),
     onCityChange: vi.fn(),
     onPersonChange: vi.fn(),
     onGroupByChange: vi.fn(),
     onScheduleFilterChange: vi.fn(),
+    onSortChange: vi.fn(),
     onMapOpen: vi.fn(),
     categoryOptions: [
       ["Temple", 1],
@@ -32,6 +34,7 @@ function renderToolbar(
     ],
     totalFiltered: 3,
     scheduledCount: 1,
+    needsBookingCount: 0,
   };
   return render(<LocationsFilterToolbar {...defaults} {...overrides} />);
 }

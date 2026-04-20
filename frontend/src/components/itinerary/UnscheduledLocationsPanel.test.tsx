@@ -24,6 +24,7 @@ function makeLocation(id: string, name: string, city: string | null = null) {
     user_image_url: null,
     attribution_name: null,
     attribution_uri: null,
+    created_at: null,
   };
 }
 

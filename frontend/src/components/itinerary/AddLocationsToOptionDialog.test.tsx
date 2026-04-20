@@ -24,6 +24,7 @@ const defaultLocations = [
     user_image_url: null,
     attribution_name: null,
     attribution_uri: null,
+    created_at: null,
   },
   {
     id: "loc-2",
@@ -45,6 +46,7 @@ const defaultLocations = [
     user_image_url: null,
     attribution_name: null,
     attribution_uri: null,
+    created_at: null,
   },
   {
     id: "loc-3",
@@ -66,6 +68,7 @@ const defaultLocations = [
     user_image_url: null,
     attribution_name: null,
     attribution_uri: null,
+    created_at: null,
   },
 ];
 

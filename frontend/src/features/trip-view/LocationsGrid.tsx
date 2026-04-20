@@ -8,7 +8,7 @@ export interface LocationsGridProps {
   filteredLocations: Location[];
   groupBy: "city" | "category" | "person" | null;
   groupedLocations: [string, Location[]][] | null;
-  scheduleFilter: "all" | "scheduled" | "unscheduled";
+  scheduleFilter: "all" | "scheduled" | "unscheduled" | "needs_booking";
   categoryFilter: string | null;
   cityFilter: string | null;
   personFilter: string | null;
