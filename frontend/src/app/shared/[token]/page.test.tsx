@@ -244,9 +244,7 @@ describe("SharedTripPage", () => {
     render(<SharedTripPage />);
     await screen.findByText("Tokyo Adventure");
     expect(
-      screen.queryByPlaceholderText(
-        /search a place.*paste a google maps link/i
-      )
+      screen.queryByPlaceholderText(/search a place.*paste a google maps link/i)
     ).not.toBeInTheDocument();
   });
 

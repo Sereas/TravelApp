@@ -228,9 +228,8 @@ export function TripView({
 
   const needsBookingCount = useMemo(
     () =>
-      filteredByNonSchedule.filter(
-        (loc) => loc.requires_booking === "yes"
-      ).length,
+      filteredByNonSchedule.filter((loc) => loc.requires_booking === "yes")
+        .length,
     [filteredByNonSchedule]
   );
 

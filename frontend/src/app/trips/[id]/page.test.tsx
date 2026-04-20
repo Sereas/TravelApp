@@ -312,9 +312,7 @@ describe("TripDetailPage", () => {
 
     await screen.findByRole("heading", { name: "Eiffel Tower" });
     expect(
-      screen.getByPlaceholderText(
-        /search a place.*paste a google maps link/i
-      )
+      screen.getByPlaceholderText(/search a place.*paste a google maps link/i)
     ).toBeInTheDocument();
   });
 
@@ -325,9 +323,7 @@ describe("TripDetailPage", () => {
 
     await screen.findByText(/ready to build your/i);
     expect(
-      screen.queryByPlaceholderText(
-        /search a place.*paste a google maps link/i
-      )
+      screen.queryByPlaceholderText(/search a place.*paste a google maps link/i)
     ).not.toBeInTheDocument();
   });
 

@@ -1,7 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Building2, ChevronDown, Map as MapIcon, Tag, User } from "lucide-react";
+import {
+  Building2,
+  ChevronDown,
+  Map as MapIcon,
+  Tag,
+  User,
+} from "lucide-react";
 import type { Location } from "@/lib/api";
 import { CATEGORY_META, type CategoryKey } from "@/lib/location-constants";
 import { FilterPill } from "./FilterPill";
@@ -162,8 +168,7 @@ export function LocationsFilterToolbar({
                 )}
                 onClick={() => onScheduleFilterChange(key)}
               >
-                {label}{" "}
-                <span className="tabular-nums">{count}</span>
+                {label} <span className="tabular-nums">{count}</span>
               </button>
             );
           })}
