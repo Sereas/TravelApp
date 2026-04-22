@@ -65,10 +65,10 @@ export function FilterPill({
           aria-expanded={open}
           aria-haspopup="listbox"
           className={cn(
-            "touch-target inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm font-medium transition-colors",
+            "touch-target inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-all duration-200",
             isActive
               ? "bg-brand-muted text-brand-strong"
-              : "text-foreground hover:bg-brand-muted"
+              : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
           )}
         >
           {icon}

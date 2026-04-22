@@ -143,13 +143,13 @@ export function LocationsFilterToolbar({
     SORT_OPTIONS.find((o) => o.key === sortBy)?.label ?? "Recently added";
 
   return (
-    <div className="mb-4 space-y-2.5">
+    <div className="mb-4 space-y-3">
       {/* Schedule status tabs + sort dropdown */}
       <div className="flex items-center gap-2">
         <div
           role="radiogroup"
           aria-label="Filter by schedule status"
-          className="flex items-center gap-1.5"
+          className="flex items-center gap-1"
         >
           {SCHEDULE_TABS.map(({ key, label }) => {
             const isActive = scheduleFilter === key;
@@ -161,32 +161,40 @@ export function LocationsFilterToolbar({
                 type="button"
                 aria-checked={isActive}
                 className={cn(
-                  "touch-target rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+                  "touch-target rounded-full px-3 py-1.5 text-[13px] font-medium transition-all duration-200",
                   isActive
-                    ? "bg-primary text-primary-foreground"
-                    : "border border-border text-muted-foreground hover:border-primary/30 hover:text-foreground"
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                 )}
                 onClick={() => onScheduleFilterChange(key)}
               >
-                {label} <span className="tabular-nums">{count}</span>
+                {label}{" "}
+                <span
+                  className={cn(
+                    "ml-0.5 tabular-nums",
+                    isActive ? "text-primary-foreground/70" : "text-muted-foreground/50"
+                  )}
+                >
+                  {count}
+                </span>
               </button>
             );
           })}
         </div>
 
         {/* Sort dropdown — right-aligned */}
-        <div className="ml-auto flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">Sort</span>
+        <div className="ml-auto flex items-center gap-1.5">
+          <span className="text-xs text-muted-foreground/60">Sort</span>
           <Popover open={sortOpen} onOpenChange={setSortOpen}>
             <PopoverTrigger asChild>
               <button
                 type="button"
                 aria-expanded={sortOpen}
                 aria-haspopup="true"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+                className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
                 {currentSortLabel}
-                <ChevronDown size={14} className="opacity-50" />
+                <ChevronDown size={12} className="opacity-40" />
               </button>
             </PopoverTrigger>
             <PopoverContent
@@ -218,12 +226,12 @@ export function LocationsFilterToolbar({
       </div>
 
       {/* Filter pills row */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-1.5">
         {/* Mobile-only Map pill */}
         <button
           type="button"
           onClick={onMapOpen}
-          className="touch-target inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-brand-muted lg:hidden"
+          className="touch-target inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-brand-muted lg:hidden"
           aria-label="Map"
         >
           <MapIcon size={14} />
