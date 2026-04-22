@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Cropper from "react-easy-crop";
+import type { Area } from "react-easy-crop";
 import { Camera, ImageOff, Loader2, Upload } from "lucide-react";
 import {
   Dialog,
@@ -15,88 +17,94 @@ const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
 const RESIZE_MAX_WIDTH = 800; // 2x retina for ~400px card width
 const RESIZE_QUALITY = 0.82;
+const CROP_ASPECT = 16 / 10; // Matches LocationCard aspect-[16/10]
 
-/** Resize an image to max width and compress as WebP (JPEG fallback).
- *  Falls back to the original file if resize fails (e.g. in test environments). */
-async function resizeImage(file: File): Promise<File> {
-  return new Promise<File>((resolve) => {
+// ---------------------------------------------------------------------------
+// Image utilities
+// ---------------------------------------------------------------------------
+
+/** Crop an image to the given pixel area, then resize to max width. */
+async function cropAndResize(
+  imageSrc: string,
+  cropArea: Area
+): Promise<File> {
+  return new Promise<File>((resolve, reject) => {
     const img = new Image();
-    let url: string;
-    try {
-      url = URL.createObjectURL(file);
-    } catch {
-      resolve(file);
-      return;
-    }
-
-    // Timeout fallback: if neither onload nor onerror fires (jsdom), resolve with original
-    const timeout = setTimeout(() => {
-      URL.revokeObjectURL(url);
-      resolve(file);
-    }, 500);
-
     img.onload = () => {
-      clearTimeout(timeout);
-      URL.revokeObjectURL(url);
-      // Skip resize if already small enough
-      if (img.width <= RESIZE_MAX_WIDTH) {
-        resolve(file);
+      // Step 1: Crop to selected area
+      const cropCanvas = document.createElement("canvas");
+      cropCanvas.width = cropArea.width;
+      cropCanvas.height = cropArea.height;
+      const cropCtx = cropCanvas.getContext("2d");
+      if (!cropCtx) {
+        reject(new Error("Canvas not supported"));
         return;
       }
-      const scale = RESIZE_MAX_WIDTH / img.width;
-      const width = RESIZE_MAX_WIDTH;
-      const height = Math.round(img.height * scale);
+      cropCtx.drawImage(
+        img,
+        cropArea.x,
+        cropArea.y,
+        cropArea.width,
+        cropArea.height,
+        0,
+        0,
+        cropArea.width,
+        cropArea.height
+      );
 
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        resolve(file);
-        return;
+      // Step 2: Resize if wider than max
+      let finalCanvas = cropCanvas;
+      if (cropArea.width > RESIZE_MAX_WIDTH) {
+        const scale = RESIZE_MAX_WIDTH / cropArea.width;
+        const resizeCanvas = document.createElement("canvas");
+        resizeCanvas.width = RESIZE_MAX_WIDTH;
+        resizeCanvas.height = Math.round(cropArea.height * scale);
+        const resizeCtx = resizeCanvas.getContext("2d");
+        if (resizeCtx) {
+          resizeCtx.drawImage(
+            cropCanvas,
+            0,
+            0,
+            resizeCanvas.width,
+            resizeCanvas.height
+          );
+          finalCanvas = resizeCanvas;
+        }
       }
-      ctx.drawImage(img, 0, 0, width, height);
 
-      // Try WebP first, fallback to JPEG
-      const outputType = "image/webp";
-      canvas.toBlob(
+      // Step 3: Export as WebP, fallback to JPEG
+      finalCanvas.toBlob(
         (blob) => {
-          if (!blob) {
-            canvas.toBlob(
-              (jpegBlob) => {
-                if (!jpegBlob) {
-                  resolve(file);
-                  return;
-                }
-                resolve(
-                  new File([jpegBlob], file.name.replace(/\.\w+$/, ".jpg"), {
-                    type: "image/jpeg",
-                  })
-                );
-              },
-              "image/jpeg",
-              RESIZE_QUALITY
-            );
+          if (blob) {
+            resolve(new File([blob], "photo.webp", { type: "image/webp" }));
             return;
           }
-          resolve(
-            new File([blob], file.name.replace(/\.\w+$/, ".webp"), {
-              type: outputType,
-            })
+          finalCanvas.toBlob(
+            (jpegBlob) => {
+              if (jpegBlob) {
+                resolve(
+                  new File([jpegBlob], "photo.jpg", { type: "image/jpeg" })
+                );
+              } else {
+                reject(new Error("Failed to export image"));
+              }
+            },
+            "image/jpeg",
+            RESIZE_QUALITY
           );
         },
-        outputType,
+        "image/webp",
         RESIZE_QUALITY
       );
     };
-    img.onerror = () => {
-      clearTimeout(timeout);
-      URL.revokeObjectURL(url);
-      resolve(file);
-    };
-    img.src = url;
+    img.onerror = () => reject(new Error("Failed to load image"));
+    img.src = imageSrc;
   });
 }
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 
 export interface PhotoUploadDialogProps {
   open: boolean;
@@ -133,6 +141,15 @@ export function PhotoUploadDialog({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
 
+  // Crop state
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
+
+  const onCropComplete = useCallback((_: Area, areaPixels: Area) => {
+    setCroppedAreaPixels(areaPixels);
+  }, []);
+
   // Clean up preview URL on unmount or file change
   useEffect(() => {
     if (!selectedFile) {
@@ -152,6 +169,9 @@ export function PhotoUploadDialog({
       setUploading(false);
       setResetting(false);
       setDragOver(false);
+      setCrop({ x: 0, y: 0 });
+      setZoom(1);
+      setCroppedAreaPixels(null);
     }
   }, [open]);
 
@@ -164,6 +184,9 @@ export function PhotoUploadDialog({
     }
     setError(null);
     setSelectedFile(file);
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+    setCroppedAreaPixels(null);
   }, []);
 
   const handleDrop = useCallback(
@@ -201,12 +224,12 @@ export function PhotoUploadDialog({
   }, [handlePaste]);
 
   async function handleUpload() {
-    if (!selectedFile) return;
+    if (!selectedFile || !preview || !croppedAreaPixels) return;
     setUploading(true);
     setError(null);
     try {
-      const optimized = await resizeImage(selectedFile);
-      await onUpload(optimized);
+      const cropped = await cropAndResize(preview, croppedAreaPixels);
+      await onUpload(cropped);
       onOpenChange(false);
     } catch (err) {
       setError(
@@ -232,7 +255,6 @@ export function PhotoUploadDialog({
     }
   }
 
-  const displayImage = preview ?? currentImageUrl;
   const busy = uploading || resetting;
 
   return (
@@ -242,15 +264,44 @@ export function PhotoUploadDialog({
           <DialogTitle>Location Photo</DialogTitle>
         </DialogHeader>
 
-        {/* Current/preview image */}
-        {displayImage && (
-          <div className="overflow-hidden rounded-lg">
-            <img
-              src={displayImage}
-              alt="Location photo preview"
-              className="h-48 w-full object-cover"
+        {/* Crop area — shown when a file is selected */}
+        {preview ? (
+          <div className="relative aspect-[16/10] w-full overflow-hidden rounded-lg bg-muted">
+            <Cropper
+              image={preview}
+              crop={crop}
+              zoom={zoom}
+              aspect={CROP_ASPECT}
+              onCropChange={setCrop}
+              onZoomChange={setZoom}
+              onCropComplete={onCropComplete}
+              objectFit="contain"
+              showGrid={false}
+              style={{
+                containerStyle: {
+                  borderRadius: "0.5rem",
+                },
+                cropAreaStyle: {
+                  border: "2px solid rgba(255,255,255,0.6)",
+                  borderRadius: "0.5rem",
+                },
+              }}
             />
+            <p className="absolute bottom-2 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/50 px-3 py-1 text-[11px] text-white/80 backdrop-blur-sm">
+              Drag to reposition &middot; Scroll to zoom
+            </p>
           </div>
+        ) : (
+          /* Current image preview (no file selected yet) */
+          currentImageUrl && (
+            <div className="overflow-hidden rounded-lg">
+              <img
+                src={currentImageUrl}
+                alt="Current location photo"
+                className="aspect-[16/10] w-full object-cover"
+              />
+            </div>
+          )
         )}
 
         {/* Drop zone */}
@@ -339,7 +390,7 @@ export function PhotoUploadDialog({
           <Button
             size="sm"
             onClick={handleUpload}
-            disabled={!selectedFile || busy}
+            disabled={!selectedFile || !croppedAreaPixels || busy}
           >
             {uploading ? (
               <Loader2 size={14} className="mr-1.5 animate-spin" />

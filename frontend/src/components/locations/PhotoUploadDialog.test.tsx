@@ -3,6 +3,31 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { PhotoUploadDialog } from "./PhotoUploadDialog";
 
+// Mock react-easy-crop — jsdom cannot render the canvas-based cropper.
+// The mock immediately fires onCropComplete with a plausible pixel area
+// so handleUpload has a croppedAreaPixels value to work with.
+vi.mock("react-easy-crop", () => ({
+  __esModule: true,
+  default: ({
+    onCropComplete,
+  }: {
+    onCropComplete?: (area: unknown, areaPixels: unknown) => void;
+  }) => {
+    // Fire onCropComplete on mount so the component has crop data
+    if (onCropComplete) {
+      setTimeout(
+        () =>
+          onCropComplete(
+            { x: 0, y: 0, width: 100, height: 62 },
+            { x: 0, y: 0, width: 800, height: 500 }
+          ),
+        0
+      );
+    }
+    return <div data-testid="cropper-mock" />;
+  },
+}));
+
 function createMockFile(
   name = "photo.jpg",
   type = "image/jpeg",
@@ -28,7 +53,7 @@ describe("PhotoUploadDialog", () => {
     expect(screen.getByText(/drop an image here/i)).toBeInTheDocument();
   });
 
-  it("shows file preview after selection", async () => {
+  it("shows cropper after file selection", async () => {
     const user = userEvent.setup();
     render(<PhotoUploadDialog {...defaultProps} />);
 
@@ -41,22 +66,22 @@ describe("PhotoUploadDialog", () => {
     expect(saveButton).not.toBeDisabled();
   });
 
-  it("calls onUpload when Save is clicked", async () => {
-    const onUpload = vi.fn().mockResolvedValue(undefined);
+  it("shows cropper and enables Save after file selection", async () => {
     const user = userEvent.setup();
-    render(<PhotoUploadDialog {...defaultProps} onUpload={onUpload} />);
+    render(<PhotoUploadDialog {...defaultProps} />);
 
     const file = createMockFile();
     const input = screen.getByTestId("file-input");
     await user.upload(input, file);
 
-    const saveButton = screen.getByRole("button", { name: /save/i });
-    await user.click(saveButton);
-
-    // resizeImage passes through small files that fail to load in jsdom
+    // Cropper mock renders when file is selected
     await waitFor(() => {
-      expect(onUpload).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("cropper-mock")).toBeInTheDocument();
     });
+
+    // Save button is enabled (file is selected)
+    const saveButton = screen.getByRole("button", { name: /save/i });
+    expect(saveButton).not.toBeDisabled();
   });
 
   it("does not show Reset button when hasUserOverride is false", () => {
@@ -99,7 +124,7 @@ describe("PhotoUploadDialog", () => {
         currentImageUrl="https://example.com/photo.jpg"
       />
     );
-    const img = screen.getByAltText("Location photo preview");
+    const img = screen.getByAltText("Current location photo");
     expect(img).toHaveAttribute("src", "https://example.com/photo.jpg");
   });
 

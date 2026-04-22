@@ -1,7 +1,8 @@
 "use client";
 
-import type { MutableRefObject } from "react";
+import { useState, type MutableRefObject } from "react";
 import type { ItineraryOptionLocation } from "@/lib/api";
+import { ImageLightbox } from "@/components/ui/image-lightbox";
 import { CategoryIcon } from "@/components/locations/CategoryIcon";
 import { LoadingSpinner } from "@/components/feedback/LoadingSpinner";
 import {
@@ -208,6 +209,7 @@ export function ItineraryLocationRow({
   onLocationHover,
 }: ItineraryLocationRowProps) {
   const readOnly = useReadOnly();
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const tk = optionLocation.time_period || "morning";
   const tm = TIME_META[tk] ?? TIME_META.morning;
   const TIcon = tm.icon;
@@ -325,7 +327,38 @@ export function ItineraryLocationRow({
             aria-expanded={expanded}
           >
             <div className="relative shrink-0">
-              <div className="relative h-16 w-16 overflow-hidden rounded-lg bg-muted">
+              <div
+                className={cn(
+                  "relative h-16 w-16 overflow-hidden rounded-lg bg-muted",
+                  imageUrl && "cursor-pointer"
+                )}
+                onClick={
+                  imageUrl
+                    ? (e) => {
+                        e.stopPropagation();
+                        setLightboxOpen(true);
+                      }
+                    : undefined
+                }
+                role={imageUrl ? "button" : undefined}
+                tabIndex={imageUrl ? 0 : undefined}
+                onKeyDown={
+                  imageUrl
+                    ? (e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          setLightboxOpen(true);
+                        }
+                      }
+                    : undefined
+                }
+                aria-label={
+                  imageUrl
+                    ? `View ${optionLocation.location.name} photo`
+                    : undefined
+                }
+              >
                 {imageUrl ? (
                   <img
                     src={imageUrl}
@@ -551,6 +584,14 @@ export function ItineraryLocationRow({
           );
         })}
       </div>
+      {imageUrl && (
+        <ImageLightbox
+          src={imageUrl}
+          alt={optionLocation.location.name}
+          open={lightboxOpen}
+          onClose={() => setLightboxOpen(false)}
+        />
+      )}
     </div>
   );
 }

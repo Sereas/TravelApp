@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { PhotoUploadDialog } from "./PhotoUploadDialog";
+import { ImageLightbox } from "@/components/ui/image-lightbox";
 import { api } from "@/lib/api";
 
 export interface LocationCardProps {
@@ -66,6 +67,8 @@ export interface LocationCardProps {
   deleteTrigger?: React.ReactNode;
   onCardClick?: () => void;
   isHighlighted?: boolean;
+  /** Called with location id on mouseenter, null on mouseleave. */
+  onLocationHover?: (locationId: string | null) => void;
   className?: string;
   /** Trip ID — required for inline editing saves. */
   tripId?: string;
@@ -460,6 +463,7 @@ export function LocationCard({
   deleteTrigger,
   onCardClick,
   isHighlighted,
+  onLocationHover,
   className,
   tripId,
   onLocationUpdated,
@@ -468,6 +472,7 @@ export function LocationCard({
   const canDelete = !readOnly && (onDelete != null || deleteTrigger != null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [photoDialogOpen, setPhotoDialogOpen] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const [flipped, setFlipped] = useState(false);
   const [noteExpanded, setNoteExpanded] = useState(false);
   const [noteClamped, setNoteClamped] = useState(false);
@@ -527,6 +532,8 @@ export function LocationCard({
         }
         onCardClick();
       }}
+      onMouseEnter={() => onLocationHover?.(id)}
+      onMouseLeave={() => onLocationHover?.(null)}
     >
       <div
         className={cn(
@@ -547,9 +554,23 @@ export function LocationCard({
                 <img
                   src={effectiveImageUrl}
                   alt={eName ?? name}
-                  className="h-full w-full object-cover"
+                  className="h-full w-full cursor-pointer object-cover transition-transform duration-300 hover:scale-[1.02]"
                   loading="lazy"
                   sizes="(min-width: 1024px) 30vw, (min-width: 640px) 50vw, 100vw"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setLightboxOpen(true);
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setLightboxOpen(true);
+                    }
+                  }}
+                  aria-label={`View ${eName ?? name} photo full size`}
                 />
                 {showAttribution && (
                   <div className="absolute bottom-0 right-0 bg-black/50 px-1.5 py-0.5 text-[10px] leading-tight text-white/80">
@@ -1227,6 +1248,14 @@ export function LocationCard({
           hasUserOverride={user_image_url != null && user_image_url !== ""}
           onUpload={onPhotoUpload}
           onReset={onPhotoReset}
+        />
+      )}
+      {effectiveImageUrl && (
+        <ImageLightbox
+          src={effectiveImageUrl}
+          alt={eName ?? name}
+          open={lightboxOpen}
+          onClose={() => setLightboxOpen(false)}
         />
       )}
     </div>

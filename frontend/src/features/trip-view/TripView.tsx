@@ -188,6 +188,9 @@ export function TripView({
   const [placesMapSheetOpen, setPlacesMapSheetOpen] = useState(false);
 
   const { itinerary, availableDays, itineraryLocationMap } = itineraryState;
+  const [cardHoveredLocationId, setCardHoveredLocationId] = useState<
+    string | null
+  >(null);
 
   // ---- derived filter state ----------------------------------------------
   const categoryOptions = useMemo(() => {
@@ -333,6 +336,7 @@ export function TripView({
           tripId={tripId}
           onLocationUpdated={onLocationUpdated}
           isHighlighted={highlightedLocationId === loc.id}
+          onLocationHover={setCardHoveredLocationId}
           onCardClick={onCardClick ? () => onCardClick(loc.id) : undefined}
           deleteTrigger={
             isReadOnly || !renderLocationDeleteTrigger
@@ -562,6 +566,7 @@ export function TripView({
                     open={placesMapSheetOpen}
                     onOpenChange={setPlacesMapSheetOpen}
                     renderMobileButton={false}
+                    highlightedLocationId={cardHoveredLocationId}
                   />
                 </div>
               </div>

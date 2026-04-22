@@ -71,6 +71,7 @@ export interface PlacesSidebarMapTriggerProps {
    * `onOpenChange`. The sheet itself is always rendered.
    */
   renderMobileButton?: boolean;
+  highlightedLocationId?: string | null;
 }
 
 export function PlacesSidebarMapTrigger({
@@ -84,6 +85,7 @@ export function PlacesSidebarMapTrigger({
   open,
   onOpenChange,
   renderMobileButton = true,
+  highlightedLocationId,
 }: PlacesSidebarMapTriggerProps) {
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const sheetOpen = open ?? uncontrolledOpen;
@@ -118,6 +120,7 @@ export function PlacesSidebarMapTrigger({
           onLocationNoteSave={onLocationNoteSave}
           onLocationDelete={onLocationDelete}
           readOnly={readOnly}
+          highlightedLocationId={highlightedLocationId}
         />
       </div>
 

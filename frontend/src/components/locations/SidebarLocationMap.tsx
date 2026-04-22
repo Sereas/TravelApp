@@ -42,6 +42,8 @@ interface SidebarLocationMapProps {
    * would be redundant and opens a nested Radix Dialog.
    */
   showExpand?: boolean;
+  /** Externally-driven highlight — when a location card is hovered. */
+  highlightedLocationId?: string | null;
 }
 
 export function SidebarLocationMap({
@@ -53,6 +55,7 @@ export function SidebarLocationMap({
   onLocationDelete,
   readOnly,
   showExpand = true,
+  highlightedLocationId,
 }: SidebarLocationMapProps) {
   const [fullscreen, setFullscreen] = useState(false);
 
@@ -116,6 +119,7 @@ export function SidebarLocationMap({
             focusLocationId={focusLocationId}
             focusSeq={focusSeq}
             onPinClick={onPinClick}
+            highlightedLocationId={highlightedLocationId}
           />
         </div>
       </div>
