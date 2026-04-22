@@ -170,7 +170,7 @@ export function ItineraryDayHeader({
         </div>
 
         {currentOption && (
-          <div className="mt-3 text-sm">
+          <div className="mt-2 text-sm">
             {readOnly ? (
               (currentOption.starting_city || currentOption.ending_city) && (
                 <div className="flex items-center gap-2 text-muted-foreground">

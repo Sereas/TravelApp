@@ -112,7 +112,7 @@ export function ItineraryPlanSwitcher({
           <button
             type="button"
             id={`plan-switch-${day.id}`}
-            className="inline-flex items-center gap-1.5 rounded-full bg-foreground px-3 py-1.5 text-xs font-medium text-background shadow-sm outline-none transition-all hover:bg-foreground/85 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            className="inline-flex items-center gap-1.5 rounded-full bg-brand-muted px-3 py-1.5 text-xs font-medium text-brand-strong outline-none transition-all duration-200 hover:bg-brand-muted/70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             title="Choose plan for this day"
             aria-haspopup="listbox"
             aria-expanded={planMenuOpen}
