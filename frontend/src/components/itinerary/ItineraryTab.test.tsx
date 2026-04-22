@@ -11,15 +11,12 @@
  *
  * Phase 4 contracts (mobile itinerary layout):
  *   - Grid breakpoint is `lg:` not `xl:` for the sidebar column.
- *   - ItineraryInspectorPanel and UnscheduledLocationsPanel render BOTH in a
- *     `lg:hidden` mobile inline wrapper AND in a `hidden lg:flex` desktop
- *     sidebar wrapper (dual-render pattern).
+ *   - ItineraryInspectorPanel renders in a `lg:hidden` mobile inline wrapper.
+ *     On desktop it overlays the sidebar map (inside SidebarMap component).
  *   - A mobile Map pill button with `lg:hidden` class opens a Sheet (dialog)
  *     containing the day map.
  *   - The mobile Map button is absent when the itinerary has no days.
  *   - The mobile Map button is visible in both edit and read-only modes.
- *   - UnscheduledLocationsPanel respects the `!readOnly && itineraryMutations`
- *     gate in BOTH mobile and desktop render trees.
  *   - The desktop SidebarMap expand Dialog remains functional (not broken).
  */
 import { render, screen } from "@testing-library/react";
@@ -54,10 +51,6 @@ vi.mock("@/components/itinerary/ItineraryRouteManager", () => ({
 
 vi.mock("@/components/itinerary/AddLocationsToOptionDialog", () => ({
   AddLocationsToOptionDialog: () => <div data-testid="add-locs-dialog-mock" />,
-}));
-
-vi.mock("@/components/itinerary/UnscheduledLocationsPanel", () => ({
-  UnscheduledLocationsPanel: () => <div data-testid="unscheduled-mock" />,
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -307,32 +300,13 @@ describe("ItineraryTab — Phase 4 mobile layout contracts", () => {
     expect(hasDesktopInspector).toBe(true);
   });
 
-  it("both mobile and desktop ItineraryInspectorPanel instances are in the DOM simultaneously (dual-render)", () => {
-    renderItineraryTab(
+  it("mobile ItineraryInspectorPanel is rendered inside an lg:hidden wrapper", () => {
+    const { container } = renderItineraryTab(
       { itineraryState: makeReadOnlyItineraryState(sampleItinerary) },
       { readOnly: true }
     );
-    // Dual-render means both a mobile (lg:hidden) copy and a desktop (hidden lg:*)
-    // copy exist at the same time. There must be at least 2 inspector-mock nodes.
-    const inspectors = screen.getAllByTestId("inspector-mock");
-    expect(inspectors.length).toBeGreaterThanOrEqual(2);
-  });
-
-  // -------------------------------------------------------------------------
-  // Mobile inline layout — UnscheduledLocationsPanel gate
-  // -------------------------------------------------------------------------
-
-  it("renders UnscheduledLocationsPanel inside an lg:hidden wrapper in edit mode (mobile inline)", () => {
-    const mutations = makeItineraryMutations();
-    const { container } = renderItineraryTab(
-      {
-        itineraryState: makeReadOnlyItineraryState(sampleItinerary),
-        itineraryMutations: mutations,
-      },
-      { readOnly: false }
-    );
-    const allUnscheduled = screen.getAllByTestId("unscheduled-mock");
-    const hasMobileUnscheduled = allUnscheduled.some((el) => {
+    const allInspectors = screen.getAllByTestId("inspector-mock");
+    const hasMobileInspector = allInspectors.some((el) => {
       let node: HTMLElement | null = el.parentElement;
       while (node && node !== container) {
         if (node.className.toString().includes("lg:hidden")) return true;
@@ -340,52 +314,7 @@ describe("ItineraryTab — Phase 4 mobile layout contracts", () => {
       }
       return false;
     });
-    expect(hasMobileUnscheduled).toBe(true);
-  });
-
-  it("mobile UnscheduledLocationsPanel is NOT rendered in read-only mode", () => {
-    renderItineraryTab(
-      {
-        itineraryState: makeReadOnlyItineraryState(sampleItinerary),
-        itineraryMutations: undefined,
-      },
-      { readOnly: true }
-    );
-    expect(screen.queryByTestId("unscheduled-mock")).not.toBeInTheDocument();
-  });
-
-  it("renders UnscheduledLocationsPanel inside a hidden lg:block/flex wrapper in edit mode (desktop sticky)", () => {
-    const mutations = makeItineraryMutations();
-    const { container } = renderItineraryTab(
-      {
-        itineraryState: makeReadOnlyItineraryState(sampleItinerary),
-        itineraryMutations: mutations,
-      },
-      { readOnly: false }
-    );
-    const allUnscheduled = screen.getAllByTestId("unscheduled-mock");
-    const hasDesktopUnscheduled = allUnscheduled.some((el) => {
-      let node: HTMLElement | null = el.parentElement;
-      while (node && node !== container) {
-        const cls = node.className.toString();
-        if (cls.includes("hidden") && /lg:(block|flex|grid)/.test(cls))
-          return true;
-        node = node.parentElement;
-      }
-      return false;
-    });
-    expect(hasDesktopUnscheduled).toBe(true);
-  });
-
-  it("desktop UnscheduledLocationsPanel is NOT rendered in read-only mode", () => {
-    renderItineraryTab(
-      {
-        itineraryState: makeReadOnlyItineraryState(sampleItinerary),
-        itineraryMutations: undefined,
-      },
-      { readOnly: true }
-    );
-    expect(screen.queryByTestId("unscheduled-mock")).not.toBeInTheDocument();
+    expect(hasMobileInspector).toBe(true);
   });
 
   // -------------------------------------------------------------------------

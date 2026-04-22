@@ -13,7 +13,6 @@ import {
   type MapRoutePolyline,
 } from "@/components/itinerary/ItineraryDayMap";
 import { ItineraryInspectorPanel } from "@/components/itinerary/ItineraryInspectorPanel";
-import { UnscheduledLocationsPanel } from "@/components/itinerary/UnscheduledLocationsPanel";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -152,6 +151,7 @@ interface SidebarMapProps {
   ) => Promise<void> | void;
   onLocationDelete?: (locationId: string) => Promise<void> | void;
   readOnly?: boolean;
+  highlightedLocationId?: string | null;
 }
 
 const SidebarMap = React.memo(function SidebarMap({
@@ -161,6 +161,7 @@ const SidebarMap = React.memo(function SidebarMap({
   onLocationNoteSave,
   onLocationDelete,
   readOnly,
+  highlightedLocationId,
 }: SidebarMapProps) {
   const [expanded, setExpanded] = useState(false);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
@@ -197,7 +198,7 @@ const SidebarMap = React.memo(function SidebarMap({
 
   if (mapLocations.length === 0) {
     return (
-      <div className="flex items-center justify-center rounded-2xl border border-border bg-card p-6">
+      <div className="flex h-full items-center justify-center rounded-2xl border border-border bg-card p-6">
         <div className="flex flex-col items-center gap-1 text-center">
           <MapPin size={20} className="text-muted-foreground/30" />
           <span className="text-xs text-muted-foreground/50">
@@ -210,16 +211,15 @@ const SidebarMap = React.memo(function SidebarMap({
 
   return (
     <>
-      {/* Compact preview — map is fully interactive */}
-      <div className="relative overflow-hidden rounded-2xl border border-border bg-card">
-        <div className="h-[180px]">
-          <ItineraryDayMap
-            locations={mapLocations}
-            routes={mapRoutes}
-            compact
-            disablePopups
-          />
-        </div>
+      {/* Compact preview — map fills available sidebar space */}
+      <div className="relative h-full overflow-hidden rounded-2xl border border-border bg-card">
+        <ItineraryDayMap
+          locations={mapLocations}
+          routes={mapRoutes}
+          compact
+          disablePopups
+          highlightedLocationId={highlightedLocationId}
+        />
         <button
           type="button"
           onClick={() => setExpanded(true)}
@@ -399,7 +399,6 @@ export function ItineraryTab({
     createOptionLoading,
     calculatingRouteId,
     routeMetricsError,
-    itineraryLocationMap,
     availableDays,
     fetchItinerary,
     clearItineraryActionError,
@@ -409,6 +408,9 @@ export function ItineraryTab({
 
   const readOnly = useReadOnly();
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
+  const [hoveredLocationId, setHoveredLocationId] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     if (!itinerary?.days.length) {
@@ -440,18 +442,6 @@ export function ItineraryTab({
     if (selectedDay) return [selectedDay];
     return [itinerary.days[0]];
   }, [itinerary, selectedDay]);
-
-  const currentDayCities = useMemo(() => {
-    const opt = selectedDay ? getSelectedOption(selectedDay) : undefined;
-    if (!opt) return new Set<string>();
-    const cities = new Set<string>();
-    if (opt.starting_city) cities.add(opt.starting_city.toLowerCase());
-    if (opt.ending_city) cities.add(opt.ending_city.toLowerCase());
-    for (const ol of opt.locations) {
-      if (ol.location.city) cities.add(ol.location.city.toLowerCase());
-    }
-    return cities;
-  }, [selectedDay, getSelectedOption]);
 
   // Mobile map sheet — same locations + routes as the desktop SidebarMap
   // compact preview. Computed here at render scope so both the sheet
@@ -685,80 +675,50 @@ export function ItineraryTab({
                         onInspectLocation={(dayId) => {
                           setSelectedDayId(dayId);
                         }}
+                        onLocationHover={setHoveredLocationId}
                       />
                     </div>
                   );
                 })}
 
-                {/* Mobile-inline Inspector + Unscheduled panels.
-                 *
-                 * Architect's Phase 4 decision (option d): the day map
-                 * goes into a bottom sheet (above), but Inspector and
-                 * Unscheduled are authoring tools used *while looking
-                 * at the day card* — burying them behind a sheet would
-                 * break the editing workflow. So they stay inline in
-                 * the main column on mobile.
-                 *
-                 * On desktop (`lg+`) these render in the sticky sidebar
-                 * below (`hidden lg:block`). Both trees are always in
-                 * the DOM; CSS handles visibility. */}
-                <div className="space-y-4 lg:hidden">
+                {/* Mobile-inline Inspector panel. On desktop this
+                 * overlays the sidebar map instead. */}
+                <div className="lg:hidden">
                   <ItineraryInspectorPanel
                     day={selectedDay}
                     currentOption={
                       selectedDay ? getSelectedOption(selectedDay) : undefined
                     }
                   />
-                  {!readOnly && itineraryMutations && (
-                    <UnscheduledLocationsPanel
-                      locations={locations}
-                      itineraryLocationMap={itineraryLocationMap}
-                      currentDayId={
-                        selectedDayId ?? itinerary.days[0]?.id ?? null
-                      }
-                      currentDayCities={currentDayCities}
-                      onScheduleToDay={
-                        itineraryMutations.handleScheduleLocationToDay
-                      }
-                    />
-                  )}
                 </div>
               </div>
 
               {/* Desktop-only sticky sidebar. Hidden on mobile — the
                * day map is reachable via the Map button + Sheet above,
-               * and Inspector + Unscheduled render inline below the
-               * day cards. */}
-              <div className="hidden space-y-4 lg:block lg:sticky lg:top-[6.75rem] lg:self-start">
-                <SidebarMap
-                  selectedDay={selectedDay}
-                  getSelectedOption={getSelectedOption}
-                  locations={locations}
-                  onLocationNoteSave={
-                    itineraryMutations?.handleLocationNoteSave
-                  }
-                  onLocationDelete={itineraryMutations?.handleLocationDelete}
-                  readOnly={readOnly}
-                />
+               * and Inspector renders inline below the day cards.
+               * Uses the same flex-fill pattern as the locations tab:
+               * max-h viewport cap → flex-col → inspector shrink-0 →
+               * map flex-1 fills the rest. */}
+              <div className="hidden lg:sticky lg:top-[6.75rem] lg:flex lg:max-h-[calc(100vh-8rem)] lg:flex-col lg:gap-4 lg:overflow-hidden lg:pb-2">
                 <ItineraryInspectorPanel
                   day={selectedDay}
                   currentOption={
                     selectedDay ? getSelectedOption(selectedDay) : undefined
                   }
                 />
-                {!readOnly && itineraryMutations && (
-                  <UnscheduledLocationsPanel
+                <div className="min-h-0 lg:flex-1">
+                  <SidebarMap
+                    selectedDay={selectedDay}
+                    getSelectedOption={getSelectedOption}
                     locations={locations}
-                    itineraryLocationMap={itineraryLocationMap}
-                    currentDayId={
-                      selectedDayId ?? itinerary.days[0]?.id ?? null
+                    onLocationNoteSave={
+                      itineraryMutations?.handleLocationNoteSave
                     }
-                    currentDayCities={currentDayCities}
-                    onScheduleToDay={
-                      itineraryMutations.handleScheduleLocationToDay
-                    }
+                    onLocationDelete={itineraryMutations?.handleLocationDelete}
+                    readOnly={readOnly}
+                    highlightedLocationId={hoveredLocationId}
                   />
-                )}
+                </div>
               </div>
             </div>
           </div>

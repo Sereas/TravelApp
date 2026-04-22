@@ -168,6 +168,7 @@ export interface ItineraryDayCardProps {
   calculatingRouteId: string | null;
   routeMetricsError: Record<string, string>;
   onInspectLocation: (dayId: string, locationId: string) => void;
+  onLocationHover?: (locationId: string | null) => void;
 }
 
 // Shared no-op fallbacks used when mutation callbacks are omitted (shared
@@ -200,6 +201,7 @@ export function ItineraryDayCard({
   calculatingRouteId,
   routeMetricsError,
   onInspectLocation,
+  onLocationHover,
 }: ItineraryDayCardProps) {
   const readOnly = useReadOnly();
 
@@ -569,6 +571,7 @@ export function ItineraryDayCard({
                   )
                 }
                 onRemoveLocation={safeRemoveLocation}
+                onLocationHover={onLocationHover}
                 onDropAtEnd={(e) => {
                   e.preventDefault();
                   e.dataTransfer.dropEffect = "move";

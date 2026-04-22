@@ -241,6 +241,17 @@ Page Object Models in `frontend/e2e/pages/`, helpers in `frontend/e2e/helpers/`,
 
 If services are not running when E2E is triggered, **prompt the user to start them** — do not skip or bypass E2E testing.
 
+## UI Change Verification (Mandatory)
+
+**Every UI change must be visually verified via Playwright before reporting the task as complete.** Do not rely on passing unit tests or type checks alone — they verify code correctness, not feature correctness.
+
+### Verification procedure
+
+1. **Ensure services are running.** Frontend (`http://localhost:3000`) and backend (`http://0.0.0.0:8000`) must be live. If they are not running, **prompt the user to start them** — do not start them yourself.
+2. **Use the France trip** in the E2E test account for visual verification. E2E credentials are stored in `frontend/e2e/.env.e2e` (see `frontend/e2e/helpers/env.ts` for `E2E_USER_EMAIL` / `E2E_USER_PASSWORD`).
+3. **Use Playwright** (`mcp__playwright__*` tools) to log in, navigate to the trip, and verify the change visually — take screenshots, check element visibility, hover interactions, etc.
+4. **Do not skip this step** because a task "feels simple" or unit tests pass.
+
 ## Database Performance Rules
 
 DB requests and performance are the highest priority concern in this codebase.

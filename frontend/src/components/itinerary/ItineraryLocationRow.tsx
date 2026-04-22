@@ -175,6 +175,8 @@ interface ItineraryLocationRowProps {
     optionId: string,
     locationId: string
   ) => void;
+  /** Called with location_id on mouseenter, null on mouseleave. */
+  onLocationHover?: (locationId: string | null) => void;
 }
 
 export function ItineraryLocationRow({
@@ -203,6 +205,7 @@ export function ItineraryLocationRow({
   onToggleTimePicker,
   onInspectLocation,
   onRemoveLocation,
+  onLocationHover,
 }: ItineraryLocationRowProps) {
   const readOnly = useReadOnly();
   const tk = optionLocation.time_period || "morning";
@@ -309,6 +312,8 @@ export function ItineraryLocationRow({
                 ? "border-primary/20 bg-primary/5 shadow-sm"
                 : "border-border/40 bg-white hover:border-primary/10 hover:shadow-sm dark:border-card dark:bg-card"
           )}
+          onMouseEnter={() => onLocationHover?.(optionLocation.location_id)}
+          onMouseLeave={() => onLocationHover?.(null)}
         >
           <button
             type="button"

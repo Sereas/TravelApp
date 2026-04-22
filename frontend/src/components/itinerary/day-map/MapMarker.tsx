@@ -7,6 +7,18 @@ import {
   type CategoryKey,
 } from "@/lib/location-constants";
 
+// Inject keyframe once — markers render inside imperatively-created React
+// roots outside the normal DOM tree, so Tailwind @keyframes won't reach them.
+if (typeof document !== "undefined" && !document.getElementById("marker-pulse-keyframes")) {
+  const style = document.createElement("style");
+  style.id = "marker-pulse-keyframes";
+  style.textContent = [
+    `@keyframes marker-breathe{0%,100%{transform:scale(1.06)}50%{transform:scale(1.14)}}`,
+    `@media(prefers-reduced-motion:reduce){.marker-breathe{animation:none!important;transform:scale(1.1)!important}}`,
+  ].join("");
+  document.head.appendChild(style);
+}
+
 function getCategoryColors(category: string | null | undefined): {
   text: string;
 } {
@@ -42,6 +54,8 @@ export function MapMarker({
   const showLabel = isHovered && !isOpen;
   const active = isOpen || isSelected;
 
+  const highlighted = isHovered && !active;
+
   return (
     <div
       className="relative flex flex-col items-center"
@@ -50,9 +64,10 @@ export function MapMarker({
         // below catches them. This keeps the hit area small and stable when
         // pins are close together, so hover switches feel responsive.
         pointerEvents: "none",
-        filter: active
+        filter: active || highlighted
           ? "drop-shadow(0 2px 8px rgba(0,0,0,.3))"
           : "drop-shadow(0 1px 4px rgba(0,0,0,.18))",
+        transition: "filter 200ms ease-out",
       }}
       title={name}
     >
@@ -84,16 +99,17 @@ export function MapMarker({
       {/* Pin body — teardrop with category icon. Only element that captures
           pointer events (cursor + clicks). */}
       <div
-        className="relative flex cursor-pointer items-center justify-center transition-transform duration-150"
+        className={highlighted ? "marker-breathe relative flex cursor-pointer items-center justify-center" : "relative flex cursor-pointer items-center justify-center"}
         style={{
           width: 34,
           height: 40,
           pointerEvents: "auto",
-          transform: active
-            ? "scale(1.2)"
-            : isHovered
-              ? "scale(1.08)"
-              : "scale(1)",
+          ...(highlighted
+            ? { animation: "marker-breathe 1.5s ease-in-out infinite" }
+            : {
+                transform: active ? "scale(1.2)" : "scale(1)",
+                transition: "transform 150ms cubic-bezier(0.25, 1, 0.5, 1)",
+              }),
         }}
       >
         <svg
@@ -104,9 +120,9 @@ export function MapMarker({
         >
           <path
             d="M17 39C17 39 32 23.5 32 14.5C32 6.492 25.284 0.5 17 0.5C8.716 0.5 2 6.492 2 14.5C2 23.5 17 39 17 39Z"
-            fill={active ? colors.text : "white"}
+            fill={active || highlighted ? colors.text : "white"}
             stroke={colors.text}
-            strokeWidth={active ? "0" : "1.5"}
+            strokeWidth={active || highlighted ? "0" : "1.5"}
           />
         </svg>
         <div
@@ -117,7 +133,7 @@ export function MapMarker({
             category={categoryKey}
             size={16}
             className="shrink-0"
-            style={{ color: active ? "white" : colors.text }}
+            style={{ color: active || highlighted ? "white" : colors.text }}
           />
         </div>
       </div>

@@ -52,6 +52,7 @@ interface ItineraryDayTimelineProps {
     locationId: string
   ) => void;
   onDropAtEnd: (e: React.DragEvent) => void;
+  onLocationHover?: (locationId: string | null) => void;
 }
 
 const TIME_SECTIONS = [
@@ -109,6 +110,7 @@ export function ItineraryDayTimeline({
   onToggleTimePicker,
   onRemoveLocation,
   onDropAtEnd,
+  onLocationHover,
 }: ItineraryDayTimelineProps) {
   if (sorted.length === 0) {
     return (
@@ -220,6 +222,7 @@ export function ItineraryDayTimeline({
                     onInspectLocation={onInspectLocation}
                     onToggleTimePicker={onToggleTimePicker}
                     onRemoveLocation={onRemoveLocation}
+                    onLocationHover={onLocationHover}
                   />
                 );
               })}

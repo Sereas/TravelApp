@@ -64,6 +64,10 @@ interface ItineraryDayMapProps {
    *  popup content is rendered into an imperatively-created `createRoot`
    *  outside the React tree and would not inherit context. */
   readOnly?: boolean;
+  /** Externally-driven highlight — when a location card is hovered,
+   *  the parent sets this to the location_id so the corresponding pin
+   *  gets the `isHovered` visual treatment (scale + pulse). */
+  highlightedLocationId?: string | null;
 }
 
 export function ItineraryDayMap({
@@ -78,6 +82,7 @@ export function ItineraryDayMap({
   onLocationNoteSave,
   onLocationDelete,
   readOnly,
+  highlightedLocationId,
 }: ItineraryDayMapProps & { compact?: boolean }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -901,6 +906,22 @@ export function ItineraryDayMap({
       duration: 500,
     });
   }, [focusLocationId, focusSeq]);
+
+  // Sync external highlight (card hover) into the hover ref so the
+  // corresponding pin gets the isHovered visual treatment. When the
+  // external highlight is cleared (null), we only reset if the ref
+  // still points to the externally-set id — cursor-proximity hover
+  // may have already moved it elsewhere.
+  useEffect(() => {
+    if (highlightedLocationId) {
+      hoveredLocationIdRef.current = highlightedLocationId;
+      renderAllMarkersRef.current?.();
+    } else if (hoveredLocationIdRef.current && !cursorPosRef.current) {
+      // Only clear if cursor isn't actively hovering (proximity-based)
+      hoveredLocationIdRef.current = null;
+      renderAllMarkersRef.current?.();
+    }
+  }, [highlightedLocationId]);
 
   return (
     <div
