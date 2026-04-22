@@ -988,32 +988,6 @@ COMMENT ON TABLE public.google_api_usage IS 'Per-user per-day counter for Google
 
 COMMENT ON COLUMN public.google_api_usage.count IS 'Monotonic counter for (user_id, date, endpoint). Never decremented — housekeeping should DELETE rows older than ~32 days in a future migration.';
 
-CREATE TABLE public.place_detail_cache (
-    google_place_id text NOT NULL,
-    name text NOT NULL,
-    formatted_address text,
-    city text,
-    latitude double precision,
-    longitude double precision,
-    google_types text[] DEFAULT '{}'::text[] NOT NULL,
-    suggested_category text,
-    photo_resource_name text,
-    cached_at timestamp with time zone DEFAULT now() NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT place_detail_cache_latitude_check CHECK (((latitude IS NULL) OR ((latitude >= ('-90'::integer)::double precision) AND (latitude <= (90)::double precision)))),
-    CONSTRAINT place_detail_cache_longitude_check CHECK (((longitude IS NULL) OR ((longitude >= ('-180'::integer)::double precision) AND (longitude <= (180)::double precision))))
-);
-
-ALTER TABLE public.place_detail_cache OWNER TO postgres;
-
-COMMENT ON TABLE public.place_detail_cache IS 'Cached Google Place Details responses keyed by google_place_id. Global cache shared across all users/trips. Avoids redundant Place Details Pro API calls ($17/1000).';
-
-COMMENT ON COLUMN public.place_detail_cache.google_types IS 'Raw Google place type tags (e.g. restaurant, museum). Stored so suggested_category can be re-derived if mapping logic changes.';
-
-COMMENT ON COLUMN public.place_detail_cache.photo_resource_name IS 'Google Places photo resource (e.g. places/X/photos/Y). May expire; failure to fetch is handled gracefully by ensure_place_photo.';
-
-COMMENT ON COLUMN public.place_detail_cache.cached_at IS 'Timestamp of the Google API call that populated this row. Enables future TTL-based invalidation.';
-
 CREATE TABLE public.locations (
     location_id uuid DEFAULT gen_random_uuid() NOT NULL,
     trip_id uuid NOT NULL,
@@ -1075,6 +1049,32 @@ CREATE TABLE public.option_routes (
 );
 
 ALTER TABLE public.option_routes OWNER TO postgres;
+
+CREATE TABLE public.place_detail_cache (
+    google_place_id text NOT NULL,
+    name text NOT NULL,
+    formatted_address text,
+    city text,
+    latitude double precision,
+    longitude double precision,
+    google_types text[] DEFAULT '{}'::text[] NOT NULL,
+    suggested_category text,
+    photo_resource_name text,
+    cached_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT place_detail_cache_latitude_check CHECK (((latitude IS NULL) OR ((latitude >= ('-90'::integer)::double precision) AND (latitude <= (90)::double precision)))),
+    CONSTRAINT place_detail_cache_longitude_check CHECK (((longitude IS NULL) OR ((longitude >= ('-180'::integer)::double precision) AND (longitude <= (180)::double precision))))
+);
+
+ALTER TABLE public.place_detail_cache OWNER TO postgres;
+
+COMMENT ON TABLE public.place_detail_cache IS 'Cached Google Place Details responses keyed by google_place_id. Global cache shared across all users/trips. Avoids redundant Place Details Pro API calls ($17/1000).';
+
+COMMENT ON COLUMN public.place_detail_cache.google_types IS 'Raw Google place type tags (e.g. restaurant, museum). Stored so suggested_category can be re-derived if mapping logic changes.';
+
+COMMENT ON COLUMN public.place_detail_cache.photo_resource_name IS 'Google Places photo resource (e.g. places/X/photos/Y). May expire; failure to fetch is handled gracefully by ensure_place_photo.';
+
+COMMENT ON COLUMN public.place_detail_cache.cached_at IS 'Timestamp of the Google API call that populated this row. Enables future TTL-based invalidation.';
 
 CREATE TABLE public.place_photos (
     google_place_id text NOT NULL,
@@ -1327,8 +1327,6 @@ CREATE POLICY locations_update_own_trip ON public.locations FOR UPDATE USING ((E
 
 ALTER TABLE public.option_locations ENABLE ROW LEVEL SECURITY;
 
-ALTER TABLE public.place_detail_cache ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY option_locations_delete_own_trip ON public.option_locations FOR DELETE USING ((EXISTS ( SELECT 1
    FROM ((public.day_options o
      JOIN public.trip_days d ON ((d.day_id = o.day_id)))
@@ -1378,6 +1376,8 @@ CREATE POLICY option_routes_update ON public.option_routes FOR UPDATE USING ((EX
      JOIN public.trip_days d ON ((d.day_id = o.day_id)))
      JOIN public.trips t ON ((t.trip_id = d.trip_id)))
   WHERE ((o.option_id = option_routes.option_id) AND (t.user_id = ( SELECT auth.uid() AS uid))))));
+
+ALTER TABLE public.place_detail_cache ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE public.place_photos ENABLE ROW LEVEL SECURITY;
 
