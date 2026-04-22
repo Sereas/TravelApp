@@ -24,10 +24,7 @@ const CROP_ASPECT = 16 / 10; // Matches LocationCard aspect-[16/10]
 // ---------------------------------------------------------------------------
 
 /** Crop an image to the given pixel area, then resize to max width. */
-async function cropAndResize(
-  imageSrc: string,
-  cropArea: Area
-): Promise<File> {
+async function cropAndResize(imageSrc: string, cropArea: Area): Promise<File> {
   return new Promise<File>((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
