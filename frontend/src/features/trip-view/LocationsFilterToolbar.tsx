@@ -172,7 +172,9 @@ export function LocationsFilterToolbar({
                 <span
                   className={cn(
                     "ml-0.5 tabular-nums",
-                    isActive ? "text-primary-foreground/70" : "text-muted-foreground/50"
+                    isActive
+                      ? "text-primary-foreground/70"
+                      : "text-muted-foreground/50"
                   )}
                 >
                   {count}

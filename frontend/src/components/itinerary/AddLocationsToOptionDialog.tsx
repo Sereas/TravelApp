@@ -83,7 +83,12 @@ function buildExistingMatches(
 
 /** Build Google suggestion items, annotated with pool matches. */
 function buildGoogleItems(
-  suggestions: { place_id: string; main_text: string; secondary_text: string | null; types: string[] }[],
+  suggestions: {
+    place_id: string;
+    main_text: string;
+    secondary_text: string | null;
+    types: string[];
+  }[],
   locations: Location[],
   shownIds: Set<string>
 ): GoogleSuggestion[] {
@@ -97,9 +102,7 @@ function buildGoogleItems(
     let matchedLocationId: string | null = byPlaceId.get(s.place_id) ?? null;
     if (matchedLocationId === null && s.main_text) {
       const lower = s.main_text.toLowerCase();
-      const fallback = locations.find(
-        (l) => l.name.toLowerCase() === lower
-      );
+      const fallback = locations.find((l) => l.name.toLowerCase() === lower);
       if (fallback) matchedLocationId = fallback.id;
     }
     if (matchedLocationId && shownIds.has(matchedLocationId)) continue;
@@ -194,9 +197,7 @@ export function AddLocationsToOptionDialog({
   // Keep highlighted index in range
   useEffect(() => {
     if (!showDropdown) return;
-    setHighlightedIdx((prev) =>
-      prev >= suggestionItems.length ? -1 : prev
-    );
+    setHighlightedIdx((prev) => (prev >= suggestionItems.length ? -1 : prev));
   }, [suggestionItems, showDropdown]);
 
   // -- city filter for pool list --------------------------------------------
@@ -501,236 +502,233 @@ export function AddLocationsToOptionDialog({
         {/* ── Scrollable content area — stable min-height prevents dialog
          *    from jumping as content switches between pool and suggestions ── */}
         <div className="mt-2 h-[280px] overflow-y-auto border-t border-border/40">
+          {/* ── Inline Google suggestions (replaces pool while searching) ── */}
+          {showDropdown && (
+            <ul
+              role="listbox"
+              id="add-loc-suggestions"
+              className="space-y-px py-1"
+            >
+              {suggestionItems.map((item, idx) => {
+                const highlighted = idx === highlightedIdx;
+                const onList =
+                  item.kind === "existing" ||
+                  (item.kind === "google" && item.matchedLocationId !== null);
+                const key =
+                  item.kind === "existing"
+                    ? `ex-${item.locationId}`
+                    : `g-${item.placeId}-${idx}`;
 
-        {/* ── Inline Google suggestions (replaces pool while searching) ── */}
-        {showDropdown && (
-          <ul
-            role="listbox"
-            id="add-loc-suggestions"
-            className="space-y-px py-1"
-          >
-            {suggestionItems.map((item, idx) => {
-              const highlighted = idx === highlightedIdx;
-              const onList =
-                item.kind === "existing" ||
-                (item.kind === "google" && item.matchedLocationId !== null);
-              const key =
-                item.kind === "existing"
-                  ? `ex-${item.locationId}`
-                  : `g-${item.placeId}-${idx}`;
-
-              return (
-                <li
-                  key={key}
-                  role="option"
-                  id={`loc-suggestion-${idx}`}
-                  aria-selected={highlighted}
-                  className={cn(
-                    "flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors duration-150",
-                    highlighted ? "bg-brand/[0.08]" : "hover:bg-muted/50"
-                  )}
-                  onMouseEnter={() => setHighlightedIdx(idx)}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => handlePickSuggestion(item)}
-                >
-                  <Search
-                    size={14}
-                    className="shrink-0 text-muted-foreground/40"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <span className="font-medium text-foreground">
-                      {item.mainText}
-                    </span>
-                    {item.secondaryText && (
-                      <span className="ml-1.5 text-xs text-muted-foreground/60">
-                        {item.secondaryText}
+                return (
+                  <li
+                    key={key}
+                    role="option"
+                    id={`loc-suggestion-${idx}`}
+                    aria-selected={highlighted}
+                    className={cn(
+                      "flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors duration-150",
+                      highlighted ? "bg-brand/[0.08]" : "hover:bg-muted/50"
+                    )}
+                    onMouseEnter={() => setHighlightedIdx(idx)}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => handlePickSuggestion(item)}
+                  >
+                    <Search
+                      size={14}
+                      className="shrink-0 text-muted-foreground/40"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <span className="font-medium text-foreground">
+                        {item.mainText}
+                      </span>
+                      {item.secondaryText && (
+                        <span className="ml-1.5 text-xs text-muted-foreground/60">
+                          {item.secondaryText}
+                        </span>
+                      )}
+                    </div>
+                    {onList && (
+                      <span className="shrink-0 rounded-full bg-brand-muted px-2 py-0.5 text-[10px] font-medium text-brand-strong">
+                        On list
                       </span>
                     )}
-                  </div>
-                  {onList && (
-                    <span className="shrink-0 rounded-full bg-brand-muted px-2 py-0.5 text-[10px] font-medium text-brand-strong">
-                      On list
-                    </span>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-
-        {/* ── Link resolve prompt ── */}
-        <AnimatePresence mode="wait">
-          {isUrl && !resolved && !resolving && (
-            <motion.button
-              key="link-resolve"
-              type="button"
-              onClick={handleLinkResolve}
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.2, ease: EASE_OUT_QUART }}
-              className="mt-3 flex items-center gap-2.5 rounded-xl border border-dashed border-brand/25 bg-brand/[0.03] px-4 py-3 text-left text-sm text-muted-foreground transition-colors hover:border-brand/40 hover:bg-brand/[0.06] hover:text-foreground"
-            >
-              <Link2 size={15} className="shrink-0 text-brand/60" />
-              <span>Resolve this Google Maps link</span>
-            </motion.button>
+                  </li>
+                );
+              })}
+            </ul>
           )}
-        </AnimatePresence>
 
-        {/* ── Resolve error ── */}
-        <AnimatePresence>
-          {resolveError && (
-            <motion.p
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className="mt-2 overflow-hidden rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive"
-            >
-              {resolveError}
-            </motion.p>
-          )}
-        </AnimatePresence>
-
-        {/* ── Resolved place card ── */}
-        <AnimatePresence mode="wait">
-          {resolved && (
-            <motion.div
-              key="resolved"
-              initial={{ opacity: 0, scale: 0.97, y: 8 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.97, y: -4 }}
-              transition={{ duration: 0.25, ease: EASE_OUT_QUART }}
-              className="mt-3 space-y-3 rounded-xl border border-brand/20 bg-brand/[0.03] p-4"
-            >
-              <div>
-                <p className="font-medium text-foreground">{resolved.name}</p>
-                {resolved.address && (
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {resolved.address}
-                  </p>
-                )}
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="flex-1">
-                  <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
-                    Category
-                  </label>
-                  <select
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    className="h-8 w-full rounded-lg border border-input bg-background px-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-                  >
-                    {CATEGORY_OPTIONS.map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="pt-4">
-                  <Button
-                    size="sm"
-                    onClick={handleCreateAndQueue}
-                    disabled={saving}
-                    className="gap-1.5"
-                  >
-                    {saving ? (
-                      <Loader2 size={14} className="animate-spin" />
-                    ) : (
-                      <Check size={14} />
-                    )}
-                    {saving ? "Adding\u2026" : "Add to plan"}
-                  </Button>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* ── Pool locations (city-filtered quick-add list) ── */}
-        {showPool && (
-          <>
-            {hasCityFilter && (
-              <div className="px-1 pt-2">
-                <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <input
-                    type="checkbox"
-                    checked={filterByCities}
-                    onChange={(e) => setFilterByCities(e.target.checked)}
-                    className="rounded border-border accent-brand"
-                  />
-                  Only show locations in {cityFilterLabel}
-                </label>
-              </div>
+          {/* ── Link resolve prompt ── */}
+          <AnimatePresence mode="wait">
+            {isUrl && !resolved && !resolving && (
+              <motion.button
+                key="link-resolve"
+                type="button"
+                onClick={handleLinkResolve}
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2, ease: EASE_OUT_QUART }}
+                className="mt-3 flex items-center gap-2.5 rounded-xl border border-dashed border-brand/25 bg-brand/[0.03] px-4 py-3 text-left text-sm text-muted-foreground transition-colors hover:border-brand/40 hover:bg-brand/[0.06] hover:text-foreground"
+              >
+                <Link2 size={15} className="shrink-0 text-brand/60" />
+                <span>Resolve this Google Maps link</span>
+              </motion.button>
             )}
+          </AnimatePresence>
 
-            {poolLocations.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground/60">
-                {allLocations.length === 0
-                  ? "No locations in this trip yet."
-                  : trimmed
-                    ? "No matching locations in your trip."
-                    : hasCityFilter && filterByCities
-                      ? `No locations in ${cityFilterLabel}.`
-                      : "No locations found."}
-              </p>
-            ) : (
-              <ul className="space-y-px py-1">
-                {poolLocations.map((loc) => {
-                  const isSelected = selected.has(loc.id);
-                  const isAlreadyAdded = alreadyAddedIds.has(loc.id);
-                  return (
-                    <li key={loc.id}>
-                      <button
-                        type="button"
-                        onClick={() => toggleLocation(loc.id)}
-                        className={cn(
-                          "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-all duration-150",
-                          isSelected
-                            ? "bg-brand/10 ring-1 ring-brand/20"
-                            : "hover:bg-muted/50"
-                        )}
-                      >
-                        <span
+          {/* ── Resolve error ── */}
+          <AnimatePresence>
+            {resolveError && (
+              <motion.p
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="mt-2 overflow-hidden rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive"
+              >
+                {resolveError}
+              </motion.p>
+            )}
+          </AnimatePresence>
+
+          {/* ── Resolved place card ── */}
+          <AnimatePresence mode="wait">
+            {resolved && (
+              <motion.div
+                key="resolved"
+                initial={{ opacity: 0, scale: 0.97, y: 8 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.97, y: -4 }}
+                transition={{ duration: 0.25, ease: EASE_OUT_QUART }}
+                className="mt-3 space-y-3 rounded-xl border border-brand/20 bg-brand/[0.03] p-4"
+              >
+                <div>
+                  <p className="font-medium text-foreground">{resolved.name}</p>
+                  {resolved.address && (
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {resolved.address}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                      Category
+                    </label>
+                    <select
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value)}
+                      className="h-8 w-full rounded-lg border border-input bg-background px-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                    >
+                      {CATEGORY_OPTIONS.map((cat) => (
+                        <option key={cat} value={cat}>
+                          {cat}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="pt-4">
+                    <Button
+                      size="sm"
+                      onClick={handleCreateAndQueue}
+                      disabled={saving}
+                      className="gap-1.5"
+                    >
+                      {saving ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Check size={14} />
+                      )}
+                      {saving ? "Adding\u2026" : "Add to plan"}
+                    </Button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* ── Pool locations (city-filtered quick-add list) ── */}
+          {showPool && (
+            <>
+              {hasCityFilter && (
+                <div className="px-1 pt-2">
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={filterByCities}
+                      onChange={(e) => setFilterByCities(e.target.checked)}
+                      className="rounded border-border accent-brand"
+                    />
+                    Only show locations in {cityFilterLabel}
+                  </label>
+                </div>
+              )}
+
+              {poolLocations.length === 0 ? (
+                <p className="py-6 text-center text-sm text-muted-foreground/60">
+                  {allLocations.length === 0
+                    ? "No locations in this trip yet."
+                    : trimmed
+                      ? "No matching locations in your trip."
+                      : hasCityFilter && filterByCities
+                        ? `No locations in ${cityFilterLabel}.`
+                        : "No locations found."}
+                </p>
+              ) : (
+                <ul className="space-y-px py-1">
+                  {poolLocations.map((loc) => {
+                    const isSelected = selected.has(loc.id);
+                    const isAlreadyAdded = alreadyAddedIds.has(loc.id);
+                    return (
+                      <li key={loc.id}>
+                        <button
+                          type="button"
+                          onClick={() => toggleLocation(loc.id)}
                           className={cn(
-                            "flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] border transition-all duration-150",
+                            "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-all duration-150",
                             isSelected
-                              ? "border-brand bg-brand text-white"
-                              : "border-border/60"
+                              ? "bg-brand/10 ring-1 ring-brand/20"
+                              : "hover:bg-muted/50"
                           )}
                         >
-                          {isSelected && (
-                            <Check size={11} strokeWidth={3} />
-                          )}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate font-medium">
-                            {loc.name}
+                          <span
+                            className={cn(
+                              "flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] border transition-all duration-150",
+                              isSelected
+                                ? "border-brand bg-brand text-white"
+                                : "border-border/60"
+                            )}
+                          >
+                            {isSelected && <Check size={11} strokeWidth={3} />}
                           </span>
-                          {(loc.city || loc.category) && (
-                            <span className="block truncate text-xs text-muted-foreground/60">
-                              {loc.city}
-                              {loc.city && loc.category && " · "}
-                              {loc.category}
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate font-medium">
+                              {loc.name}
+                            </span>
+                            {(loc.city || loc.category) && (
+                              <span className="block truncate text-xs text-muted-foreground/60">
+                                {loc.city}
+                                {loc.city && loc.category && " · "}
+                                {loc.category}
+                              </span>
+                            )}
+                          </span>
+                          {isAlreadyAdded && (
+                            <span className="shrink-0 rounded-full bg-muted/80 px-2 py-0.5 text-[10px] font-medium text-muted-foreground/70">
+                              In plan
                             </span>
                           )}
-                        </span>
-                        {isAlreadyAdded && (
-                          <span className="shrink-0 rounded-full bg-muted/80 px-2 py-0.5 text-[10px] font-medium text-muted-foreground/70">
-                            In plan
-                          </span>
-                        )}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </>
-        )}
-
-        </div>{/* end stable-height scrollable area */}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </>
+          )}
+        </div>
+        {/* end stable-height scrollable area */}
 
         {/* ── Selection summary chips ── */}
         <AnimatePresence>
@@ -795,7 +793,7 @@ export function AddLocationsToOptionDialog({
               : selected.size > 0
                 ? `Add ${selected.size} location${selected.size > 1 ? "s" : ""}`
                 : "Add locations"}
-            </Button>
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -9,7 +9,10 @@ import {
 
 // Inject keyframe once — markers render inside imperatively-created React
 // roots outside the normal DOM tree, so Tailwind @keyframes won't reach them.
-if (typeof document !== "undefined" && !document.getElementById("marker-pulse-keyframes")) {
+if (
+  typeof document !== "undefined" &&
+  !document.getElementById("marker-pulse-keyframes")
+) {
   const style = document.createElement("style");
   style.id = "marker-pulse-keyframes";
   style.textContent = [
@@ -64,9 +67,10 @@ export function MapMarker({
         // below catches them. This keeps the hit area small and stable when
         // pins are close together, so hover switches feel responsive.
         pointerEvents: "none",
-        filter: active || highlighted
-          ? "drop-shadow(0 2px 8px rgba(0,0,0,.3))"
-          : "drop-shadow(0 1px 4px rgba(0,0,0,.18))",
+        filter:
+          active || highlighted
+            ? "drop-shadow(0 2px 8px rgba(0,0,0,.3))"
+            : "drop-shadow(0 1px 4px rgba(0,0,0,.18))",
         transition: "filter 200ms ease-out",
       }}
       title={name}
@@ -99,7 +103,11 @@ export function MapMarker({
       {/* Pin body — teardrop with category icon. Only element that captures
           pointer events (cursor + clicks). */}
       <div
-        className={highlighted ? "marker-breathe relative flex cursor-pointer items-center justify-center" : "relative flex cursor-pointer items-center justify-center"}
+        className={
+          highlighted
+            ? "marker-breathe relative flex cursor-pointer items-center justify-center"
+            : "relative flex cursor-pointer items-center justify-center"
+        }
         style={{
           width: 34,
           height: 40,

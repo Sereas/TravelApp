@@ -51,7 +51,10 @@ export function ItineraryDayRail({
   onSelectDay,
 }: ItineraryDayRailProps) {
   return (
-    <aside className="overflow-hidden rounded-2xl border border-border bg-card p-3" aria-label="Day timeline">
+    <aside
+      className="overflow-hidden rounded-2xl border border-border bg-card p-3"
+      aria-label="Day timeline"
+    >
       {/* Horizontally-scrolling day timeline.
        *
        * The `relative` + right-edge fade gradient gives a visual affordance
@@ -99,10 +102,7 @@ export function ItineraryDayRail({
                   {city.text ? (
                     city.start && city.end && !city.isSameCity ? (
                       <>
-                        <MapPin
-                          size={9}
-                          className="shrink-0 text-primary/40"
-                        />
+                        <MapPin size={9} className="shrink-0 text-primary/40" />
                         <span className="truncate font-medium">
                           {city.start}
                         </span>
@@ -114,10 +114,7 @@ export function ItineraryDayRail({
                       </>
                     ) : (
                       <>
-                        <MapPin
-                          size={9}
-                          className="shrink-0 text-primary/40"
-                        />
+                        <MapPin size={9} className="shrink-0 text-primary/40" />
                         <span className="truncate font-medium">
                           {city.text}
                         </span>
