@@ -110,7 +110,7 @@ describe("ItineraryDayRail", () => {
     );
 
     expect(screen.getByText("Jun 1")).toBeInTheDocument();
-    expect(screen.getByText("Destination TBD")).toBeInTheDocument();
+    expect(screen.getByText("No destination")).toBeInTheDocument();
     // No "Empty" pill or "Ready to plan" text
     expect(screen.queryByText("Empty")).not.toBeInTheDocument();
     expect(screen.queryByText("Ready to plan")).not.toBeInTheDocument();

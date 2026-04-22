@@ -2,7 +2,7 @@
 
 import type { ItineraryDay, ItineraryOption } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { ArrowRight, CalendarDays, MapPin } from "lucide-react";
+import { ArrowRight, MapPin } from "lucide-react";
 
 function formatCityLabel(option: ItineraryOption | undefined): {
   text: string | null;
@@ -51,11 +51,7 @@ export function ItineraryDayRail({
   onSelectDay,
 }: ItineraryDayRailProps) {
   return (
-    <aside className="overflow-hidden rounded-2xl border border-border bg-card p-3">
-      <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
-        <CalendarDays size={13} />
-        Timeline
-      </div>
+    <aside className="overflow-hidden rounded-2xl border border-border bg-card p-3" aria-label="Day timeline">
       {/* Horizontally-scrolling day timeline.
        *
        * The `relative` + right-edge fade gradient gives a visual affordance
@@ -87,48 +83,40 @@ export function ItineraryDayRail({
                 aria-current={isSelected ? "date" : undefined}
                 aria-label={`Day ${i + 1}: ${dateLabel}${city.text ? `, ${city.text}` : ""}${isPlanned ? `, ${locationCount} stop${locationCount === 1 ? "" : "s"}` : ""}`}
                 className={cn(
-                  "ticket-card group relative min-w-[140px] shrink-0 px-3 py-2.5 text-left transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  // The selected state is driven entirely from CSS via
-                  // `.ticket-card[aria-current="date"]` in globals.css —
-                  // `.ticket-card` sets its own `background` and `box-shadow`,
-                  // so plain Tailwind bg-*/ring-*/shadow-* utilities lose the
-                  // cascade fight. Using aria-current keeps the styling in
-                  // lockstep with the accessibility state.
+                  "ticket-card group relative min-w-[120px] shrink-0 cursor-pointer py-2 pl-3 pr-5 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   isSelected
                     ? "z-10"
                     : isPlanned
-                      ? "hover:shadow-sm"
-                      : "opacity-60 hover:opacity-100"
+                      ? "hover:shadow-md"
+                      : "opacity-50 hover:opacity-90"
                 )}
               >
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-sm font-bold text-foreground">
-                    {dateLabel}
-                  </span>
-                </div>
+                <span className="text-base font-bold tracking-tight text-foreground">
+                  {dateLabel}
+                </span>
 
-                <div className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                <div className="mt-1.5 flex items-center gap-1 text-[11px] text-muted-foreground">
                   {city.text ? (
                     city.start && city.end && !city.isSameCity ? (
                       <>
                         <MapPin
-                          size={10}
-                          className="shrink-0 text-primary/50"
+                          size={9}
+                          className="shrink-0 text-primary/40"
                         />
                         <span className="truncate font-medium">
                           {city.start}
                         </span>
                         <ArrowRight
-                          size={9}
-                          className="shrink-0 text-primary/40"
+                          size={8}
+                          className="shrink-0 text-primary/30"
                         />
                         <span className="truncate font-medium">{city.end}</span>
                       </>
                     ) : (
                       <>
                         <MapPin
-                          size={10}
-                          className="shrink-0 text-primary/50"
+                          size={9}
+                          className="shrink-0 text-primary/40"
                         />
                         <span className="truncate font-medium">
                           {city.text}
@@ -136,27 +124,26 @@ export function ItineraryDayRail({
                       </>
                     )
                   ) : (
-                    <span className="italic text-muted-foreground/30">
-                      Destination TBD
+                    <span className="italic text-muted-foreground/25">
+                      No destination
                     </span>
                   )}
                 </div>
 
-                {isPlanned && (
-                  <div className="mt-1.5">
-                    <span className="text-[10px] font-medium text-muted-foreground/50">
-                      {locationCount} {locationCount === 1 ? "stop" : "stops"}
-                    </span>
-                  </div>
-                )}
-
-                {!isPlanned && (
-                  <div className="mt-1.5">
-                    <span className="text-[10px] text-muted-foreground/30">
-                      No stops
-                    </span>
-                  </div>
-                )}
+                <div className="mt-1">
+                  <span
+                    className={cn(
+                      "text-[10px] tabular-nums",
+                      isPlanned
+                        ? "font-medium text-muted-foreground/50"
+                        : "text-muted-foreground/25"
+                    )}
+                  >
+                    {isPlanned
+                      ? `${locationCount} ${locationCount === 1 ? "stop" : "stops"}`
+                      : "No stops"}
+                  </span>
+                </div>
               </button>
             );
           })}

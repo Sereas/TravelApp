@@ -498,12 +498,16 @@ export function AddLocationsToOptionDialog({
           )}
         </div>
 
+        {/* ── Scrollable content area — stable min-height prevents dialog
+         *    from jumping as content switches between pool and suggestions ── */}
+        <div className="mt-2 h-[280px] overflow-y-auto border-t border-border/40">
+
         {/* ── Inline Google suggestions (replaces pool while searching) ── */}
         {showDropdown && (
           <ul
             role="listbox"
             id="add-loc-suggestions"
-            className="mt-2 min-h-0 flex-1 space-y-px overflow-y-auto border-t border-border/40 py-1"
+            className="space-y-px py-1"
           >
             {suggestionItems.map((item, idx) => {
               const highlighted = idx === highlightedIdx;
@@ -648,7 +652,7 @@ export function AddLocationsToOptionDialog({
         {showPool && (
           <>
             {hasCityFilter && (
-              <div className="mt-3">
+              <div className="px-1 pt-2">
                 <label className="flex items-center gap-2 text-xs text-muted-foreground">
                   <input
                     type="checkbox"
@@ -661,73 +665,72 @@ export function AddLocationsToOptionDialog({
               </div>
             )}
 
-            <div className="mt-2 min-h-0 flex-1 overflow-y-auto border-t border-border/40 pt-1">
-              {poolLocations.length === 0 ? (
-                <p className="py-6 text-center text-sm text-muted-foreground/60">
-                  {allLocations.length === 0
-                    ? "No locations in this trip yet."
-                    : trimmed
-                      ? "No matching locations in your trip."
-                      : hasCityFilter && filterByCities
-                        ? `No locations in ${cityFilterLabel}.`
-                        : "No locations found."}
-                </p>
-              ) : (
-                <ul className="space-y-px py-1">
-                  {poolLocations.map((loc) => {
-                    const isSelected = selected.has(loc.id);
-                    const isAlreadyAdded = alreadyAddedIds.has(loc.id);
-                    return (
-                      <li key={loc.id}>
-                        <button
-                          type="button"
-                          onClick={() => toggleLocation(loc.id)}
+            {poolLocations.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground/60">
+                {allLocations.length === 0
+                  ? "No locations in this trip yet."
+                  : trimmed
+                    ? "No matching locations in your trip."
+                    : hasCityFilter && filterByCities
+                      ? `No locations in ${cityFilterLabel}.`
+                      : "No locations found."}
+              </p>
+            ) : (
+              <ul className="space-y-px py-1">
+                {poolLocations.map((loc) => {
+                  const isSelected = selected.has(loc.id);
+                  const isAlreadyAdded = alreadyAddedIds.has(loc.id);
+                  return (
+                    <li key={loc.id}>
+                      <button
+                        type="button"
+                        onClick={() => toggleLocation(loc.id)}
+                        className={cn(
+                          "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-all duration-150",
+                          isSelected
+                            ? "bg-brand/10 ring-1 ring-brand/20"
+                            : "hover:bg-muted/50"
+                        )}
+                      >
+                        <span
                           className={cn(
-                            "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-all duration-150",
+                            "flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] border transition-all duration-150",
                             isSelected
-                              ? "bg-brand/10 ring-1 ring-brand/20"
-                              : "hover:bg-muted/50"
+                              ? "border-brand bg-brand text-white"
+                              : "border-border/60"
                           )}
                         >
-                          <span
-                            className={cn(
-                              "flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] border transition-all duration-150",
-                              isSelected
-                                ? "border-brand bg-brand text-white"
-                                : "border-border/60"
-                            )}
-                          >
-                            {isSelected && (
-                              <Check size={11} strokeWidth={3} />
-                            )}
+                          {isSelected && (
+                            <Check size={11} strokeWidth={3} />
+                          )}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-medium">
+                            {loc.name}
                           </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="font-medium">{loc.name}</span>
-                            {loc.city && (
-                              <span className="ml-1.5 text-muted-foreground/70">
-                                &middot; {loc.city}
-                              </span>
-                            )}
-                            {loc.category && (
-                              <span className="ml-1 text-xs text-muted-foreground/50">
-                                ({loc.category})
-                              </span>
-                            )}
-                          </span>
-                          {isAlreadyAdded && (
-                            <span className="shrink-0 rounded-full bg-muted/80 px-2 py-0.5 text-[10px] font-medium text-muted-foreground/70">
-                              In plan
+                          {(loc.city || loc.category) && (
+                            <span className="block truncate text-xs text-muted-foreground/60">
+                              {loc.city}
+                              {loc.city && loc.category && " · "}
+                              {loc.category}
                             </span>
                           )}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
+                        </span>
+                        {isAlreadyAdded && (
+                          <span className="shrink-0 rounded-full bg-muted/80 px-2 py-0.5 text-[10px] font-medium text-muted-foreground/70">
+                            In plan
+                          </span>
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </>
         )}
+
+        </div>{/* end stable-height scrollable area */}
 
         {/* ── Selection summary chips ── */}
         <AnimatePresence>
@@ -757,7 +760,7 @@ export function AddLocationsToOptionDialog({
         </AnimatePresence>
 
         {/* ── Footer ── */}
-        <DialogFooter className="mt-3 gap-2 pt-1">
+        <DialogFooter className="mt-3 gap-2 border-t border-border/40 pt-3">
           <Button
             variant="ghost"
             size="sm"
