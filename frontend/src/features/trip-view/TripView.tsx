@@ -163,6 +163,14 @@ export function TripView({
   const contextReadOnly = useReadOnly();
   const isReadOnly = readOnly || contextReadOnly;
 
+  // Stable callback for itinerary tab's "Find new" location creation.
+  // Narrows `onLocationAdded(loc, scheduleDayId?)` to `(loc) => void` without
+  // creating a new function on every render.
+  const handleItineraryLocationCreated = useCallback(
+    (loc: Location) => onLocationAdded?.(loc),
+    [onLocationAdded]
+  );
+
   // ---- local state (presentation only) -----------------------------------
   const [activeTab, setActiveTab] = useState<
     "locations" | "itinerary" | "budget" | "documents"
@@ -570,6 +578,7 @@ export function TripView({
             locations={locations}
             itineraryState={itineraryState}
             itineraryMutations={isReadOnly ? undefined : itineraryMutations}
+            onLocationCreated={handleItineraryLocationCreated}
           />
         </div>
       )}

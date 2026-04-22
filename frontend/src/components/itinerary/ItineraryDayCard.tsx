@@ -169,6 +169,7 @@ export interface ItineraryDayCardProps {
   routeMetricsError: Record<string, string>;
   onInspectLocation: (dayId: string, locationId: string) => void;
   onLocationHover?: (locationId: string | null) => void;
+  onLocationCreated?: (location: Location) => void;
 }
 
 // Shared no-op fallbacks used when mutation callbacks are omitted (shared
@@ -202,6 +203,7 @@ export function ItineraryDayCard({
   routeMetricsError,
   onInspectLocation,
   onLocationHover,
+  onLocationCreated,
 }: ItineraryDayCardProps) {
   const readOnly = useReadOnly();
 
@@ -534,6 +536,8 @@ export function ItineraryDayCard({
                     onConfirm={(ids) =>
                       onAddLocations(day.id, currentOption.id, ids)
                     }
+                    tripId={tripId}
+                    onLocationCreated={onLocationCreated}
                   />
                 </div>
               )}

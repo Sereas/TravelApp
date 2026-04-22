@@ -908,19 +908,16 @@ export function ItineraryDayMap({
   }, [focusLocationId, focusSeq]);
 
   // Sync external highlight (card hover) into the hover ref so the
-  // corresponding pin gets the isHovered visual treatment. When the
-  // external highlight is cleared (null), we only reset if the ref
-  // still points to the externally-set id — cursor-proximity hover
-  // may have already moved it elsewhere.
+  // corresponding pin gets the isHovered visual treatment. Always trust
+  // the card's mouseenter/mouseleave to set/clear — proximity-based
+  // hover will naturally take over on the next cursor move if needed.
   useEffect(() => {
     if (highlightedLocationId) {
       hoveredLocationIdRef.current = highlightedLocationId;
-      renderAllMarkersRef.current?.();
-    } else if (hoveredLocationIdRef.current && !cursorPosRef.current) {
-      // Only clear if cursor isn't actively hovering (proximity-based)
+    } else {
       hoveredLocationIdRef.current = null;
-      renderAllMarkersRef.current?.();
     }
+    renderAllMarkersRef.current?.();
   }, [highlightedLocationId]);
 
   return (

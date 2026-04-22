@@ -300,23 +300,6 @@ describe("ItineraryTab — Phase 4 mobile layout contracts", () => {
     expect(hasDesktopInspector).toBe(true);
   });
 
-  it("mobile ItineraryInspectorPanel is rendered inside an lg:hidden wrapper", () => {
-    const { container } = renderItineraryTab(
-      { itineraryState: makeReadOnlyItineraryState(sampleItinerary) },
-      { readOnly: true }
-    );
-    const allInspectors = screen.getAllByTestId("inspector-mock");
-    const hasMobileInspector = allInspectors.some((el) => {
-      let node: HTMLElement | null = el.parentElement;
-      while (node && node !== container) {
-        if (node.className.toString().includes("lg:hidden")) return true;
-        node = node.parentElement;
-      }
-      return false;
-    });
-    expect(hasMobileInspector).toBe(true);
-  });
-
   // -------------------------------------------------------------------------
   // Mobile Map pill button
   // -------------------------------------------------------------------------

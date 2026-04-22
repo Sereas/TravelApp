@@ -380,6 +380,9 @@ interface ItineraryTabProps {
    * wired by the `<ReadOnlyProvider>` in the shared route.
    */
   itineraryMutations?: ItineraryMutations;
+  /** Called when a new location is created via the "Find new" tab so the
+   *  parent page can update its locations state. */
+  onLocationCreated?: (location: Location) => void;
 }
 
 export function ItineraryTab({
@@ -388,6 +391,7 @@ export function ItineraryTab({
   locations,
   itineraryState,
   itineraryMutations,
+  onLocationCreated,
 }: ItineraryTabProps) {
   const {
     itinerary,
@@ -676,6 +680,7 @@ export function ItineraryTab({
                           setSelectedDayId(dayId);
                         }}
                         onLocationHover={setHoveredLocationId}
+                        onLocationCreated={onLocationCreated}
                       />
                     </div>
                   );
