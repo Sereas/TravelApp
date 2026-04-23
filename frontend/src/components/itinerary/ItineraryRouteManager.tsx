@@ -6,6 +6,7 @@ import {
   type ItineraryOption,
   type ItineraryOptionLocation,
 } from "@/lib/api";
+import { ROUTE_COLORS } from "@/components/itinerary/ItineraryDayCard";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/feedback/LoadingSpinner";
 import { cn } from "@/lib/utils";
@@ -35,38 +36,6 @@ const TRANSPORT = [
   { key: "transit", label: "Transit", icon: TrainFront },
 ] as const;
 
-const ROUTE_COLORS = [
-  {
-    bar: "border-l-route-1",
-    bg: "bg-route-1/10",
-    text: "text-route-1",
-    hex: "hsl(213, 94%, 68%)",
-  },
-  {
-    bar: "border-l-route-2",
-    bg: "bg-route-2/10",
-    text: "text-route-2",
-    hex: "hsl(160, 64%, 52%)",
-  },
-  {
-    bar: "border-l-route-3",
-    bg: "bg-route-3/10",
-    text: "text-route-3",
-    hex: "hsl(27, 96%, 61%)",
-  },
-  {
-    bar: "border-l-route-4",
-    bg: "bg-route-4/10",
-    text: "text-route-4",
-    hex: "hsl(263, 70%, 72%)",
-  },
-  {
-    bar: "border-l-route-5",
-    bg: "bg-route-5/10",
-    text: "text-route-5",
-    hex: "hsl(350, 80%, 65%)",
-  },
-] as const;
 
 function formatDuration(seconds: number): string {
   const totalMin = Math.round(seconds / 60);
@@ -554,10 +523,7 @@ export function ItineraryRouteManager({
                   <Icon size={14} className={cn("shrink-0", color.text)} />
                   <button
                     type="button"
-                    className={cn(
-                      "min-w-0 flex-1 truncate text-left font-bold",
-                      color.text
-                    )}
+                    className="min-w-0 flex-1 truncate text-left font-bold text-foreground"
                     title={stopNames.join(" → ")}
                     onClick={() =>
                       setExpandedRouteId(isExpanded ? null : route.route_id)

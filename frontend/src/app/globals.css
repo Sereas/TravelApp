@@ -66,12 +66,12 @@
     --time-night-text: 220 20% 35%;
     --time-night-border: 220 15% 25%;
 
-    /* Route palette */
-    --route-1: 213 94% 68%;
-    --route-2: 160 64% 52%;
-    --route-3: 27 96% 61%;
-    --route-4: 263 70% 72%;
-    --route-5: 350 80% 65%;
+    /* Route palette — desaturated / dusty tones */
+    --route-1: 213 55% 62%;
+    --route-2: 160 40% 50%;
+    --route-3: 30 55% 58%;
+    --route-4: 263 40% 65%;
+    --route-5: 350 45% 60%;
 
     /* Booking status */
     --booking-done-bg: 145 60% 96%;
@@ -131,12 +131,12 @@
     --time-night-text: 220 15% 80%;
     --time-night-border: 220 20% 18%;
 
-    /* Route palette (dark) */
-    --route-1: 213 80% 60%;
-    --route-2: 160 50% 48%;
-    --route-3: 27 80% 55%;
-    --route-4: 263 55% 65%;
-    --route-5: 350 65% 60%;
+    /* Route palette (dark) — desaturated / dusty tones */
+    --route-1: 213 50% 58%;
+    --route-2: 160 32% 46%;
+    --route-3: 27 50% 52%;
+    --route-4: 263 35% 62%;
+    --route-5: 350 40% 58%;
 
     /* Booking status (dark) */
     --booking-done-bg: 145 30% 14%;
