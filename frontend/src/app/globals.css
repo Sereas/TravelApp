@@ -323,62 +323,35 @@
     mix-blend-mode: soft-light;
   }
 
-  /* Plane ticket — perforated edge effect */
+  /* Minimal elevated card — clean card for itinerary day tiles */
   .ticket-card {
     position: relative;
     background: hsl(var(--card));
     border-radius: 12px;
-    box-shadow:
-      0 1px 4px rgba(0, 0, 0, 0.08),
-      0 0 0 1px rgba(0, 0, 0, 0.04);
-  }
-  .ticket-card::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: 8px;
-    bottom: 8px;
-    width: 4px;
-    border-left: 4px dashed hsl(var(--border));
-    border-radius: 0;
-  }
-  .ticket-card::after {
-    content: "";
-    position: absolute;
-    right: -1px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 12px;
-    height: 24px;
-    background: hsl(var(--background));
-    border-radius: 12px 0 0 12px;
-    box-shadow: inset 1px 0 0 hsl(var(--border));
+    border: 1px solid hsl(var(--border) / 0.5);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
   }
 
-  /* Active ticket — the selected day in the itinerary timeline ribbon.
+  /* Hover — pointer devices only: subtle lift + background tint */
+  @media (hover: hover) {
+    .ticket-card:not([aria-current="date"]):hover {
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+      background: hsl(var(--muted));
+    }
+  }
+
+  /* Active / selected day — brand-muted bg, elevated shadow, bottom accent.
    * Driven by `aria-current="date"` set by `ItineraryDayRail`, so the
    * visual state always matches the accessibility state. We override the
    * `.ticket-card` base shorthand `background` and `box-shadow` here
    * because Tailwind `bg-*` / `ring-*` utilities lose the cascade fight
-   * against the base rule's shorthand declarations.
-   *
-   * No `transform: translateY(...)` on purpose — the parent ribbon's
-   * scroll container is `overflow-x-auto`, which in CSS implicitly forces
-   * `overflow-y: auto` too, so any lifted tile would get its top edge
-   * clipped by the scroller. We signal "active" with brand colors + a
-   * brand-colored ring and glow instead. */
+   * against the base rule's shorthand declarations. */
   .ticket-card[aria-current="date"] {
     background: hsl(var(--brand-muted));
-    box-shadow:
-      0 4px 14px hsl(var(--brand) / 0.22),
-      0 0 0 2px hsl(var(--brand-strong));
-  }
-  .ticket-card[aria-current="date"]::before {
-    border-left-color: hsl(var(--brand-strong));
-  }
-  .ticket-card[aria-current="date"]::after {
-    background: hsl(var(--brand-muted));
-    box-shadow: inset 1px 0 0 hsl(var(--brand-strong));
+    border: 1px solid hsl(var(--brand) / 0.2);
+    border-bottom-width: 3px;
+    border-bottom-color: hsl(var(--brand-strong));
+    box-shadow: 0 2px 8px hsl(var(--brand) / 0.15);
   }
 
   /* ---- Card flip (3D rotateY) ---- */

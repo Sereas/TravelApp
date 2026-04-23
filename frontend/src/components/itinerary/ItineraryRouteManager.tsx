@@ -546,7 +546,7 @@ export function ItineraryRouteManager({
               <div key={route.route_id} className="space-y-0">
                 <div
                   className={cn(
-                    "ticket-card flex items-center gap-2 border-l-[4px] py-2.5 pl-4 pr-6 text-xs",
+                    "flex items-center gap-2 border-l-[4px] bg-card py-2.5 pl-4 pr-6 text-xs shadow-sm",
                     isExpanded ? "rounded-t-xl" : "rounded-xl",
                     color.bar
                   )}

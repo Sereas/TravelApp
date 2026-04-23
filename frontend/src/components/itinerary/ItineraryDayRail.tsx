@@ -2,7 +2,6 @@
 
 import type { ItineraryDay, ItineraryOption } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { ArrowRight, MapPin } from "lucide-react";
 
 function formatCityLabel(option: ItineraryOption | undefined): {
   text: string | null;
@@ -20,7 +19,7 @@ function formatCityLabel(option: ItineraryOption | undefined): {
 
   if (start && end) {
     return {
-      text: isSameCity ? start : `${start} > ${end}`,
+      text: isSameCity ? start : `${start} → ${end}`,
       start,
       end,
       isSameCity,
@@ -69,7 +68,7 @@ export function ItineraryDayRail({
          * scroll container's implicit `overflow-y: auto` (a side-effect
          * of `overflow-x-auto`) clips the shadow on the top and bottom
          * edges, making the active tile look cropped. */}
-        <div className="-mx-1 flex gap-2 overflow-x-auto scrollbar-hide px-1 py-2">
+        <div className="-mx-1 flex gap-3 overflow-x-auto scrollbar-hide px-1 py-2">
           {days.map((day, i) => {
             const option = selectedOptionsByDay[day.id];
             const locationCount = option?.locations.length ?? 0;
@@ -86,11 +85,11 @@ export function ItineraryDayRail({
                 aria-current={isSelected ? "date" : undefined}
                 aria-label={`Day ${i + 1}: ${dateLabel}${city.text ? `, ${city.text}` : ""}${isPlanned ? `, ${locationCount} stop${locationCount === 1 ? "" : "s"}` : ""}`}
                 className={cn(
-                  "ticket-card group relative min-w-[120px] shrink-0 cursor-pointer py-2 pl-3 pr-5 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "ticket-card group relative w-[160px] shrink-0 cursor-pointer py-2 pl-3 pr-5 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   isSelected
                     ? "z-10"
                     : isPlanned
-                      ? "hover:shadow-md"
+                      ? ""
                       : "opacity-50 hover:opacity-90"
                 )}
               >
@@ -98,27 +97,33 @@ export function ItineraryDayRail({
                   {dateLabel}
                 </span>
 
-                <div className="mt-1.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+                <div className="mt-1.5 text-[11px] text-muted-foreground">
                   {city.text ? (
                     city.start && city.end && !city.isSameCity ? (
-                      <>
-                        <MapPin size={9} className="shrink-0 text-primary/40" />
-                        <span className="truncate font-medium">
-                          {city.start}
-                        </span>
-                        <ArrowRight
-                          size={8}
-                          className="shrink-0 text-primary/30"
-                        />
-                        <span className="truncate font-medium">{city.end}</span>
-                      </>
+                      <div className="flex gap-1.5">
+                        {/* Vertical route indicator: dots connected by a line */}
+                        <div className="flex shrink-0 flex-col items-center pt-[3px]">
+                          <div className="size-[5px] rounded-full bg-muted-foreground/30" />
+                          <div className="-my-[1px] w-px flex-1 bg-muted-foreground/20" />
+                          <div className="size-[5px] rounded-full bg-brand/50" />
+                        </div>
+                        {/* City names, each on its own line */}
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-medium leading-snug">
+                            {city.start}
+                          </div>
+                          <div className="truncate font-medium leading-snug text-foreground/70">
+                            {city.end}
+                          </div>
+                        </div>
+                      </div>
                     ) : (
-                      <>
-                        <MapPin size={9} className="shrink-0 text-primary/40" />
+                      <div className="flex items-center gap-1.5">
+                        <div className="size-[5px] shrink-0 rounded-full bg-muted-foreground/30" />
                         <span className="truncate font-medium">
                           {city.text}
                         </span>
-                      </>
+                      </div>
                     )
                   ) : (
                     <span className="italic text-muted-foreground/25">

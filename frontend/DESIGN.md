@@ -249,15 +249,15 @@ Location categories (Museum, Restaurant, Beach, etc.) each have their own color 
 
 ### Custom Visual Classes (defined in `globals.css`)
 
-| Class                              | What It Does                                                            | When to Use                                       |
-| ---------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------- |
-| `ticket-card`                      | Plane ticket visual: dashed left border, circular perforation on right. | Itinerary day cards in the timeline rail.         |
-| `ticket-card[aria-current="date"]` | Active day: brand-muted background, brand ring + glow.                  | The currently selected day in `ItineraryDayRail`. |
-| `stamp-badge`                      | Rotated circle badge with uppercase text and border.                    | Decorative labels (day numbers, status badges).   |
-| `grain-overlay`                    | Film grain texture via SVG noise, `::before` pseudo.                    | Cards or surfaces that need analog texture.       |
-| `touch-target`                     | Invisible 44x44 hit area via `::after` pseudo.                          | Any button visually smaller than 44px.            |
-| `scrollbar-hide`                   | Hides scrollbars cross-browser.                                         | Horizontal scroll rails, overflow containers.     |
-| `date-input-branded`               | Brand-colored accent for native date pickers.                           | `InlineDateInput` component.                      |
+| Class                              | What It Does                                                           | When to Use                                       |
+| ---------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------- |
+| `ticket-card`                      | Minimal elevated card: subtle shadow, clean rounded shape, hover lift. | Itinerary day cards in the timeline rail.         |
+| `ticket-card[aria-current="date"]` | Active day: brand-muted background, elevated shadow, bottom accent.    | The currently selected day in `ItineraryDayRail`. |
+| `stamp-badge`                      | Rotated circle badge with uppercase text and border.                   | Decorative labels (day numbers, status badges).   |
+| `grain-overlay`                    | Film grain texture via SVG noise, `::before` pseudo.                   | Cards or surfaces that need analog texture.       |
+| `touch-target`                     | Invisible 44x44 hit area via `::after` pseudo.                         | Any button visually smaller than 44px.            |
+| `scrollbar-hide`                   | Hides scrollbars cross-browser.                                        | Horizontal scroll rails, overflow containers.     |
+| `date-input-branded`               | Brand-colored accent for native date pickers.                          | `InlineDateInput` component.                      |
 
 ---
 

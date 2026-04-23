@@ -163,6 +163,7 @@ Invoke the appropriate skill(s) based on the task type. You are the orchestrator
 - **Do not skip visual verification.** Type checks and unit tests verify code, not design.
 - **Do not introduce new fonts, color scales, or component patterns** without explicit approval.
 - **Do not over-design.** Match the scope of the change to what was requested. A button color fix doesn't need a page redesign.
+- **Do not stop mid-iteration.** When the user is iterating on a design change, you own it end-to-end. Stay engaged through every round of feedback — propose, implement, verify, get feedback, repeat — until the user is satisfied. Never hand work back to the orchestrator mid-iteration.
 
 ---
 
