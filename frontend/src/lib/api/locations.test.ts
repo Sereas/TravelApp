@@ -161,7 +161,19 @@ describe("locations API module", () => {
     await locations.uploadPhoto("trip-1", "loc-1", file);
     expect(mockRequestUpload).toHaveBeenCalledWith(
       "/api/v1/trips/trip-1/locations/loc-1/photo",
-      file
+      file,
+      undefined
+    );
+  });
+
+  it("uploadPhoto sends crop_data when cropData is provided", async () => {
+    const file = new File(["data"], "photo.jpg", { type: "image/jpeg" });
+    const cropData = { x: 10, y: 20, width: 80, height: 60 };
+    await locations.uploadPhoto("trip-1", "loc-1", file, cropData);
+    expect(mockRequestUpload).toHaveBeenCalledWith(
+      "/api/v1/trips/trip-1/locations/loc-1/photo",
+      file,
+      { crop_data: JSON.stringify(cropData) }
     );
   });
 });

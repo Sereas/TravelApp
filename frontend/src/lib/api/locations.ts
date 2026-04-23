@@ -42,10 +42,16 @@ export const del = (tripId: string, locationId: string) =>
     method: "DELETE",
   });
 
-export const uploadPhoto = (tripId: string, locationId: string, file: File) =>
+export const uploadPhoto = (
+  tripId: string,
+  locationId: string,
+  file: File,
+  cropData?: { x: number; y: number; width: number; height: number }
+) =>
   requestUpload<Location>(
     `/api/v1/trips/${tripId}/locations/${locationId}/photo`,
-    file
+    file,
+    cropData ? { crop_data: JSON.stringify(cropData) } : undefined
   );
 
 export const deletePhoto = (tripId: string, locationId: string) =>

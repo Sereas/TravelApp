@@ -23,6 +23,7 @@ const optionLocation = {
     longitude: null,
     image_url: null,
     user_image_url: null,
+    user_image_crop: null,
     attribution_name: null,
     attribution_uri: null,
   },

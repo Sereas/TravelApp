@@ -119,7 +119,9 @@ class TestUploadPhoto:
             assert resp.status_code == 200
             data = resp.json()
             assert data["id"] == LOCATION_ID
-            assert data["user_image_url"] == "https://storage.example.com/user-photos/test.jpg"
+            assert data["user_image_url"].startswith(
+                "https://storage.example.com/user-photos/test.jpg?v="
+            )
         finally:
             app.dependency_overrides.pop(get_supabase_client, None)
 

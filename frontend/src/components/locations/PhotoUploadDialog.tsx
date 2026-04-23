@@ -12,10 +12,11 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { ImageCropData } from "@/lib/api/types";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
-const RESIZE_MAX_WIDTH = 800; // 2x retina for ~400px card width
+const RESIZE_MAX_WIDTH = 1600; // Full image for lightbox (higher than old 800 since no crop)
 const RESIZE_QUALITY = 0.82;
 const CROP_ASPECT = 16 / 10; // Matches LocationCard aspect-[16/10]
 
@@ -23,60 +24,34 @@ const CROP_ASPECT = 16 / 10; // Matches LocationCard aspect-[16/10]
 // Image utilities
 // ---------------------------------------------------------------------------
 
-/** Crop an image to the given pixel area, then resize to max width. */
-async function cropAndResize(imageSrc: string, cropArea: Area): Promise<File> {
+/** Resize the full image to max width — no cropping. Cropping is CSS-only on display. */
+async function resizeOnly(imageSrc: string): Promise<File> {
   return new Promise<File>((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
-      // Step 1: Crop to selected area
-      const cropCanvas = document.createElement("canvas");
-      cropCanvas.width = cropArea.width;
-      cropCanvas.height = cropArea.height;
-      const cropCtx = cropCanvas.getContext("2d");
-      if (!cropCtx) {
+      const canvas = document.createElement("canvas");
+      if (img.width > RESIZE_MAX_WIDTH) {
+        const scale = RESIZE_MAX_WIDTH / img.width;
+        canvas.width = RESIZE_MAX_WIDTH;
+        canvas.height = Math.round(img.height * scale);
+      } else {
+        canvas.width = img.width;
+        canvas.height = img.height;
+      }
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
         reject(new Error("Canvas not supported"));
         return;
       }
-      cropCtx.drawImage(
-        img,
-        cropArea.x,
-        cropArea.y,
-        cropArea.width,
-        cropArea.height,
-        0,
-        0,
-        cropArea.width,
-        cropArea.height
-      );
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-      // Step 2: Resize if wider than max
-      let finalCanvas = cropCanvas;
-      if (cropArea.width > RESIZE_MAX_WIDTH) {
-        const scale = RESIZE_MAX_WIDTH / cropArea.width;
-        const resizeCanvas = document.createElement("canvas");
-        resizeCanvas.width = RESIZE_MAX_WIDTH;
-        resizeCanvas.height = Math.round(cropArea.height * scale);
-        const resizeCtx = resizeCanvas.getContext("2d");
-        if (resizeCtx) {
-          resizeCtx.drawImage(
-            cropCanvas,
-            0,
-            0,
-            resizeCanvas.width,
-            resizeCanvas.height
-          );
-          finalCanvas = resizeCanvas;
-        }
-      }
-
-      // Step 3: Export as WebP, fallback to JPEG
-      finalCanvas.toBlob(
+      canvas.toBlob(
         (blob) => {
           if (blob) {
             resolve(new File([blob], "photo.webp", { type: "image/webp" }));
             return;
           }
-          finalCanvas.toBlob(
+          canvas.toBlob(
             (jpegBlob) => {
               if (jpegBlob) {
                 resolve(
@@ -108,7 +83,8 @@ export interface PhotoUploadDialogProps {
   onOpenChange: (open: boolean) => void;
   currentImageUrl: string | null;
   hasUserOverride: boolean;
-  onUpload: (file: File) => Promise<void>;
+  /** Receives the full resized image and the crop region percentages. */
+  onUpload: (file: File, cropData: ImageCropData) => Promise<void>;
   onReset: () => Promise<void>;
 }
 
@@ -138,13 +114,13 @@ export function PhotoUploadDialog({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
 
-  // Crop state
+  // Crop state — capture percentage-based area for CSS background-position
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
-  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
+  const [croppedAreaPct, setCroppedAreaPct] = useState<Area | null>(null);
 
-  const onCropComplete = useCallback((_: Area, areaPixels: Area) => {
-    setCroppedAreaPixels(areaPixels);
+  const onCropComplete = useCallback((areaPct: Area, _areaPixels: Area) => {
+    setCroppedAreaPct(areaPct);
   }, []);
 
   // Clean up preview URL on unmount or file change
@@ -168,7 +144,7 @@ export function PhotoUploadDialog({
       setDragOver(false);
       setCrop({ x: 0, y: 0 });
       setZoom(1);
-      setCroppedAreaPixels(null);
+      setCroppedAreaPct(null);
     }
   }, [open]);
 
@@ -183,7 +159,7 @@ export function PhotoUploadDialog({
     setSelectedFile(file);
     setCrop({ x: 0, y: 0 });
     setZoom(1);
-    setCroppedAreaPixels(null);
+    setCroppedAreaPct(null);
   }, []);
 
   const handleDrop = useCallback(
@@ -221,12 +197,18 @@ export function PhotoUploadDialog({
   }, [handlePaste]);
 
   async function handleUpload() {
-    if (!selectedFile || !preview || !croppedAreaPixels) return;
+    if (!selectedFile || !preview || !croppedAreaPct) return;
     setUploading(true);
     setError(null);
     try {
-      const cropped = await cropAndResize(preview, croppedAreaPixels);
-      await onUpload(cropped);
+      const resized = await resizeOnly(preview);
+      const cropData: ImageCropData = {
+        x: croppedAreaPct.x,
+        y: croppedAreaPct.y,
+        width: croppedAreaPct.width,
+        height: croppedAreaPct.height,
+      };
+      await onUpload(resized, cropData);
       onOpenChange(false);
     } catch (err) {
       setError(
@@ -387,7 +369,7 @@ export function PhotoUploadDialog({
           <Button
             size="sm"
             onClick={handleUpload}
-            disabled={!selectedFile || !croppedAreaPixels || busy}
+            disabled={!selectedFile || !croppedAreaPct || busy}
           >
             {uploading ? (
               <Loader2 size={14} className="mr-1.5 animate-spin" />

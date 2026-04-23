@@ -160,6 +160,7 @@ def _rpc_rows_to_tree_data(
                     "requires_booking": r.get("loc_requires_booking"),
                     "image_url": r.get("loc_photo_url"),
                     "user_image_url": r.get("loc_user_image_url"),
+                    "user_image_crop": r.get("loc_user_image_crop"),
                     "attribution_name": r.get("loc_attribution_name"),
                     "attribution_uri": r.get("loc_attribution_uri"),
                     "latitude": r.get("loc_latitude"),

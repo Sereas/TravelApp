@@ -71,6 +71,7 @@ function makeLocationSummary(
     longitude: null,
     image_url: null,
     user_image_url: null,
+    user_image_crop: null,
     attribution_name: null,
     attribution_uri: null,
     ...overrides,

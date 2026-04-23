@@ -51,6 +51,9 @@ def _make_mock_supabase():
         "latitude": None,
         "longitude": None,
         "user_image_url": None,
+        "user_image_crop": None,
+        "useful_link": None,
+        "created_at": None,
     }
 
     def table_handler(name):
@@ -185,3 +188,71 @@ class TestMagicByteValidation:
             )
         finally:
             app.dependency_overrides.pop(get_supabase_client, None)
+
+
+class TestCropDataValidation:
+    """Validate the optional crop_data form field on photo upload."""
+
+    import json
+
+    JPEG_PAYLOAD = b"\xff\xd8\xff\xe0" + b"\x00" * 1020
+
+    def _upload(self, client, crop_data=None):
+        app.dependency_overrides[get_supabase_client] = lambda: _make_mock_supabase()
+        try:
+            data = {}
+            if crop_data is not None:
+                data["crop_data"] = crop_data
+            return client.post(
+                f"/api/v1/trips/{TRIP_ID}/locations/{LOCATION_ID}/photo",
+                files={"file": ("photo.jpg", BytesIO(self.JPEG_PAYLOAD), "image/jpeg")},
+                data=data,
+            )
+        finally:
+            app.dependency_overrides.pop(get_supabase_client, None)
+
+    def test_upload_with_valid_crop_data(self, client):
+        import json
+
+        resp = self._upload(
+            client,
+            crop_data=json.dumps({"x": 10, "y": 5, "width": 50, "height": 31.25}),
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["user_image_crop"] is not None
+        assert body["user_image_crop"]["x"] == 10
+
+    def test_upload_without_crop_data(self, client):
+        resp = self._upload(client)
+        assert resp.status_code == 200
+
+    def test_upload_with_invalid_json(self, client):
+        resp = self._upload(client, crop_data="not json")
+        assert resp.status_code == 422
+
+    def test_upload_with_missing_keys(self, client):
+        import json
+
+        resp = self._upload(client, crop_data=json.dumps({"x": 10, "y": 5}))
+        assert resp.status_code == 422
+
+    def test_upload_with_negative_value(self, client):
+        import json
+
+        crop = {"x": -10, "y": 5, "width": 50, "height": 50}
+        resp = self._upload(client, crop_data=json.dumps(crop))
+        assert resp.status_code == 422
+
+    def test_upload_with_zero_width(self, client):
+        import json
+
+        crop = {"x": 0, "y": 0, "width": 0, "height": 50}
+        resp = self._upload(client, crop_data=json.dumps(crop))
+        assert resp.status_code == 422
+
+    def test_cache_buster_in_url(self, client):
+        resp = self._upload(client)
+        assert resp.status_code == 200
+        url = resp.json()["user_image_url"]
+        assert "?v=" in url

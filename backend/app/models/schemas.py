@@ -182,6 +182,7 @@ class LocationResponse(BaseModel):
     longitude: float | None = None
     image_url: str | None = None
     user_image_url: str | None = None
+    user_image_crop: dict | None = None
     attribution_name: str | None = None
     attribution_uri: str | None = None
     created_at: str | None = None

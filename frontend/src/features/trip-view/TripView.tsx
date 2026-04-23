@@ -25,7 +25,7 @@
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Compass, DollarSign, FileText, MapPin } from "lucide-react";
 
-import type { Location, Trip } from "@/lib/api";
+import type { Location, Trip, ImageCropData } from "@/lib/api";
 import type {
   ItineraryMutations,
   ReadOnlyItineraryState,
@@ -113,7 +113,11 @@ export interface TripViewProps {
   onCancelEditingLocation?: () => void;
   onLocationUpdated?: (updated: Location) => void;
   onRefreshData?: () => void | Promise<void>;
-  onPhotoUpload?: (locationId: string, file: File) => Promise<void>;
+  onPhotoUpload?: (
+    locationId: string,
+    file: File,
+    cropData: ImageCropData
+  ) => Promise<void>;
   onPhotoReset?: (locationId: string) => Promise<void>;
   onMapPinClick?: (locationId: string) => void;
   onCardClick?: (locationId: string) => void;
@@ -310,12 +314,13 @@ export function TripView({
           added_by_email={loc.added_by_email}
           image_url={loc.image_url}
           user_image_url={loc.user_image_url}
+          user_image_crop={loc.user_image_crop}
           attribution_name={loc.attribution_name}
           attribution_uri={loc.attribution_uri}
           onPhotoUpload={
             isReadOnly || !onPhotoUpload
               ? undefined
-              : (file) => onPhotoUpload(loc.id, file)
+              : (file, cropData) => onPhotoUpload(loc.id, file, cropData)
           }
           onPhotoReset={
             isReadOnly || !onPhotoReset ? undefined : () => onPhotoReset(loc.id)

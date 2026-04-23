@@ -22,6 +22,7 @@ function makeLocation(overrides: Partial<Location> = {}): Location {
     longitude: null,
     image_url: null,
     user_image_url: null,
+    user_image_crop: null,
     attribution_name: null,
     attribution_uri: null,
     created_at: null,

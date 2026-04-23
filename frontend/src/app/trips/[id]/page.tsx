@@ -17,7 +17,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { api, type Trip, type Location } from "@/lib/api";
+import { api, type Trip, type Location, type ImageCropData } from "@/lib/api";
 import { type TripUpdatePayload } from "@/components/trips/EditTripForm";
 import {
   DateChangeDialog,
@@ -270,13 +270,23 @@ export default function TripDetailPage() {
     }
   }
 
-  async function handlePhotoUpload(locationId: string, file: File) {
-    const updated = await api.locations.uploadPhoto(tripId, locationId, file);
+  async function handlePhotoUpload(
+    locationId: string,
+    file: File,
+    cropData: ImageCropData
+  ) {
+    const updated = await api.locations.uploadPhoto(
+      tripId,
+      locationId,
+      file,
+      cropData
+    );
     setLocations((prev) =>
       prev.map((loc) => (loc.id === locationId ? updated : loc))
     );
     syncLocationSummary(locationId, () => ({
       user_image_url: updated.user_image_url,
+      user_image_crop: updated.user_image_crop,
     }));
   }
 
@@ -284,10 +294,15 @@ export default function TripDetailPage() {
     await api.locations.deletePhoto(tripId, locationId);
     setLocations((prev) =>
       prev.map((loc) =>
-        loc.id === locationId ? { ...loc, user_image_url: null } : loc
+        loc.id === locationId
+          ? { ...loc, user_image_url: null, user_image_crop: null }
+          : loc
       )
     );
-    syncLocationSummary(locationId, () => ({ user_image_url: null }));
+    syncLocationSummary(locationId, () => ({
+      user_image_url: null,
+      user_image_crop: null,
+    }));
   }
 
   function handleSmartInputSubmit(value: string, isUrl: boolean) {

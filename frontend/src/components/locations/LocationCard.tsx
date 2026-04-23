@@ -38,6 +38,8 @@ import { Button } from "@/components/ui/button";
 import { PhotoUploadDialog } from "./PhotoUploadDialog";
 import { ImageLightbox } from "@/components/ui/image-lightbox";
 import { api } from "@/lib/api";
+import type { ImageCropData } from "@/lib/api/types";
+import { cropToBgStyle } from "@/lib/image-crop";
 
 export interface LocationCardProps {
   id: string;
@@ -53,9 +55,10 @@ export interface LocationCardProps {
   added_by_email?: string | null;
   image_url?: string | null;
   user_image_url?: string | null;
+  user_image_crop?: ImageCropData | null;
   attribution_name?: string | null;
   attribution_uri?: string | null;
-  onPhotoUpload?: (file: File) => Promise<void>;
+  onPhotoUpload?: (file: File, cropData: ImageCropData) => Promise<void>;
   onPhotoReset?: () => Promise<void>;
   inItinerary?: boolean;
   itineraryDayLabel?: string | null;
@@ -456,6 +459,7 @@ export function LocationCard({
   onDelete,
   image_url,
   user_image_url,
+  user_image_crop,
   attribution_name,
   attribution_uri,
   onPhotoUpload,
@@ -551,27 +555,54 @@ export function LocationCard({
           <div className="relative aspect-[16/10] w-full overflow-hidden rounded-t-xl">
             {effectiveImageUrl ? (
               <>
-                <img
-                  src={effectiveImageUrl}
-                  alt={eName ?? name}
-                  className="h-full w-full cursor-pointer object-cover transition-transform duration-300 hover:scale-[1.02]"
-                  loading="lazy"
-                  sizes="(min-width: 1024px) 30vw, (min-width: 640px) 50vw, 100vw"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setLightboxOpen(true);
-                  }}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
+                {/* When crop data exists, use a div with background-image to
+                    show only the cropped region. This avoids Tailwind preflight
+                    `img { max-width: 100% }` which breaks absolute-positioned
+                    img scaling. When no crop, fall back to plain img + object-cover. */}
+                {user_image_crop &&
+                user_image_crop.width > 0 &&
+                user_image_crop.height > 0 ? (
+                  <div
+                    className="h-full w-full cursor-pointer transition-transform duration-300 hover:scale-[1.02]"
+                    style={cropToBgStyle(effectiveImageUrl, user_image_crop)}
+                    onClick={(e) => {
                       e.stopPropagation();
                       setLightboxOpen(true);
-                    }
-                  }}
-                  aria-label={`View ${eName ?? name} photo full size`}
-                />
+                    }}
+                    role="img"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setLightboxOpen(true);
+                      }
+                    }}
+                    aria-label={`View ${eName ?? name} photo full size`}
+                  />
+                ) : (
+                  <img
+                    src={effectiveImageUrl}
+                    alt={eName ?? name}
+                    className="h-full w-full cursor-pointer object-cover transition-transform duration-300 hover:scale-[1.02]"
+                    loading="lazy"
+                    sizes="(min-width: 1024px) 30vw, (min-width: 640px) 50vw, 100vw"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setLightboxOpen(true);
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setLightboxOpen(true);
+                      }
+                    }}
+                    aria-label={`View ${eName ?? name} photo full size`}
+                  />
+                )}
                 {showAttribution && (
                   <div className="absolute bottom-0 right-0 bg-black/50 px-1.5 py-0.5 text-[10px] leading-tight text-white/80">
                     {attribution_uri ? (

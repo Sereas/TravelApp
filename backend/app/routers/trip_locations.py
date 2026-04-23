@@ -10,6 +10,7 @@ from fastapi import (
     APIRouter,
     BackgroundTasks,
     Depends,
+    Form,
     HTTPException,
     Request,
     Response,
@@ -66,7 +67,7 @@ _LOCATIONS_SELECT = (
     "location_id, trip_id, name, address, google_link, google_place_id, "
     "google_source_type, added_by_email, note, added_by_user_id, city, "
     "working_hours, useful_link, requires_booking, category, "
-    "latitude, longitude, user_image_url, created_at"
+    "latitude, longitude, user_image_url, user_image_crop, created_at"
 )
 
 
@@ -93,6 +94,7 @@ def _loc_to_response(loc: dict) -> LocationResponse:
         longitude=loc.get("longitude"),
         image_url=loc.get("image_url"),
         user_image_url=loc.get("user_image_url"),
+        user_image_crop=loc.get("user_image_crop"),
         attribution_name=loc.get("attribution_name"),
         attribution_uri=loc.get("attribution_uri"),
         created_at=loc.get("created_at"),
@@ -753,10 +755,15 @@ async def upload_location_photo(
     trip_id: UUID,
     location_id: UUID,
     file: UploadFile,
+    crop_data: str | None = Form(None),
     user_id: UUID = Depends(get_current_user_id),
     supabase=Depends(get_supabase_client),
 ):
-    """Upload a user photo override for a location. Replaces any existing override."""
+    """Upload a user photo override for a location. Replaces any existing override.
+
+    ``crop_data`` (optional) is a JSON string ``{"x": N, "y": N, "width": N, "height": N}``
+    with percentages (0-100) describing the card crop region of the full image.
+    """
     if file.content_type not in _ALLOWED_IMAGE_TYPES:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -815,13 +822,47 @@ async def upload_location_photo(
         {"content-type": file.content_type, "upsert": "true"},
     )
 
-    # Build public URL
-    public_url = bucket.get_public_url(storage_path)
+    # Build public URL with cache-buster to avoid stale browser cache on re-upload
+    raw_url = bucket.get_public_url(storage_path)
+    public_url = f"{raw_url}?v={int(time.time())}"
+
+    # Parse and validate crop metadata (if provided)
+    parsed_crop = None
+    if crop_data:
+        try:
+            parsed_crop = json.loads(crop_data)
+        except (json.JSONDecodeError, TypeError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="crop_data must be valid JSON",
+            ) from exc
+        required_keys = {"x", "y", "width", "height"}
+        if not isinstance(parsed_crop, dict) or not required_keys.issubset(parsed_crop.keys()):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="crop_data must contain x, y, width, height",
+            )
+        for key in required_keys:
+            val = parsed_crop[key]
+            if not isinstance(val, (int, float)) or val < 0 or val > 100:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"crop_data.{key} must be a number between 0 and 100",
+                )
+        if parsed_crop["width"] <= 0 or parsed_crop["height"] <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="crop_data width and height must be greater than 0",
+            )
 
     # Update locations row
-    supabase.table("locations").update({"user_image_url": public_url}).eq(
-        "location_id", str(location_id)
-    ).eq("trip_id", str(trip_id)).execute()
+    update_payload: dict = {
+        "user_image_url": public_url,
+        "user_image_crop": parsed_crop,
+    }
+    supabase.table("locations").update(update_payload).eq("location_id", str(location_id)).eq(
+        "trip_id", str(trip_id)
+    ).execute()
 
     # Fetch updated row
     fetch = (
@@ -833,6 +874,7 @@ async def upload_location_photo(
     )
     loc = fetch.data[0] if fetch.data else loc_result.data[0]
     loc["user_image_url"] = public_url
+    loc["user_image_crop"] = parsed_crop
     # Enrich with photo URL and attribution
     gp_id = loc.get("google_place_id")
     if gp_id:
@@ -893,8 +935,8 @@ async def delete_location_photo(
         with contextlib.suppress(Exception):
             bucket.remove([f"{trip_id}/{location_id}.{ext}"])
 
-    # Clear the column
-    supabase.table("locations").update({"user_image_url": None}).eq(
+    # Clear the columns
+    supabase.table("locations").update({"user_image_url": None, "user_image_crop": None}).eq(
         "location_id", str(location_id)
     ).eq("trip_id", str(trip_id)).execute()
 

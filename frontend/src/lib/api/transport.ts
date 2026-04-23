@@ -69,10 +69,19 @@ export async function request<T>(
   return res.json();
 }
 
-export async function requestUpload<T>(path: string, file: File): Promise<T> {
+export async function requestUpload<T>(
+  path: string,
+  file: File,
+  extraFields?: Record<string, string>
+): Promise<T> {
   const token = await getAccessToken();
   const formData = new FormData();
   formData.append("file", file);
+  if (extraFields) {
+    for (const [key, value] of Object.entries(extraFields)) {
+      formData.append(key, value);
+    }
+  }
 
   const headers: Record<string, string> = {};
   if (token) {

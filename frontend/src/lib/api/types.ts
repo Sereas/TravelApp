@@ -45,9 +45,18 @@ export interface Location {
   longitude: number | null;
   image_url: string | null;
   user_image_url: string | null;
+  user_image_crop: ImageCropData | null;
   attribution_name: string | null;
   attribution_uri: string | null;
   created_at: string | null;
+}
+
+/** Crop region as percentages (0-100) of the full image dimensions. */
+export interface ImageCropData {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 /** Minimal location info embedded in itinerary tree. */
@@ -66,6 +75,7 @@ export interface LocationSummary {
   longitude: number | null;
   image_url: string | null;
   user_image_url: string | null;
+  user_image_crop: ImageCropData | null;
   attribution_name: string | null;
   attribution_uri: string | null;
 }
@@ -224,6 +234,7 @@ export interface SharedLocationSummary {
   longitude: number | null;
   image_url: string | null;
   user_image_url: string | null;
+  user_image_crop: ImageCropData | null;
   attribution_name: string | null;
   attribution_uri: string | null;
 }

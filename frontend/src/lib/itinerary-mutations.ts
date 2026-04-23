@@ -130,6 +130,7 @@ export function locationSummaryFromLocation(loc: Location): LocationSummary {
     longitude: loc.longitude,
     image_url: loc.image_url,
     user_image_url: loc.user_image_url,
+    user_image_crop: loc.user_image_crop,
     attribution_name: loc.attribution_name,
     attribution_uri: loc.attribution_uri,
   };
@@ -157,6 +158,7 @@ export function locationSummaryPlaceholder(
     longitude: null,
     image_url: null,
     user_image_url: null,
+    user_image_crop: null,
     attribution_name: null,
     attribution_uri: null,
   };
