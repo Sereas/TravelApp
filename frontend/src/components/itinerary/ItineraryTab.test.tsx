@@ -47,6 +47,7 @@ vi.mock("@/components/itinerary/ItineraryInspectorPanel", () => ({
 
 vi.mock("@/components/itinerary/ItineraryRouteManager", () => ({
   ItineraryRouteManager: () => <div data-testid="route-manager-mock" />,
+  RouteBuilderToolbar: () => null,
 }));
 
 vi.mock("@/components/itinerary/AddLocationsToOptionDialog", () => ({
