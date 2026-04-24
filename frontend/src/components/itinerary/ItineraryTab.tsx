@@ -671,7 +671,7 @@ export function ItineraryTab({
                         onReorderLocations={
                           itineraryMutations?.handleReorderOptionLocations
                         }
-                        onRoutesChanged={fetchItinerary}
+                        onDeleteRoute={itineraryMutations?.handleDeleteRoute}
                         onRouteCreated={itineraryMutations?.handleRouteCreated}
                         onRetryRouteMetrics={
                           itineraryMutations?.handleRetryRouteMetrics

@@ -136,6 +136,14 @@ Invoke the appropriate skill(s) based on the task type. You are the orchestrator
 
 **Mandatory.** After implementation, verify your work visually using Playwright.
 
+**CRITICAL: Browser session management.**
+- Open the browser ONCE at the start of verification. Do NOT call `browser_close` until ALL checks are complete.
+- Log in ONCE. Do NOT re-login between checks.
+- Do all navigation, screenshots, clicks, and state checks in the SAME browser session.
+- NEVER open a second browser instance. If you already have one open, use it.
+- Closing and reopening the browser is extremely expensive (tokens + time) and wastes the user's resources.
+- If you need to check a different page, use `browser_navigate` — do NOT close and reopen.
+
 1. Navigate to the affected page(s) using `mcp__playwright__browser_navigate`.
 2. Take a screenshot using `mcp__playwright__browser_take_screenshot`.
 3. Check:
@@ -145,7 +153,8 @@ Invoke the appropriate skill(s) based on the task type. You are the orchestrator
    - Do hover/focus/active states work? (use `mcp__playwright__browser_hover`, `mcp__playwright__browser_click`)
    - Does it look correct at different viewport sizes if relevant? (use `mcp__playwright__browser_resize`)
 4. If something looks wrong, fix it and re-verify. Do not report completion until the visual check passes.
-5. Share the verification result with the user — describe what you checked and what you observed.
+5. When ALL checks are done, call `browser_close` exactly once.
+6. Share the verification result with the user — describe what you checked and what you observed.
 
 **If Playwright is not available or services are not running:**
 - Tell the user you cannot visually verify.

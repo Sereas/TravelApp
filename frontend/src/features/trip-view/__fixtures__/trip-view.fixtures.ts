@@ -234,6 +234,7 @@ export function makeItineraryMutations(): ItineraryMutations {
     handleReorderOptionLocations: vi.fn(),
     handleRouteCreated: vi.fn().mockResolvedValue(undefined),
     handleRetryRouteMetrics: vi.fn(),
+    handleDeleteRoute: vi.fn(),
     handleScheduleLocationToDay: vi.fn().mockResolvedValue(undefined),
     handleLocationNoteSave: vi.fn().mockResolvedValue(undefined),
     handleLocationDelete: vi.fn().mockResolvedValue(undefined),

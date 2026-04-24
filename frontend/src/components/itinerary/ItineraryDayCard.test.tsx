@@ -96,8 +96,8 @@ function makeMinimalProps(
       undefined as unknown as ItineraryDayCardProps["onUpdateTimePeriod"],
     onReorderLocations:
       undefined as unknown as ItineraryDayCardProps["onReorderLocations"],
-    onRoutesChanged:
-      undefined as unknown as ItineraryDayCardProps["onRoutesChanged"],
+    onDeleteRoute:
+      undefined as unknown as ItineraryDayCardProps["onDeleteRoute"],
     onRouteCreated:
       undefined as unknown as ItineraryDayCardProps["onRouteCreated"],
     onRetryRouteMetrics:

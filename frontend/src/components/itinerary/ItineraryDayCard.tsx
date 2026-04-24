@@ -19,7 +19,11 @@ import {
 } from "@/lib/api";
 import { ItineraryDayHeader } from "@/components/itinerary/ItineraryDayHeader";
 import { ItineraryDayTimeline } from "@/components/itinerary/ItineraryDayTimeline";
-import { ItineraryRouteManager } from "@/components/itinerary/ItineraryRouteManager";
+import {
+  ItineraryRouteManager,
+  RouteBuilderToolbar,
+} from "@/components/itinerary/ItineraryRouteManager";
+import type { TransportMode } from "@/components/itinerary/itinerary-route-constants";
 import { AddLocationsToOptionDialog } from "@/components/itinerary/AddLocationsToOptionDialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -62,43 +66,8 @@ const TIME_META: Record<
   },
 };
 
-export const ROUTE_COLORS = [
-  {
-    bar: "border-l-route-1",
-    bg: "bg-route-1/10",
-    text: "text-route-1",
-    dot: "bg-route-1",
-    hex: "#6898d3",
-  },
-  {
-    bar: "border-l-route-2",
-    bg: "bg-route-2/10",
-    text: "text-route-2",
-    dot: "bg-route-2",
-    hex: "#4cb290",
-  },
-  {
-    bar: "border-l-route-3",
-    bg: "bg-route-3/10",
-    text: "text-route-3",
-    dot: "bg-route-3",
-    hex: "#ce9358",
-  },
-  {
-    bar: "border-l-route-4",
-    bg: "bg-route-4/10",
-    text: "text-route-4",
-    dot: "bg-route-4",
-    hex: "#9d82c9",
-  },
-  {
-    bar: "border-l-route-5",
-    bg: "bg-route-5/10",
-    text: "text-route-5",
-    dot: "bg-route-5",
-    hex: "#c66b7a",
-  },
-];
+import { ROUTE_COLORS } from "@/components/itinerary/itinerary-route-constants";
+export { ROUTE_COLORS };
 
 export interface ItineraryDayCardProps {
   day: ItineraryDay;
@@ -154,7 +123,7 @@ export interface ItineraryDayCardProps {
     optionId: string,
     locationIds: string[]
   ) => void;
-  onRoutesChanged: () => void;
+  onDeleteRoute?: (dayId: string, optionId: string, routeId: string) => void;
   onRouteCreated?: (
     dayId: string,
     optionId: string,
@@ -196,7 +165,7 @@ export function ItineraryDayCard({
   onRemoveLocation,
   onUpdateTimePeriod,
   onReorderLocations,
-  onRoutesChanged,
+  onDeleteRoute,
   onRouteCreated,
   onRetryRouteMetrics,
   calculatingRouteId,
@@ -230,6 +199,52 @@ export function ItineraryDayCard({
     () => currentOption?.routes ?? [],
     [currentOption?.routes]
   );
+
+  // ── Route builder state (lifted from ItineraryRouteManager) ──────────
+  const [builderMode, setBuilderMode] = useState<"create" | "edit" | null>(
+    null
+  );
+  const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
+  const [pickIds, setPickIds] = useState<string[]>([]);
+  const [transport, setTransport] = useState<TransportMode>("drive");
+  const [saving, setSaving] = useState(false);
+
+  // Clear builder state when the user switches day options
+  useEffect(() => {
+    setBuilderMode(null);
+    setEditingRouteId(null);
+    setPickIds([]);
+    setTransport("drive");
+  }, [currentOption?.id]);
+
+  const handleBeginCreate = useCallback(() => {
+    setBuilderMode("create");
+    setEditingRouteId(null);
+    setPickIds([]);
+    setTransport("drive");
+  }, []);
+
+  const handleBeginEdit = useCallback((route: (typeof routes)[0]) => {
+    setBuilderMode("edit");
+    setEditingRouteId(route.route_id);
+    setPickIds(route.option_location_ids ?? []);
+    setTransport((route.transport_mode as TransportMode) ?? "drive");
+  }, []);
+
+  const handleCancelBuilder = useCallback(() => {
+    setBuilderMode(null);
+    setEditingRouteId(null);
+    setPickIds([]);
+    setTransport("drive");
+  }, []);
+
+  const handleTogglePick = useCallback((olId: string) => {
+    setPickIds((prev) =>
+      prev.includes(olId) ? prev.filter((id) => id !== olId) : [...prev, olId]
+    );
+  }, []);
+
+  // ─────────────────────────────────────────────────────────────────────
 
   // Build lookup: locationId → all route memberships
   const locRouteMap = useMemo(() => {
@@ -379,51 +394,52 @@ export function ItineraryDayCard({
   }
 
   async function handleSaveRoute(
-    transport: "walk" | "drive" | "transit",
+    transportMode: TransportMode,
     locationIds: string[],
-    editingRouteId: string | null
+    routeEditId: string | null
   ) {
     if (!currentOption) return;
-    if (editingRouteId) {
-      const routeResponse = await api.itinerary.updateRoute(
-        tripId,
-        day.id,
-        currentOption.id,
-        editingRouteId,
-        {
-          transport_mode: transport,
-          option_location_ids: locationIds,
-        }
-      );
-      await safeRouteCreated(day.id, currentOption.id, routeResponse);
-    } else {
-      const routeResponse = await api.itinerary.createRoute(
-        tripId,
-        day.id,
-        currentOption.id,
-        {
-          transport_mode: transport,
-          label: null,
-          option_location_ids: locationIds,
-        }
-      );
-      await safeRouteCreated(day.id, currentOption.id, routeResponse);
+    setSaving(true);
+    try {
+      if (routeEditId) {
+        const routeResponse = await api.itinerary.updateRoute(
+          tripId,
+          day.id,
+          currentOption.id,
+          routeEditId,
+          {
+            transport_mode: transportMode,
+            option_location_ids: locationIds,
+          }
+        );
+        await safeRouteCreated(day.id, currentOption.id, routeResponse);
+      } else {
+        const routeResponse = await api.itinerary.createRoute(
+          tripId,
+          day.id,
+          currentOption.id,
+          {
+            transport_mode: transportMode,
+            label: null,
+            option_location_ids: locationIds,
+          }
+        );
+        await safeRouteCreated(day.id, currentOption.id, routeResponse);
+      }
+      // Clear builder state on success
+      setBuilderMode(null);
+      setEditingRouteId(null);
+      setPickIds([]);
+    } catch {
+      /* error shown by parent */
+    } finally {
+      setSaving(false);
     }
   }
 
-  async function handleDeleteRoute(routeId: string) {
+  function handleDeleteRoute(routeId: string) {
     if (!currentOption) return;
-    try {
-      await api.itinerary.deleteRoute(
-        tripId,
-        day.id,
-        currentOption.id,
-        routeId
-      );
-      onRoutesChanged();
-    } catch {
-      /* swallow */
-    }
+    onDeleteRoute?.(day.id, currentOption.id, routeId);
   }
 
   // Time picker portal
@@ -548,14 +564,14 @@ export function ItineraryDayCard({
                 expandedId={expandedId}
                 dragId={dragId}
                 dropId={dropId}
-                isPickMode={false}
-                pickIds={[]}
+                isPickMode={builderMode !== null}
+                pickIds={pickIds}
                 tpOpen={tpOpen}
                 tpTrigger={tpTrigger}
                 currentOptionId={currentOption.id}
                 dayId={day.id}
                 calculatingRouteId={calculatingRouteId}
-                onTogglePick={() => {}}
+                onTogglePick={handleTogglePick}
                 onDragStart={onDragStart}
                 onDragEnd={onDragEnd}
                 onDragOver={onDragOver}
@@ -591,9 +607,29 @@ export function ItineraryDayCard({
                 routes={routes}
                 calculatingRouteId={calculatingRouteId}
                 routeMetricsError={routeMetricsError}
+                builderMode={builderMode}
                 onRetryRouteMetrics={safeRetryRouteMetrics}
-                onSaveRoute={handleSaveRoute}
                 onDeleteRoute={handleDeleteRoute}
+                onBeginCreate={handleBeginCreate}
+                onBeginEdit={handleBeginEdit}
+              />
+
+              {/* Sticky toolbar — stays visible at bottom of viewport
+                  while the user scrolls through the timeline to pick
+                  route stops. Positioned here (outside RouteManager,
+                  inside CardContent) so the sticky range spans the full
+                  card height including the timeline above. */}
+              <RouteBuilderToolbar
+                builderMode={builderMode}
+                pickIds={pickIds}
+                transport={transport}
+                saving={saving}
+                onSetTransport={setTransport}
+                onCancelBuilder={handleCancelBuilder}
+                onSave={() => {
+                  if (pickIds.length < 2) return;
+                  void handleSaveRoute(transport, pickIds, editingRouteId);
+                }}
               />
             </div>
           )}

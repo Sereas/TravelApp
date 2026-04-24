@@ -94,11 +94,12 @@ export function useItineraryState({
       const data = await api.itinerary.get(tripId);
       setItinerary(data);
 
-      // Auto-recalculate routes with missing segments (e.g. after a stop was
-      // deleted and some segments were removed). Only fire once per route to
-      // avoid loops — skip if we're already calculating.
+      // Auto-recalculate routes whose segment count doesn't match the
+      // expected count (stops - 1). Covers both missing segments (after a
+      // stop was added) and stale excess segments (after a stop was deleted).
+      // Only fire once per route to avoid loops — skip if already calculating.
       // Only trigger when segments is an explicit array (present in tree data)
-      // but shorter than expected — not when segments is undefined.
+      // — not when segments is undefined.
       for (const day of data.days) {
         for (const option of day.options) {
           for (const route of option.routes ?? []) {
@@ -110,7 +111,7 @@ export function useItineraryState({
             if (
               expectedSegments > 0 &&
               hasSegmentsArray &&
-              actualSegments < expectedSegments &&
+              actualSegments !== expectedSegments &&
               !calculatingRouteIdRef.current
             ) {
               // Trigger recalculation in the background
@@ -512,11 +513,19 @@ export function useItineraryState({
             o.routes.length > 0
               ? (o.routes
                   .map((route) => {
+                    const wasInRoute = route.option_location_ids.includes(olId);
+                    if (!wasInRoute) return route;
                     const remainingIds = route.option_location_ids.filter(
                       (id) => id !== olId
                     );
                     if (remainingIds.length < 2) return null;
-                    return { ...route, option_location_ids: remainingIds };
+                    return {
+                      ...route,
+                      option_location_ids: remainingIds,
+                      segments: [],
+                      duration_seconds: null,
+                      distance_meters: null,
+                    };
                   })
                   .filter(Boolean) as typeof o.routes)
               : o.routes;
@@ -531,6 +540,11 @@ export function useItineraryState({
           optionId,
           olId
         );
+        // Refetch so auto-recalculation picks up routes with stale segments.
+        // The optimistic update already removed the location visually; the
+        // refetch syncs segment data and triggers recalculation for affected
+        // routes.
+        await fetchItinerary();
       } catch (err) {
         setItineraryActionError(
           err instanceof Error ? err.message : "Failed to remove location"
@@ -609,6 +623,38 @@ export function useItineraryState({
       _fetchAndPatchRouteMetrics(tripId, dayId, optionId, routeId);
     },
     [_fetchAndPatchRouteMetrics, tripId]
+  );
+
+  const handleDeleteRoute = useCallback(
+    (dayId: string, optionId: string, routeId: string) => {
+      setItineraryActionError(null);
+      setRouteMetricsError((prev) => {
+        const next = { ...prev };
+        delete next[routeId];
+        return next;
+      });
+      if (calculatingRouteIdRef.current === routeId) {
+        calculatingRouteIdRef.current = null;
+        setCalculatingRouteId(null);
+      }
+
+      void withOptimisticUpdate({
+        setter: setItinerary,
+        optimisticUpdate: (prev) =>
+          mutateOption(prev, dayId, optionId, (o) => ({
+            ...o,
+            routes: o.routes.filter((r) => r.route_id !== routeId),
+          })),
+        serverCall: () =>
+          api.itinerary.deleteRoute(tripId, dayId, optionId, routeId),
+        refetch: fetchItinerary,
+        onError: (err) =>
+          setItineraryActionError(
+            err instanceof Error ? err.message : "Failed to delete route"
+          ),
+      });
+    },
+    [fetchItinerary, tripId]
   );
 
   const handleReorderOptionLocations = useCallback(
@@ -786,6 +832,7 @@ export function useItineraryState({
     handleUpdateLocationTimePeriod,
     handleRouteCreated,
     handleRetryRouteMetrics,
+    handleDeleteRoute,
     handleReorderOptionLocations,
     handleScheduleLocationToDay,
     syncLocationSummary,

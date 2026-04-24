@@ -1,41 +1,32 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   type ItineraryDay,
   type ItineraryOption,
   type ItineraryOptionLocation,
 } from "@/lib/api";
-import { ROUTE_COLORS } from "@/components/itinerary/ItineraryDayCard";
+import {
+  ROUTE_COLORS,
+  TRANSPORT,
+  type TransportMode,
+} from "@/components/itinerary/itinerary-route-constants";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/feedback/LoadingSpinner";
 import { cn } from "@/lib/utils";
 import { useReadOnly } from "@/lib/read-only-context";
 import {
   AlertCircle,
-  ArrowDown,
-  ArrowUp,
   Check,
   ChevronDown,
   ChevronUp,
   Footprints,
-  GripVertical,
   MapPin,
+  Navigation,
   Pencil,
   Plus,
   Trash2,
-  Car,
-  TrainFront,
-  Navigation,
-  X,
 } from "lucide-react";
-
-const TRANSPORT = [
-  { key: "walk", label: "Walk", icon: Footprints },
-  { key: "drive", label: "Drive", icon: Car },
-  { key: "transit", label: "Transit", icon: TrainFront },
-] as const;
-
 
 function formatDuration(seconds: number): string {
   const totalMin = Math.round(seconds / 60);
@@ -95,15 +86,6 @@ function formatRouteTotalDistance(
   return formatDistance(distance);
 }
 
-type TransportMode = "walk" | "drive" | "transit";
-
-const TIME_PERIOD_ORDER: Record<string, number> = {
-  morning: 0,
-  afternoon: 1,
-  evening: 2,
-  night: 3,
-};
-
 interface ItineraryRouteManagerProps {
   day: ItineraryDay;
   currentOption: ItineraryOption;
@@ -111,272 +93,16 @@ interface ItineraryRouteManagerProps {
   routes: ItineraryOption["routes"];
   calculatingRouteId: string | null;
   routeMetricsError: Record<string, string>;
+  /** Whether the route builder is active (pick mode). */
+  builderMode: "create" | "edit" | null;
   onRetryRouteMetrics: (
     dayId: string,
     optionId: string,
     routeId: string
   ) => void;
-  onSaveRoute: (
-    transport: TransportMode,
-    locationIds: string[],
-    editingRouteId: string | null
-  ) => Promise<void>;
   onDeleteRoute: (routeId: string) => void;
-}
-
-function InlineRouteBuilder({
-  sortedLocations,
-  initialPickIds,
-  initialTransport,
-  isEditing,
-  saving,
-  onSave,
-  onCancel,
-}: {
-  sortedLocations: ItineraryOptionLocation[];
-  initialPickIds: string[];
-  initialTransport: TransportMode;
-  isEditing: boolean;
-  saving: boolean;
-  onSave: (transport: TransportMode, locationIds: string[]) => void;
-  onCancel: () => void;
-}) {
-  const displayLocations = useMemo(
-    () =>
-      [...sortedLocations].sort((a, b) => {
-        const ta = TIME_PERIOD_ORDER[a.time_period || "morning"] ?? 0;
-        const tb = TIME_PERIOD_ORDER[b.time_period || "morning"] ?? 0;
-        if (ta !== tb) return ta - tb;
-        return a.sort_order - b.sort_order;
-      }),
-    [sortedLocations]
-  );
-
-  const [pickIds, setPickIds] = useState<string[]>(initialPickIds);
-  const [transport, setTransport] = useState<TransportMode>(initialTransport);
-
-  const toggleStop = useCallback((olId: string) => {
-    setPickIds((prev) =>
-      prev.includes(olId) ? prev.filter((id) => id !== olId) : [...prev, olId]
-    );
-  }, []);
-
-  const moveStop = useCallback((index: number, direction: -1 | 1) => {
-    setPickIds((prev) => {
-      const next = [...prev];
-      const target = index + direction;
-      if (target < 0 || target >= next.length) return prev;
-      [next[index], next[target]] = [next[target], next[index]];
-      return next;
-    });
-  }, []);
-
-  const removeStop = useCallback((olId: string) => {
-    setPickIds((prev) => prev.filter((id) => id !== olId));
-  }, []);
-
-  const selectAllInOrder = useCallback(() => {
-    setPickIds(displayLocations.map((l) => l.id));
-  }, [displayLocations]);
-
-  return (
-    <div className="space-y-3 rounded-xl border border-brand/20 bg-brand/5 p-3">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-bold text-brand">
-          {isEditing ? "Edit route" : "New route"}
-        </span>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
-          aria-label="Cancel"
-        >
-          <X size={14} />
-        </button>
-      </div>
-
-      {/* Transport mode */}
-      <div
-        className="flex items-center gap-1"
-        role="radiogroup"
-        aria-label="Transport mode"
-      >
-        {TRANSPORT.map((mode) => {
-          const MIcon = mode.icon;
-          const selected = transport === mode.key;
-          return (
-            <button
-              key={mode.key}
-              type="button"
-              role="radio"
-              aria-checked={selected}
-              onClick={() => setTransport(mode.key as TransportMode)}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all",
-                selected
-                  ? "bg-brand text-white shadow-sm"
-                  : "bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
-              )}
-            >
-              <MIcon size={13} />
-              {mode.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Stop list header */}
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] font-medium text-muted-foreground">
-          Select stops in order ({pickIds.length} selected)
-        </span>
-        {displayLocations.length >= 2 &&
-          pickIds.length < displayLocations.length && (
-            <button
-              type="button"
-              onClick={selectAllInOrder}
-              className="text-[11px] font-medium text-brand transition-colors hover:text-brand-strong"
-            >
-              Select all
-            </button>
-          )}
-      </div>
-
-      {/* Available stops */}
-      <div className="space-y-1">
-        {displayLocations.map((ol) => {
-          const selected = pickIds.includes(ol.id);
-          const seq = selected ? pickIds.indexOf(ol.id) + 1 : 0;
-          return (
-            <button
-              key={ol.id}
-              type="button"
-              onClick={() => toggleStop(ol.id)}
-              className={cn(
-                "flex w-full items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left text-xs transition-all",
-                selected
-                  ? "border-brand/30 bg-white shadow-sm dark:bg-card"
-                  : "border-transparent bg-card/50 hover:bg-card dark:bg-card/30 dark:hover:bg-card/60"
-              )}
-            >
-              <span
-                className={cn(
-                  "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition-all",
-                  selected
-                    ? "bg-brand text-white"
-                    : "border-2 border-muted-foreground/20 text-muted-foreground/40"
-                )}
-              >
-                {selected ? seq : ""}
-              </span>
-              <span
-                className={cn(
-                  "min-w-0 flex-1 truncate font-medium",
-                  selected ? "text-foreground" : "text-muted-foreground"
-                )}
-              >
-                {ol.location.name}
-              </span>
-              {ol.location.city && (
-                <span className="shrink-0 text-[10px] text-muted-foreground/60">
-                  {ol.location.city}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Reorder selected stops */}
-      {pickIds.length >= 2 && (
-        <div className="space-y-1">
-          <span className="text-[11px] font-medium text-muted-foreground">
-            Route order
-          </span>
-          <div className="rounded-lg border border-border/60 bg-card p-1">
-            {pickIds.map((id, i) => {
-              const ol = displayLocations.find((l) => l.id === id);
-              if (!ol) return null;
-              return (
-                <div
-                  key={id}
-                  className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs"
-                >
-                  <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-brand text-[9px] font-bold text-white">
-                    {i + 1}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate font-medium text-foreground">
-                    {ol.location.name}
-                  </span>
-                  <div className="flex shrink-0 items-center gap-0.5">
-                    <button
-                      type="button"
-                      onClick={() => moveStop(i, -1)}
-                      disabled={i === 0}
-                      className="rounded p-0.5 text-muted-foreground/50 transition-colors hover:text-foreground disabled:opacity-30"
-                      aria-label={`Move ${ol.location.name} up`}
-                    >
-                      <ArrowUp size={11} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => moveStop(i, 1)}
-                      disabled={i === pickIds.length - 1}
-                      className="rounded p-0.5 text-muted-foreground/50 transition-colors hover:text-foreground disabled:opacity-30"
-                      aria-label={`Move ${ol.location.name} down`}
-                    >
-                      <ArrowDown size={11} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => removeStop(id)}
-                      className="rounded p-0.5 text-muted-foreground/50 transition-colors hover:text-destructive"
-                      aria-label={`Remove ${ol.location.name}`}
-                    >
-                      <X size={11} />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Actions */}
-      <div className="flex items-center justify-end gap-2 pt-1">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-8 text-xs"
-          onClick={onCancel}
-          disabled={saving}
-        >
-          Cancel
-        </Button>
-        <Button
-          size="sm"
-          className="h-8 gap-1.5 text-xs"
-          disabled={pickIds.length < 2 || saving}
-          onClick={() => onSave(transport, pickIds)}
-        >
-          {saving ? (
-            <>
-              <LoadingSpinner size="sm" className="h-3 w-3" />
-              Saving…
-            </>
-          ) : (
-            <>
-              <Check size={13} />
-              {isEditing
-                ? "Update route"
-                : `Create route (${pickIds.length} stops)`}
-            </>
-          )}
-        </Button>
-      </div>
-    </div>
-  );
+  onBeginCreate: () => void;
+  onBeginEdit: (route: ItineraryOption["routes"][0]) => void;
 }
 
 export function ItineraryRouteManager({
@@ -386,56 +112,20 @@ export function ItineraryRouteManager({
   routes,
   calculatingRouteId,
   routeMetricsError,
+  builderMode,
   onRetryRouteMetrics,
-  onSaveRoute,
   onDeleteRoute,
+  onBeginCreate,
+  onBeginEdit,
 }: ItineraryRouteManagerProps) {
   const readOnly = useReadOnly();
   const [expandedRouteId, setExpandedRouteId] = useState<string | null>(null);
-  const [builderMode, setBuilderMode] = useState<"create" | "edit" | null>(
-    null
-  );
-  const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
 
-  const editInitialIds =
-    editingRouteId != null
-      ? (routes.find((r) => r.route_id === editingRouteId)
-          ?.option_location_ids ?? [])
-      : [];
-  const editInitialTransport =
-    editingRouteId != null
-      ? ((routes.find((r) => r.route_id === editingRouteId)
-          ?.transport_mode as TransportMode) ?? "walk")
-      : "walk";
-
-  function handleBeginCreate() {
-    setBuilderMode("create");
-    setEditingRouteId(null);
-  }
-
-  function handleBeginEdit(route: (typeof routes)[0]) {
-    setBuilderMode("edit");
-    setEditingRouteId(route.route_id);
-  }
-
-  function handleCancel() {
-    setBuilderMode(null);
-    setEditingRouteId(null);
-  }
-
-  async function handleSave(transport: TransportMode, locationIds: string[]) {
-    setSaving(true);
-    try {
-      await onSaveRoute(transport, locationIds, editingRouteId);
-      setBuilderMode(null);
-      setEditingRouteId(null);
-    } catch {
-      /* error shown by parent */
-    } finally {
-      setSaving(false);
+  useEffect(() => {
+    if (expandedRouteId && !routes.some((r) => r.route_id === expandedRouteId)) {
+      setExpandedRouteId(null);
     }
-  }
+  }, [routes, expandedRouteId]);
 
   return (
     <section className="mt-5 rounded-2xl border border-border/70 bg-muted/20 px-3 py-3">
@@ -456,7 +146,7 @@ export function ItineraryRouteManager({
             variant="ghost"
             size="sm"
             className="h-7 gap-1 text-xs text-muted-foreground"
-            onClick={handleBeginCreate}
+            onClick={onBeginCreate}
           >
             <Plus size={12} />
             Create route
@@ -464,34 +154,11 @@ export function ItineraryRouteManager({
         )}
       </div>
 
-      {/* Inline route builder */}
-      {builderMode === "create" && (
-        <div className="mb-3">
-          <InlineRouteBuilder
-            sortedLocations={sortedLocations}
-            initialPickIds={[]}
-            initialTransport="walk"
-            isEditing={false}
-            saving={saving}
-            onSave={handleSave}
-            onCancel={handleCancel}
-          />
-        </div>
-      )}
-
-      {builderMode === "edit" && editingRouteId && (
-        <div className="mb-3">
-          <InlineRouteBuilder
-            key={editingRouteId}
-            sortedLocations={sortedLocations}
-            initialPickIds={editInitialIds}
-            initialTransport={editInitialTransport}
-            isEditing
-            saving={saving}
-            onSave={handleSave}
-            onCancel={handleCancel}
-          />
-        </div>
+      {/* Pick-mode hint — directs user to click locations above */}
+      {builderMode !== null && (
+        <p className="mb-2 text-xs text-muted-foreground">
+          Click locations in the timeline above to add stops.
+        </p>
       )}
 
       {routes.length > 0 && builderMode === null && (
@@ -599,7 +266,7 @@ export function ItineraryRouteManager({
                       <button
                         type="button"
                         className="shrink-0 text-muted-foreground hover:text-primary disabled:opacity-50"
-                        onClick={() => handleBeginEdit(route)}
+                        onClick={() => onBeginEdit(route)}
                         aria-label="Edit route"
                         disabled={isCalculating}
                       >
@@ -688,5 +355,109 @@ export function ItineraryRouteManager({
         </div>
       )}
     </section>
+  );
+}
+
+// ── Sticky route builder toolbar ──────────────────────────────────────
+// Rendered outside ItineraryRouteManager so it can be positioned as a
+// sticky element at the card-content level, staying visible while the
+// user scrolls through the timeline to pick stops.
+
+interface RouteBuilderToolbarProps {
+  builderMode: "create" | "edit" | null;
+  pickIds: string[];
+  transport: TransportMode;
+  saving: boolean;
+  onSetTransport: (mode: TransportMode) => void;
+  onCancelBuilder: () => void;
+  onSave: () => void;
+}
+
+export function RouteBuilderToolbar({
+  builderMode,
+  pickIds,
+  transport,
+  saving,
+  onSetTransport,
+  onCancelBuilder,
+  onSave,
+}: RouteBuilderToolbarProps) {
+  if (builderMode === null) return null;
+
+  return (
+    <div className="sticky bottom-0 z-10 -mx-6 -mb-6 rounded-b-lg border-t border-brand/15 bg-card/95 px-5 py-2.5 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] backdrop-blur-sm">
+      <div className="flex items-center gap-2">
+        {/* Transport mode pills */}
+        <div
+          className="flex items-center gap-0.5"
+          role="radiogroup"
+          aria-label="Transport mode"
+        >
+          {TRANSPORT.map((mode) => {
+            const MIcon = mode.icon;
+            const selected = transport === mode.key;
+            return (
+              <button
+                key={mode.key}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => onSetTransport(mode.key as TransportMode)}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors",
+                  selected
+                    ? "bg-brand text-white"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}
+              >
+                <MIcon size={12} />
+                {mode.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Separator */}
+        <div className="h-4 w-px bg-border/60" />
+
+        {/* Stop count */}
+        <span className="text-[11px] font-medium text-muted-foreground">
+          {pickIds.length} {pickIds.length === 1 ? "stop" : "stops"}
+        </span>
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Cancel */}
+        <button
+          type="button"
+          onClick={onCancelBuilder}
+          disabled={saving}
+          className="rounded px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+        >
+          Cancel
+        </button>
+
+        {/* Create / Update */}
+        <Button
+          size="sm"
+          className="h-7 gap-1 text-[11px]"
+          disabled={pickIds.length < 2 || saving}
+          onClick={onSave}
+        >
+          {saving ? (
+            <>
+              <LoadingSpinner size="sm" className="h-3 w-3" />
+              Saving…
+            </>
+          ) : (
+            <>
+              <Check size={12} />
+              {builderMode === "edit" ? "Update route" : "Create route"}
+            </>
+          )}
+        </Button>
+      </div>
+    </div>
   );
 }

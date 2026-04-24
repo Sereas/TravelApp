@@ -196,6 +196,7 @@ function buildItineraryMutations() {
     handleReorderOptionLocations: vi.fn(),
     handleRouteCreated: vi.fn(),
     handleRetryRouteMetrics: vi.fn(),
+    handleDeleteRoute: vi.fn(),
     handleScheduleLocationToDay: vi.fn(),
     handleLocationNoteSave: vi.fn().mockResolvedValue(undefined),
     handleLocationDelete: vi.fn().mockResolvedValue(undefined),

@@ -97,6 +97,11 @@ export interface ItineraryMutations {
     optionId: string,
     routeId: string
   ) => void;
+  handleDeleteRoute: (
+    dayId: string,
+    optionId: string,
+    routeId: string
+  ) => void;
   handleScheduleLocationToDay: (
     locationId: string,
     dayId: string
