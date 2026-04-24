@@ -122,7 +122,10 @@ export function ItineraryRouteManager({
   const [expandedRouteId, setExpandedRouteId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (expandedRouteId && !routes.some((r) => r.route_id === expandedRouteId)) {
+    if (
+      expandedRouteId &&
+      !routes.some((r) => r.route_id === expandedRouteId)
+    ) {
       setExpandedRouteId(null);
     }
   }, [routes, expandedRouteId]);
