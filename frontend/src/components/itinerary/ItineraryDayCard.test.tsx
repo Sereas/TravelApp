@@ -25,6 +25,7 @@ vi.mock("@/components/itinerary/ItineraryDayMap", () => ({
 
 vi.mock("@/components/itinerary/ItineraryRouteManager", () => ({
   ItineraryRouteManager: () => <div data-testid="route-manager-mock" />,
+  RouteBuilderToolbar: () => null,
 }));
 
 // Render just the trigger so "Add locations" button assertions can see it.
