@@ -182,12 +182,12 @@ class _InstrumentedMock:
         return _RpcProxy()
 
     def _dispatch_rpc(self, name: str, params: dict):
-        if name == "verify_resource_chain":
+        if name in ("verify_member_access", "verify_resource_chain"):
             tid = str(params.get("p_trip_id", ""))
             uid = str(params.get("p_user_id", ""))
             trip = self._trips.get(tid)
             valid = trip is not None and str(trip.get("user_id")) == uid
-            return type("Result", (), {"data": valid})()
+            return type("Result", (), {"data": ("owner" if valid else None)})()
         return type("Result", (), {"data": None})()
 
 

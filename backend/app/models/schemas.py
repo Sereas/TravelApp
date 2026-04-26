@@ -22,12 +22,13 @@ class CreateTripBody(BaseModel):
 
 
 class TripResponse(BaseModel):
-    """Response body for create-trip (201)."""
+    """Response body for trip endpoints."""
 
     id: str = Field(..., description="Trip UUID")
     name: str = Field(..., description="Trip display name")
     start_date: date_type | None = None
     end_date: date_type | None = None
+    role: str | None = None
 
 
 REQUIRES_BOOKING_VALUES = frozenset({"no", "yes", "yes_done"})
@@ -817,3 +818,42 @@ class ImportGoogleListResponse(BaseModel):
     imported: list[ImportedLocationSummary]
     existing: list[ImportedLocationSummary]
     failed: list[ImportedLocationSummary]
+
+
+# ---------------------------------------------------------------------------
+# Trip membership
+# ---------------------------------------------------------------------------
+
+
+class TripMemberResponse(BaseModel):
+    """A member of a trip."""
+
+    id: str
+    user_id: str
+    email: str | None = None
+    role: str
+    joined_at: str
+
+
+class InviteLinkResponse(BaseModel):
+    """An invite link (returned on creation or listing)."""
+
+    id: str
+    invite_url: str
+    expires_at: str
+    created_at: str
+
+
+class InvitePreviewResponse(BaseModel):
+    """Public-facing preview of an invitation (minimal data)."""
+
+    trip_name: str
+    expires_at: str
+    status: str  # active, expired, revoked
+
+
+class InviteAcceptResponse(BaseModel):
+    """Result of accepting an invitation."""
+
+    trip_id: str
+    role: str

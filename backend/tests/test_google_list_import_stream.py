@@ -521,9 +521,9 @@ def test_list_import_stops_on_daily_cap_mid_stream(client: TestClient):
                 m.execute.return_value = MagicMock(data=under_cap)
                 return m
             # For verify_resource_chain (ownership check)
-            if name == "verify_resource_chain":
+            if name in ("verify_member_access", "verify_resource_chain"):
                 m = MagicMock()
-                m.execute.return_value = MagicMock(data=True)
+                m.execute.return_value = MagicMock(data="owner")
                 return m
             raise AssertionError(f"Unexpected RPC: {name!r}")
 

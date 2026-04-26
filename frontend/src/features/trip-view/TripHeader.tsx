@@ -16,6 +16,8 @@ export interface TripHeaderProps {
   itinerary: ItineraryResponse | null;
   isReadOnly: boolean;
   canShare: boolean;
+  canEditName?: boolean;
+  canEditDates?: boolean;
   onBack?: () => void;
   onInlineNameSave?: (name: string) => void | Promise<void>;
   onDateRangeSave?: (newStart: string, newEnd: string) => void | Promise<void>;
@@ -27,6 +29,8 @@ export function TripHeader({
   itinerary,
   isReadOnly,
   canShare,
+  canEditName = true,
+  canEditDates = true,
   onBack,
   onInlineNameSave,
   onDateRangeSave,
@@ -73,7 +77,7 @@ export function TripHeader({
             <span className="rounded-full bg-brand-muted px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-brand-strong">
               Planning
             </span>
-            {isReadOnly ? (
+            {isReadOnly || !canEditDates ? (
               <TripDateRangeReadOnly
                 startDate={trip.start_date}
                 endDate={trip.end_date}
@@ -115,7 +119,7 @@ export function TripHeader({
 
         {/* Trip name */}
         <div className="mt-1">
-          {isReadOnly ? (
+          {isReadOnly || !canEditName ? (
             <h1 className="-mx-1 px-1 text-left text-2xl font-bold tracking-tight text-foreground sm:text-3xl md:text-4xl">
               {trip.name}
             </h1>

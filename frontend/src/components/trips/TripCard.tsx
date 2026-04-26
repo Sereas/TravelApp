@@ -12,6 +12,7 @@ export interface TripCardProps {
   endDate?: string | null;
   imageUrl?: string | null;
   href?: string;
+  role?: string | null;
   onClick?: (id: string) => void;
   onDelete?: (id: string) => void;
 }
@@ -39,6 +40,7 @@ export function TripCard({
   endDate,
   imageUrl,
   href,
+  role,
   onClick,
   onDelete,
 }: TripCardProps) {
@@ -104,6 +106,11 @@ export function TripCard({
           <Calendar size={12} className="shrink-0" />
           <span className={hasDates ? "" : "italic"}>{dateDisplay}</span>
         </div>
+        {role === "editor" && (
+          <div className="mt-1 text-[11px] font-medium text-brand/70">
+            Shared with you
+          </div>
+        )}
       </div>
     </>
   );

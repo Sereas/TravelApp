@@ -63,6 +63,8 @@ def mock_supabase():
     """Mock Supabase client that records inserts and returns stub trip row."""
     inserted = []
 
+    _stub_trip_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+
     class MockTable:
         def __init__(self):
             self._last_row = None
@@ -73,13 +75,26 @@ def mock_supabase():
             return self
 
         def execute(self):
-            trip_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
             name = self._last_row.get("trip_name", "") if self._last_row else ""
-            return type("Result", (), {"data": [{"trip_id": trip_id, "trip_name": name}]})()
+            return type("Result", (), {"data": [{"trip_id": _stub_trip_id, "trip_name": name}]})()
 
     class MockSupabase:
         def table(self, name):
             return MockTable()
+
+        def rpc(self, name, params):
+            if name == "create_trip_with_owner":
+                row = {
+                    "user_id": params.get("p_user_id"),
+                    "trip_name": params.get("p_trip_name"),
+                    "start_date": params.get("p_start_date"),
+                    "end_date": params.get("p_end_date"),
+                }
+                inserted.append(row)
+                return type(
+                    "RpcChain", (), {"execute": lambda _: type("R", (), {"data": _stub_trip_id})()}
+                )()
+            return type("RpcChain", (), {"execute": lambda _: type("R", (), {"data": None})()})()
 
     return MockSupabase(), inserted
 
@@ -148,6 +163,24 @@ def mock_supabase_with_rls():
 
         def table(self, name):
             return MockTableRLS(trips_store, self._current_user_id)
+
+        def rpc(self, name, params):
+            import uuid
+
+            if name == "create_trip_with_owner":
+                trip_id = str(uuid.uuid4())
+                row = {
+                    "trip_id": trip_id,
+                    "user_id": params.get("p_user_id"),
+                    "trip_name": params.get("p_trip_name", ""),
+                    "start_date": params.get("p_start_date"),
+                    "end_date": params.get("p_end_date"),
+                }
+                trips_store.append(row)
+                return type(
+                    "RpcChain", (), {"execute": lambda _: type("R", (), {"data": trip_id})()}
+                )()
+            return type("RpcChain", (), {"execute": lambda _: type("R", (), {"data": None})()})()
 
     return trips_store, MockSupabaseRLS
 
@@ -435,12 +468,23 @@ def mock_supabase_trips_and_locations():
             return None
 
         def rpc(self, name, params):
-            if name == "verify_resource_chain":
+            if name in ("verify_member_access", "verify_resource_chain"):
                 tid = str(params.get("p_trip_id", ""))
                 uid = str(params.get("p_user_id", ""))
-                valid = tid in self._trip_owners and self._trip_owners[tid] == uid
+                if tid in self._trip_owners and self._trip_owners[tid] == uid:
+                    role = "owner"
+                else:
+                    role = None
                 return type(
-                    "RpcChain", (), {"execute": lambda _: type("R", (), {"data": valid})()}
+                    "RpcChain", (), {"execute": lambda _: type("R", (), {"data": role})()}
+                )()
+            if name == "list_user_trips":
+                uid = str(params.get("p_user_id", ""))
+                trips = [
+                    {**t, "role": "owner"} for t in self._trips_store if t.get("user_id") == uid
+                ]
+                return type(
+                    "RpcChain", (), {"execute": lambda _: type("R", (), {"data": trips})()}
                 )()
             if name == "delete_location_cascade":
                 loc_id = str(params.get("p_location_id", ""))
@@ -1147,17 +1191,29 @@ def mock_supabase_trips_and_days():
                     self._locations_store,
                 )
                 return type("RpcChain", (), {"execute": lambda _: _RpcResult(data)})()
-            if name == "verify_resource_chain":
+            if name in ("verify_member_access", "verify_resource_chain"):
                 trip_id_str = str(params.get("p_trip_id", ""))
                 user_id_str = str(params.get("p_user_id", ""))
                 day_id_str = params.get("p_day_id")
                 option_id_str = params.get("p_option_id")
-                # Check trip ownership
+                min_role = params.get("p_min_role", "editor")
+                # Check trip membership — owners stored in _trip_owners,
+                # editors in _trip_editors (if present)
+                role = None
                 if (
-                    trip_id_str not in self._trip_owners
-                    or self._trip_owners[trip_id_str] != user_id_str
+                    trip_id_str in self._trip_owners
+                    and self._trip_owners[trip_id_str] == user_id_str
                 ):
-                    return type("RpcChain", (), {"execute": lambda _: _RpcResult(False)})()
+                    role = "owner"
+                elif hasattr(self, "_trip_editors"):
+                    editors = self._trip_editors.get(trip_id_str, [])
+                    if user_id_str in editors:
+                        role = "editor"
+                if role is None:
+                    return type("RpcChain", (), {"execute": lambda _: _RpcResult(None)})()
+                # Enforce minimum role
+                if min_role == "owner" and role != "owner":
+                    return type("RpcChain", (), {"execute": lambda _: _RpcResult(None)})()
                 # Check day in trip
                 if day_id_str is not None:
                     day_found = any(
@@ -1166,7 +1222,7 @@ def mock_supabase_trips_and_days():
                         for d in self._days_store
                     )
                     if not day_found:
-                        return type("RpcChain", (), {"execute": lambda _: _RpcResult(False)})()
+                        return type("RpcChain", (), {"execute": lambda _: _RpcResult(None)})()
                 # Check option in day
                 if option_id_str is not None and day_id_str is not None:
                     opt_found = any(
@@ -1175,8 +1231,8 @@ def mock_supabase_trips_and_days():
                         for o in self._options_store
                     )
                     if not opt_found:
-                        return type("RpcChain", (), {"execute": lambda _: _RpcResult(False)})()
-                return type("RpcChain", (), {"execute": lambda _: _RpcResult(True)})()
+                        return type("RpcChain", (), {"execute": lambda _: _RpcResult(None)})()
+                return type("RpcChain", (), {"execute": lambda _: _RpcResult(role)})()
             if name == "reorder_option_locations":
                 oid = str(params.get("p_option_id", ""))
                 ol_ids = [str(x) for x in (params.get("p_ol_ids") or [])]

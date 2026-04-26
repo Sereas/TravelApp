@@ -7,7 +7,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from backend.app.db.supabase import get_supabase_client
-from backend.app.dependencies import get_current_user_id
+from backend.app.dependencies import get_current_user_email, get_current_user_id
 from backend.app.models.schemas import CreateTripBody, TripResponse, UpdateTripBody
 from backend.app.routers.trip_ownership import _ensure_resource_chain
 
@@ -20,33 +20,37 @@ router = APIRouter(prefix="/trips", tags=["trips"])
 async def create_trip(
     body: CreateTripBody,
     user_id: UUID = Depends(get_current_user_id),
+    user_email: str | None = Depends(get_current_user_email),
     supabase=Depends(get_supabase_client),
 ):
     """
     Create a trip owned by the authenticated user.
-    Requires valid JWT in Authorization: Bearer <token>.
+    Atomically creates trip + owner membership row via RPC.
     """
-    row = {
-        "user_id": str(user_id),
-        "trip_name": body.name,
-        "start_date": body.start_date.isoformat() if body.start_date else None,
-        "end_date": body.end_date.isoformat() if body.end_date else None,
-    }
-    result = supabase.table("trips").insert(row).execute()
-    if not result.data or len(result.data) == 0:
-        raise RuntimeError("Insert did not return row")
-    trip = result.data[0]
-    trip_id = trip["trip_id"]
+    result = supabase.rpc(
+        "create_trip_with_owner",
+        {
+            "p_trip_name": body.name,
+            "p_start_date": body.start_date.isoformat() if body.start_date else None,
+            "p_end_date": body.end_date.isoformat() if body.end_date else None,
+            "p_user_id": str(user_id),
+            "p_user_email": user_email,
+        },
+    ).execute()
+    if not result.data:
+        raise RuntimeError("create_trip_with_owner did not return trip_id")
+    trip_id = result.data
     logger.info("trip_created", trip_id=str(trip_id), user_id=str(user_id))
     return TripResponse(
         id=str(trip_id),
-        name=trip.get("trip_name", body.name),
+        name=body.name,
         start_date=body.start_date,
         end_date=body.end_date,
+        role="owner",
     )
 
 
-def _trip_row_to_response(trip: dict) -> TripResponse:
+def _trip_row_to_response(trip: dict, role: str | None = None) -> TripResponse:
     start = trip.get("start_date")
     end = trip.get("end_date")
     if isinstance(start, str):
@@ -58,6 +62,7 @@ def _trip_row_to_response(trip: dict) -> TripResponse:
         name=trip.get("trip_name", ""),
         start_date=start,
         end_date=end,
+        role=role or trip.get("role"),
     )
 
 
@@ -67,16 +72,13 @@ async def list_trips(
     supabase=Depends(get_supabase_client),
 ):
     """
-    List all trips for the authenticated user. Requires valid JWT.
-    Returns 200 with array of trips (id, name, start_date, end_date); empty → [].
+    List all trips the user is a member of (owned + shared).
+    Returns 200 with array of trips including the user's role.
     """
-    result = (
-        supabase.table("trips")
-        .select("trip_id, trip_name, start_date, end_date")
-        .eq("user_id", str(user_id))
-        .order("created_at", desc=True)
-        .execute()
-    )
+    result = supabase.rpc(
+        "list_user_trips",
+        {"p_user_id": str(user_id)},
+    ).execute()
     items = result.data if result.data else []
     logger.info("trips_listed", user_id=str(user_id), count=len(items))
     return [_trip_row_to_response(t) for t in items]
@@ -90,9 +92,9 @@ async def get_trip(
 ):
     """
     Get a trip by id. Requires valid JWT.
-    Trip must exist and be owned by the authenticated user; else 404.
+    User must be a member of the trip; else 404.
     """
-    _ensure_resource_chain(supabase, trip_id, user_id)
+    role = _ensure_resource_chain(supabase, trip_id, user_id)
     result = (
         supabase.table("trips")
         .select("trip_id, trip_name, start_date, end_date")
@@ -101,7 +103,7 @@ async def get_trip(
     )
     trip = result.data[0]
     logger.info("trip_retrieved", trip_id=str(trip_id), user_id=str(user_id))
-    return _trip_row_to_response(trip)
+    return _trip_row_to_response(trip, role=role)
 
 
 @router.patch("/{trip_id}", response_model=TripResponse)
@@ -112,11 +114,9 @@ async def update_trip(
     supabase=Depends(get_supabase_client),
 ):
     """
-    Update trip name and/or dates. Requires valid JWT.
-    Trip must exist and be owned by the authenticated user; else 404 with
-    a descriptive message.
+    Update trip name and/or dates. Owner only.
     """
-    _ensure_resource_chain(supabase, trip_id, user_id)
+    _ensure_resource_chain(supabase, trip_id, user_id, required_role="owner")
 
     if not body.model_fields_set:
         raise HTTPException(
@@ -160,11 +160,10 @@ async def delete_trip(
     supabase=Depends(get_supabase_client),
 ):
     """
-    Delete a trip and its associated locations. Requires valid JWT.
-    Trip must exist and be owned by the authenticated user; else 404.
-    Returns 204 No Content on success.
+    Delete a trip. Owner only.
+    FK cascades handle locations, days, options, routes, segments, members deletion.
     """
-    _ensure_resource_chain(supabase, trip_id, user_id)
+    _ensure_resource_chain(supabase, trip_id, user_id, required_role="owner")
 
     # FK cascades handle locations, days, options, routes, segments deletion
     supabase.table("trips").delete().eq("trip_id", str(trip_id)).execute()

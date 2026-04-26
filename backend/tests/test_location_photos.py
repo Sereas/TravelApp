@@ -22,9 +22,9 @@ def _make_mock_supabase(*, has_location=True, user_image_url=None):
 
     # verify_resource_chain RPC
     def rpc_handler(name, params):
-        if name == "verify_resource_chain":
+        if name in ("verify_member_access", "verify_resource_chain"):
             result = MagicMock()
-            result.execute.return_value = MagicMock(data=True)
+            result.execute.return_value = MagicMock(data="owner")
             return result
         result = MagicMock()
         result.execute.return_value = MagicMock(data=[])

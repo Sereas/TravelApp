@@ -68,6 +68,21 @@ def _mock_supabase(existing_place_ids: list[str] | None = None):
         return t
 
     sb.table.side_effect = _table
+
+    def _rpc(name, params):
+        if name in ("verify_member_access", "verify_resource_chain"):
+            m = MagicMock()
+            m.execute.return_value = MagicMock(data="owner")
+            return m
+        if name == "bump_google_usage":
+            m = MagicMock()
+            m.execute.return_value = MagicMock(data=True)
+            return m
+        m = MagicMock()
+        m.execute.return_value = MagicMock(data=None)
+        return m
+
+    sb.rpc.side_effect = _rpc
     return sb
 
 

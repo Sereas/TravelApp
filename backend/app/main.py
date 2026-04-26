@@ -27,6 +27,7 @@ from backend.app.routers import (
     locations_google,
     shared_trips,
     trip_locations,
+    trip_members,
     trips,
 )
 
@@ -155,3 +156,5 @@ app.include_router(itinerary_option_locations.router, prefix="/api/v1")
 app.include_router(itinerary_routes.router, prefix="/api/v1")
 app.include_router(itinerary_tree.router, prefix="/api/v1")
 app.include_router(shared_trips.router, prefix="/api/v1")
+app.include_router(trip_members.trip_router, prefix="/api/v1")
+app.include_router(trip_members.invite_router, prefix="/api/v1")

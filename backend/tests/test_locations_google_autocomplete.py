@@ -50,7 +50,6 @@ class _DummySupabase:
     """
 
     def rpc(self, name, params=None):
-        # bump_google_usage: return under-cap by default
         if name == "bump_google_usage":
             m = MagicMock()
             m.execute.return_value = MagicMock(data=True)

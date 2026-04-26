@@ -66,12 +66,12 @@ class MockSupabaseTrips:
         raise AssertionError(f"Unexpected table: {name}")
 
     def rpc(self, fn_name, params=None):
-        if fn_name == "verify_resource_chain":
+        if fn_name in ("verify_member_access", "verify_resource_chain"):
             trip_id = params.get("p_trip_id")
             user_id = params.get("p_user_id")
             trip = self._trips_store.get(trip_id)
             if trip and trip.get("user_id") == user_id:
-                return _RpcResult(True)
+                return _RpcResult("owner")
             return _RpcResult(None)
         raise AssertionError(f"Unexpected RPC: {fn_name}")
 

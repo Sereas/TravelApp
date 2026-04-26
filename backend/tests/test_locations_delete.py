@@ -199,8 +199,8 @@ def test_delete_location_calls_cascade_rpc(
     class _MockSb:
         def rpc(self, name, params):
             rpc_calls.append((name, params))
-            if name == "verify_resource_chain":
-                return type("C", (), {"execute": lambda _: type("R", (), {"data": True})()})()
+            if name in ("verify_member_access", "verify_resource_chain"):
+                return type("C", (), {"execute": lambda _: type("R", (), {"data": "owner"})()})()
             if name == "delete_location_cascade":
                 return type("C", (), {"execute": lambda _: type("R", (), {"data": None})()})()
             return type("C", (), {"execute": lambda _: type("R", (), {"data": None})()})()
@@ -240,8 +240,8 @@ def test_delete_location_cascade_rpc_not_found_returns_404(
 
     class _MockSb:
         def rpc(self, name, params):
-            if name == "verify_resource_chain":
-                return type("C", (), {"execute": lambda _: type("R", (), {"data": True})()})()
+            if name in ("verify_member_access", "verify_resource_chain"):
+                return type("C", (), {"execute": lambda _: type("R", (), {"data": "owner"})()})()
             if name == "delete_location_cascade":
 
                 def _raise(_=None):

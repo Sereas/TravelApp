@@ -3,6 +3,7 @@ import * as _locations from "./locations";
 import * as _google from "./google";
 import * as _itinerary from "./itinerary";
 import * as _sharing from "./sharing";
+import * as _members from "./members";
 
 /**
  * Typed API client.
@@ -62,6 +63,15 @@ export const api = {
     getShare: _sharing.getShare,
     revokeShare: _sharing.revokeShare,
     getSharedTrip: _sharing.getSharedTrip,
+  },
+  members: {
+    listMembers: _members.listMembers,
+    createInvitation: _members.createInvitation,
+    listInvitations: _members.listInvitations,
+    revokeInvitation: _members.revokeInvitation,
+    removeMember: _members.removeMember,
+    getInvitePreview: _members.getInvitePreview,
+    acceptInvitation: _members.acceptInvitation,
   },
 };
 

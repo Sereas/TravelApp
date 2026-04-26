@@ -2,8 +2,11 @@ import { type NextRequest, NextResponse } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 
 export async function middleware(request: NextRequest) {
-  // Skip Supabase session refresh for public shared trip pages
-  if (request.nextUrl.pathname.startsWith("/shared/")) {
+  // Skip Supabase session refresh for public pages
+  if (
+    request.nextUrl.pathname.startsWith("/shared/") ||
+    request.nextUrl.pathname.startsWith("/invite/")
+  ) {
     return NextResponse.next();
   }
   return await updateSession(request);

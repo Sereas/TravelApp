@@ -81,6 +81,7 @@ export interface TripViewProps {
   // --- mode -----------------------------------------------------------------
   readOnly: boolean;
   canShare: boolean;
+  userRole?: string | null;
   onBack?: () => void;
 
   // --- itinerary ------------------------------------------------------------
@@ -136,6 +137,7 @@ export function TripView({
   locations,
   readOnly,
   canShare,
+  userRole,
   onBack,
   itineraryState,
   itineraryMutations,
@@ -375,6 +377,8 @@ export function TripView({
         itinerary={itinerary}
         isReadOnly={isReadOnly}
         canShare={canShare}
+        canEditName={userRole !== "editor"}
+        canEditDates={userRole !== "editor"}
         onBack={onBack}
         onInlineNameSave={onInlineNameSave}
         onDateRangeSave={onDateRangeSave}

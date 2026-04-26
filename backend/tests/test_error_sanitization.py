@@ -32,7 +32,7 @@ def _make_minimal_routes_mock(trip_id: str, day_id: str, option_id: str, route_i
 
     def rpc_handler(name, params):
         result = MagicMock()
-        result.execute.return_value = MagicMock(data=True)
+        result.execute.return_value = MagicMock(data="owner")
         return result
 
     mock.rpc = rpc_handler

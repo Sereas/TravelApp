@@ -25,6 +25,33 @@ export interface Trip {
   name: string;
   start_date: string | null;
   end_date: string | null;
+  role?: string | null;
+}
+
+export interface TripMember {
+  id: string;
+  user_id: string;
+  email: string | null;
+  role: string;
+  joined_at: string;
+}
+
+export interface InviteLink {
+  id: string;
+  invite_url: string;
+  expires_at: string;
+  created_at: string;
+}
+
+export interface InvitePreview {
+  trip_name: string;
+  expires_at: string;
+  status: "active" | "expired" | "revoked";
+}
+
+export interface InviteAcceptResult {
+  trip_id: string;
+  role: string;
 }
 
 export interface Location {

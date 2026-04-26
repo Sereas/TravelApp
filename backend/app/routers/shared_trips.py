@@ -86,8 +86,8 @@ async def create_trip_share(
     user_id: UUID = Depends(get_current_user_id),
     supabase=Depends(get_supabase_client),
 ) -> ShareTripResponse:
-    """Create or return existing share link for a trip. Idempotent."""
-    _ensure_resource_chain(supabase, trip_id, user_id)
+    """Create or return existing share link for a trip. Owner only. Idempotent."""
+    _ensure_resource_chain(supabase, trip_id, user_id, required_role="owner")
 
     existing = (
         supabase.table("trip_shares")
@@ -133,8 +133,8 @@ async def get_trip_share(
     user_id: UUID = Depends(get_current_user_id),
     supabase=Depends(get_supabase_client),
 ) -> ShareTripResponse:
-    """Get current active share for a trip, or 404."""
-    _ensure_resource_chain(supabase, trip_id, user_id)
+    """Get current active share for a trip. Owner only."""
+    _ensure_resource_chain(supabase, trip_id, user_id, required_role="owner")
 
     result = (
         supabase.table("trip_shares")
@@ -164,8 +164,8 @@ async def revoke_trip_share(
     user_id: UUID = Depends(get_current_user_id),
     supabase=Depends(get_supabase_client),
 ) -> None:
-    """Revoke all active shares for a trip."""
-    _ensure_resource_chain(supabase, trip_id, user_id)
+    """Revoke all active shares for a trip. Owner only."""
+    _ensure_resource_chain(supabase, trip_id, user_id, required_role="owner")
 
     supabase.table("trip_shares").update({"is_active": False}).eq("trip_id", str(trip_id)).eq(
         "is_active", True

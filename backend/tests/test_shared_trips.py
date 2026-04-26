@@ -41,10 +41,10 @@ class MockSupabaseShared:
     def rpc(self, fn_name, params=None):
         if fn_name == "get_shared_trip_data":
             return _Result(self._rpc_shared_data)
-        if fn_name == "verify_resource_chain":
+        if fn_name in ("verify_member_access", "verify_resource_chain"):
             user_id = (params or {}).get("p_user_id")
             valid = self._trip_exists and self._trip_user_id == user_id
-            return _Result(True if valid else None)
+            return _Result("owner" if valid else None)
         return _Result(None)
 
     def table(self, name):

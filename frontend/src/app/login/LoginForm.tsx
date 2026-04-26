@@ -13,16 +13,20 @@ export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const passwordUpdated = searchParams.get("message") === "password_updated";
+  const redirectTo = searchParams.get("redirect");
+  const initialTab = searchParams.get("tab");
 
   useEffect(() => {
     const supabase = createBrowserClient();
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user && !passwordUpdated) {
-        router.replace("/trips");
+        router.replace(redirectTo || "/trips");
       }
     });
-  }, [router, passwordUpdated]);
-  const [mode, setMode] = useState<AuthMode>("login");
+  }, [router, passwordUpdated, redirectTo]);
+  const [mode, setMode] = useState<AuthMode>(
+    initialTab === "signup" ? "signup" : "login"
+  );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -53,11 +57,14 @@ export function LoginForm() {
         return;
       }
 
+      const callbackUrl = redirectTo
+        ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`
+        : `${window.location.origin}/auth/callback`;
       const { error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          emailRedirectTo: callbackUrl,
         },
       });
 
@@ -81,17 +88,20 @@ export function LoginForm() {
       return;
     }
 
-    router.push("/trips");
+    router.push(redirectTo || "/trips");
     router.refresh();
   }
 
   async function handleGoogleLogin() {
     setError(null);
     const supabase = createBrowserClient();
+    const oauthCallback = redirectTo
+      ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`
+      : `${window.location.origin}/auth/callback`;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: oauthCallback,
         queryParams: {
           prompt: "select_account",
         },

@@ -163,7 +163,10 @@ export default function TripsPage() {
                   startDate={trip.start_date}
                   endDate={trip.end_date}
                   href={`/trips/${trip.id}`}
-                  onDelete={handleDeleteTrip}
+                  role={trip.role}
+                  onDelete={
+                    trip.role === "editor" ? undefined : handleDeleteTrip
+                  }
                 />
               ))}
             </div>

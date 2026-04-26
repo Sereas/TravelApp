@@ -20,13 +20,12 @@ from fastapi import HTTPException
 from backend.app.routers.trip_ownership import _ensure_resource_chain
 
 
-def _make_stub_supabase(*, rpc_returns: bool = True):
+def _make_stub_supabase(*, rpc_returns="owner"):
     """
     Minimal mock that records RPC calls and returns a configurable result.
 
-    We keep `mock.rpc` as a MagicMock so tests can call
-    `stub.rpc.assert_called_once()` etc., while still controlling the
-    return value via a side_effect.
+    ``rpc_returns`` should be a role string ('owner', 'editor') for success
+    or None/False for denial.
     """
     mock = MagicMock()
 
@@ -51,7 +50,7 @@ class TestResourceChainPythonGuard:
         Currently FAILS — no such guard exists; the function calls the RPC with
         p_day_id=None which the SQL function incorrectly accepts.
         """
-        stub = _make_stub_supabase(rpc_returns=True)
+        stub = _make_stub_supabase(rpc_returns="owner")
         trip_id = uuid4()
         user_id = uuid4()
         option_id = uuid4()
@@ -79,7 +78,7 @@ class TestResourceChainPythonGuard:
         still reach the RPC and succeed.  This is the happy path for
         trip-scoped endpoints.
         """
-        stub = _make_stub_supabase(rpc_returns=True)
+        stub = _make_stub_supabase(rpc_returns="owner")
         trip_id = uuid4()
         user_id = uuid4()
 
@@ -92,7 +91,7 @@ class TestResourceChainPythonGuard:
         """
         Providing trip_id + day_id is valid; RPC must be called and succeed.
         """
-        stub = _make_stub_supabase(rpc_returns=True)
+        stub = _make_stub_supabase(rpc_returns="owner")
         trip_id = uuid4()
         user_id = uuid4()
         day_id = uuid4()
@@ -105,7 +104,7 @@ class TestResourceChainPythonGuard:
         """
         Providing trip_id + day_id + option_id is valid; RPC must be called.
         """
-        stub = _make_stub_supabase(rpc_returns=True)
+        stub = _make_stub_supabase(rpc_returns="owner")
         trip_id = uuid4()
         user_id = uuid4()
         day_id = uuid4()
@@ -121,7 +120,7 @@ class TestResourceChainPythonGuard:
         function must raise HTTPException(404).  This verifies the existing
         post-RPC check still works alongside the new pre-RPC guard.
         """
-        stub = _make_stub_supabase(rpc_returns=False)
+        stub = _make_stub_supabase(rpc_returns=None)
         trip_id = uuid4()
         user_id = uuid4()
         day_id = uuid4()
@@ -143,7 +142,7 @@ class TestResourceChainPythonGuard:
         Even if the underlying RPC would return True (e.g. due to the SQL NULL
         bypass bug), the Python guard must fire first and raise 404.
         """
-        stub = _make_stub_supabase(rpc_returns=True)  # RPC would say "OK"
+        stub = _make_stub_supabase(rpc_returns="owner")  # RPC would say "OK"
         trip_id = uuid4()
         user_id = uuid4()
         option_id = uuid4()

@@ -96,12 +96,13 @@ class MockSupabaseLocations:
         raise AssertionError(f"Unexpected table: {name}")
 
     def rpc(self, name, params):
-        if name == "verify_resource_chain":
+        if name in ("verify_member_access", "verify_resource_chain"):
             tid = str(params.get("p_trip_id", ""))
             uid = str(params.get("p_user_id", ""))
             trip = self._trips_store.get(tid)
             valid = trip is not None and str(trip.get("user_id")) == uid
-            return type("Chain", (), {"execute": lambda _: type("R", (), {"data": valid})()})()
+            role = "owner" if valid else None
+            return type("Chain", (), {"execute": lambda _: type("R", (), {"data": role})()})()
         return type("Chain", (), {"execute": lambda _: type("R", (), {"data": None})()})()
 
 

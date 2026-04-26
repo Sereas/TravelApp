@@ -28,7 +28,7 @@ def _make_mock_supabase():
 
     def rpc_handler(name, params):
         result = MagicMock()
-        result.execute.return_value = MagicMock(data=True)
+        result.execute.return_value = MagicMock(data="owner")
         return result
 
     mock.rpc = rpc_handler

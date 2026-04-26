@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 const PUBLIC_PATHS = ["/", "/login", "/auth/callback", "/auth/update-password"];
+const PUBLIC_PREFIXES = ["/invite/"];
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -32,7 +33,9 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
-  const isPublicPath = PUBLIC_PATHS.includes(pathname);
+  const isPublicPath =
+    PUBLIC_PATHS.includes(pathname) ||
+    PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));
 
   if (!user && !isPublicPath) {
     const url = request.nextUrl.clone();

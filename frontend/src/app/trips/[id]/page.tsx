@@ -448,7 +448,8 @@ export default function TripDetailPage() {
         tripId={tripId}
         locations={locations}
         readOnly={false}
-        canShare={true}
+        canShare={trip.role !== "editor"}
+        userRole={trip.role}
         onBack={() => router.push("/trips")}
         itineraryState={itineraryState}
         itineraryMutations={itineraryMutations}
@@ -456,9 +457,15 @@ export default function TripDetailPage() {
         editingLocation={editingLocation}
         focusedLocation={focusedLocation}
         highlightedLocationId={highlightedLocationId}
-        onInlineNameSave={handleInlineNameSave}
-        onDateRangeSave={handleDateRangeSave}
-        onShareClick={() => setShareDialogOpen(true)}
+        onInlineNameSave={
+          trip.role === "editor" ? undefined : handleInlineNameSave
+        }
+        onDateRangeSave={
+          trip.role === "editor" ? undefined : handleDateRangeSave
+        }
+        onShareClick={
+          trip.role === "editor" ? undefined : () => setShareDialogOpen(true)
+        }
         onSmartInputSubmit={handleSmartInputSubmit}
         onGoogleSuggestionResolved={handleGoogleSuggestionResolved}
         onPickExistingLocation={handlePickExistingLocation}
@@ -500,6 +507,7 @@ export default function TripDetailPage() {
         tripId={tripId}
         open={shareDialogOpen}
         onOpenChange={setShareDialogOpen}
+        userRole={trip.role}
       />
 
       {dateChangeDialog &&
