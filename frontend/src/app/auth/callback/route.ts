@@ -6,7 +6,8 @@ export async function GET(request: Request) {
   const code = searchParams.get("code");
   const rawNext = searchParams.get("next") ?? "/trips";
   // Prevent open redirect: only allow relative paths, reject protocol-relative URLs
-  const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/trips";
+  const next =
+    rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/trips";
 
   if (code) {
     const supabase = createClient();

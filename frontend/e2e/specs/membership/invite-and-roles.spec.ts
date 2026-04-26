@@ -102,9 +102,9 @@ test.describe("membership — trip list", () => {
     page,
   }) => {
     await page.goto("/trips");
-    await expect(
-      page.getByRole("heading", { name: "My Trips" })
-    ).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("heading", { name: "My Trips" })).toBeVisible({
+      timeout: 10_000,
+    });
 
     // Owner's trips should NOT show "Shared with you"
     await expect(page.getByText("Shared with you")).not.toBeVisible();
