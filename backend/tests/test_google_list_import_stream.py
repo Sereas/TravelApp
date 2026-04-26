@@ -90,6 +90,10 @@ def _mock_supabase(existing_place_ids: list[str] | None = None):
             m = MagicMock()
             m.execute.return_value = MagicMock(data=True)
             return m
+        if name == "verify_member_access":
+            m = MagicMock()
+            m.execute.return_value = MagicMock(data="owner")
+            return m
         return MagicMock()
 
     sb.rpc.side_effect = _rpc
