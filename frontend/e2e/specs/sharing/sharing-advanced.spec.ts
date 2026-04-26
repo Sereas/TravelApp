@@ -10,7 +10,7 @@
  *      redirect to /trips.
  *
  * Selectors derived from:
- *   - ShareTripDialog: "Enable Link Sharing", "Disable", span with "/shared/"
+ *   - ShareTripDialog: "Enable public link", "Disable", span with "/shared/"
  *   - Shared page (shared/[token]/page.tsx): error heading "This shared link
  *     is no longer valid.", "Shared trip" badge, tab buttons "Locations" /
  *     "Itinerary"

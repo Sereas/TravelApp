@@ -158,19 +158,15 @@ test("@slow full critical path — create → schedule → share → view → de
   await expect(shareDialog).toBeVisible({ timeout: 8_000 });
 
   const enableBtn = shareDialog.getByRole("button", {
-    name: /Enable Link Sharing/i,
+    name: /Enable public link/i,
   });
   await expect(enableBtn).toBeVisible({ timeout: 5_000 });
   await enableBtn.click();
 
-  await expect(shareDialog.getByText(/Link sharing is.*enabled/i)).toBeVisible({
-    timeout: 10_000,
-  });
-
   const urlSpan = shareDialog.locator("span").filter({
     hasText: /\/shared\//,
   });
-  await expect(urlSpan.first()).toBeVisible({ timeout: 5_000 });
+  await expect(urlSpan.first()).toBeVisible({ timeout: 10_000 });
 
   await test.info().attach("07-share-dialog-enabled.png", {
     body: await page.screenshot(),

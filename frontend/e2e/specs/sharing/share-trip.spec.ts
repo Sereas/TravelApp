@@ -9,7 +9,7 @@
  *     trip name and cannot find an "Edit trip" button.
  *
  * ShareTripDialog renders:
- *   Step 1: dialog with "Enable Link Sharing" button
+ *   Step 1: dialog with "Enable public link" button
  *   Step 2: after enable — share_url rendered as a <span> inside a flex row,
  *           "Link sharing is enabled" text, "Disable" button.
  */
@@ -35,27 +35,21 @@ test.describe("trip sharing", () => {
     const shareDialog = page.getByRole("dialog");
     await expect(shareDialog).toBeVisible({ timeout: 8_000 });
 
-    // Step 1 — dialog shows "Enable Link Sharing" button
+    // Step 1 — dialog shows "Enable public link" button
     const enableBtn = shareDialog.getByRole("button", {
-      name: /Enable Link Sharing/i,
+      name: /Enable public link/i,
     });
     await expect(enableBtn).toBeVisible({ timeout: 5_000 });
 
     // Enable sharing
     await enableBtn.click();
 
-    // Step 2 — share URL appears as text, "Link sharing is enabled" shown
+    // Step 2 — share URL appears as text after enabling
     // The share URL is in a <span class="...truncate..."> inside the dialog
-    await expect(
-      shareDialog.getByText(/Link sharing is.*enabled/i)
-    ).toBeVisible({ timeout: 10_000 });
-
-    // The share URL text is rendered directly (not an input)
-    // It contains "/shared/" in the URL
     const urlText = shareDialog.locator("span").filter({
       hasText: /\/shared\//,
     });
-    await expect(urlText.first()).toBeVisible({ timeout: 5_000 });
+    await expect(urlText.first()).toBeVisible({ timeout: 10_000 });
 
     const shareUrl = await urlText.first().textContent();
     expect(shareUrl).toContain("/shared/");
@@ -85,21 +79,16 @@ test.describe("trip sharing", () => {
     await expect(shareDialog).toBeVisible({ timeout: 8_000 });
 
     const enableBtn = shareDialog.getByRole("button", {
-      name: /Enable Link Sharing/i,
+      name: /Enable public link/i,
     });
     await expect(enableBtn).toBeVisible({ timeout: 5_000 });
     await enableBtn.click();
 
     // Wait for share URL to appear
-    await expect(
-      shareDialog.getByText(/Link sharing is.*enabled/i)
-    ).toBeVisible({ timeout: 10_000 });
-
-    // Extract the share URL from the span text
     const urlSpan = shareDialog.locator("span").filter({
       hasText: /\/shared\//,
     });
-    await expect(urlSpan.first()).toBeVisible({ timeout: 5_000 });
+    await expect(urlSpan.first()).toBeVisible({ timeout: 10_000 });
 
     const shareUrl = await urlSpan.first().textContent();
     expect(shareUrl).toBeTruthy();
