@@ -4,6 +4,45 @@ ALTER SCHEMA public OWNER TO pg_database_owner;
 
 COMMENT ON SCHEMA public IS 'standard public schema';
 
+CREATE FUNCTION public.accept_invitation(p_token_hash text, p_user_id uuid, p_user_email text) RETURNS TABLE(trip_id uuid, role text)
+    LANGUAGE plpgsql SECURITY DEFINER
+    AS $$
+DECLARE
+    v_inv record;
+BEGIN
+    SELECT i.id, i.trip_id, i.role, i.invited_by,
+           i.revoked_at, i.expires_at
+    INTO v_inv
+    FROM trip_invitations i
+    WHERE i.token_hash = p_token_hash;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'INVITE_NOT_FOUND';
+    END IF;
+    IF v_inv.revoked_at IS NOT NULL THEN
+        RAISE EXCEPTION 'INVITE_REVOKED';
+    END IF;
+    IF v_inv.expires_at < now() THEN
+        RAISE EXCEPTION 'INVITE_EXPIRED';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1 FROM trip_members
+        WHERE trip_members.trip_id = v_inv.trip_id
+          AND trip_members.user_id = p_user_id
+    ) THEN
+        RAISE EXCEPTION 'ALREADY_MEMBER:%', v_inv.trip_id::text;
+    END IF;
+
+    INSERT INTO trip_members (trip_id, user_id, email, role, invited_by)
+    VALUES (v_inv.trip_id, p_user_id, p_user_email, v_inv.role, v_inv.invited_by);
+
+    RETURN QUERY SELECT v_inv.trip_id, v_inv.role;
+END;
+$$;
+
+ALTER FUNCTION public.accept_invitation(p_token_hash text, p_user_id uuid, p_user_email text) OWNER TO postgres;
+
 CREATE TABLE public.option_locations (
     option_id uuid NOT NULL,
     location_id uuid NOT NULL,
@@ -213,6 +252,25 @@ $$;
 
 ALTER FUNCTION public.create_route_with_stops(p_option_id uuid, p_transport_mode character varying, p_label character varying, p_option_location_ids uuid[]) OWNER TO postgres;
 
+CREATE FUNCTION public.create_trip_with_owner(p_trip_name character varying, p_start_date date DEFAULT NULL::date, p_end_date date DEFAULT NULL::date, p_user_id uuid DEFAULT NULL::uuid, p_user_email text DEFAULT NULL::text) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    AS $$
+DECLARE
+    v_trip_id uuid;
+BEGIN
+    INSERT INTO trips (trip_name, start_date, end_date, user_id)
+    VALUES (p_trip_name, p_start_date, p_end_date, p_user_id)
+    RETURNING trip_id INTO v_trip_id;
+
+    INSERT INTO trip_members (trip_id, user_id, email, role, invited_by)
+    VALUES (v_trip_id, p_user_id, p_user_email, 'owner', p_user_id);
+
+    RETURN v_trip_id;
+END;
+$$;
+
+ALTER FUNCTION public.create_trip_with_owner(p_trip_name character varying, p_start_date date, p_end_date date, p_user_id uuid, p_user_email text) OWNER TO postgres;
+
 CREATE FUNCTION public.delete_days_batch(p_trip_id uuid, p_day_ids uuid[]) RETURNS void
     LANGUAGE plpgsql
     AS $$
@@ -302,6 +360,29 @@ $$;
 
 ALTER FUNCTION public.delete_location_cascade(p_trip_id uuid, p_location_id uuid) OWNER TO postgres;
 
+CREATE FUNCTION public.get_invite_preview(p_token_hash text) RETURNS TABLE(trip_name character varying, expires_at timestamp with time zone, inv_status text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    AS $$
+    SELECT
+        CASE
+            WHEN i.revoked_at IS NOT NULL THEN NULL
+            WHEN i.expires_at < now()     THEN NULL
+            ELSE t.trip_name
+        END AS trip_name,
+        i.expires_at,
+        CASE
+            WHEN i.revoked_at IS NOT NULL THEN 'revoked'
+            WHEN i.expires_at < now()     THEN 'expired'
+            ELSE 'active'
+        END AS inv_status
+    FROM trip_invitations i
+    LEFT JOIN trips t ON t.trip_id = i.trip_id
+    WHERE i.token_hash = p_token_hash
+    LIMIT 1;
+$$;
+
+ALTER FUNCTION public.get_invite_preview(p_token_hash text) OWNER TO postgres;
+
 CREATE FUNCTION public.get_itinerary_routes(p_option_ids uuid[]) RETURNS TABLE(route_id uuid, option_id uuid, label text, transport_mode text, duration_seconds integer, distance_meters integer, sort_order integer, stop_option_location_ids json, segments json)
     LANGUAGE sql STABLE SECURITY DEFINER
     AS $$
@@ -354,9 +435,49 @@ ALTER FUNCTION public.get_itinerary_tree(p_trip_id uuid) OWNER TO postgres;
 CREATE FUNCTION public.get_itinerary_tree(p_trip_id uuid, p_user_id uuid DEFAULT NULL::uuid) RETURNS TABLE(day_id uuid, day_date date, day_sort_order integer, day_created_at timestamp with time zone, day_active_option_id uuid, option_id uuid, option_index integer, option_starting_city character varying, option_ending_city character varying, option_created_by character varying, option_created_at timestamp with time zone, ol_id uuid, location_id uuid, ol_sort_order integer, time_period text, loc_name text, loc_city text, loc_address text, loc_google_link text, loc_category text, loc_note text, loc_working_hours text, loc_requires_booking text, loc_photo_url text, loc_user_image_url text, loc_user_image_crop jsonb, loc_attribution_name text, loc_attribution_uri text, loc_useful_link text, loc_latitude double precision, loc_longitude double precision)
     LANGUAGE sql STABLE
     AS $$
-    SELECT d.day_id, d.date AS day_date, d.sort_order AS day_sort_order, d.created_at AS day_created_at, d.active_option_id AS day_active_option_id, o.option_id, o.option_index, o.starting_city AS option_starting_city, o.ending_city AS option_ending_city, o.created_by AS option_created_by, o.created_at AS option_created_at, ol.id AS ol_id, ol.location_id, ol.sort_order AS ol_sort_order, ol.time_period, l.name AS loc_name, l.city AS loc_city, l.address AS loc_address, l.google_link AS loc_google_link, l.category AS loc_category, l.note AS loc_note, l.working_hours AS loc_working_hours, l.requires_booking AS loc_requires_booking, pp.photo_url AS loc_photo_url, l.user_image_url AS loc_user_image_url, l.user_image_crop AS loc_user_image_crop, pp.attribution_name AS loc_attribution_name, pp.attribution_uri AS loc_attribution_uri, l.useful_link AS loc_useful_link, l.latitude AS loc_latitude, l.longitude AS loc_longitude
-    FROM trip_days d LEFT JOIN day_options o ON o.day_id = d.day_id LEFT JOIN option_locations ol ON ol.option_id = o.option_id LEFT JOIN locations l ON l.trip_id = d.trip_id AND l.location_id = ol.location_id LEFT JOIN place_photos pp ON pp.google_place_id = l.google_place_id
-    WHERE d.trip_id = p_trip_id AND (p_user_id IS NULL OR EXISTS (SELECT 1 FROM trips t WHERE t.trip_id = p_trip_id AND t.user_id = p_user_id))
+    SELECT
+        d.day_id,
+        d.date             AS day_date,
+        d.sort_order       AS day_sort_order,
+        d.created_at       AS day_created_at,
+        d.active_option_id AS day_active_option_id,
+        o.option_id,
+        o.option_index,
+        o.starting_city    AS option_starting_city,
+        o.ending_city      AS option_ending_city,
+        o.created_by       AS option_created_by,
+        o.created_at       AS option_created_at,
+        ol.id              AS ol_id,
+        ol.location_id,
+        ol.sort_order      AS ol_sort_order,
+        ol.time_period,
+        l.name             AS loc_name,
+        l.city             AS loc_city,
+        l.address          AS loc_address,
+        l.google_link      AS loc_google_link,
+        l.category         AS loc_category,
+        l.note             AS loc_note,
+        l.working_hours    AS loc_working_hours,
+        l.requires_booking AS loc_requires_booking,
+        pp.photo_url       AS loc_photo_url,
+        l.user_image_url   AS loc_user_image_url,
+        l.user_image_crop  AS loc_user_image_crop,
+        pp.attribution_name AS loc_attribution_name,
+        pp.attribution_uri  AS loc_attribution_uri,
+        l.useful_link      AS loc_useful_link,
+        l.latitude         AS loc_latitude,
+        l.longitude        AS loc_longitude
+    FROM trip_days d
+    LEFT JOIN day_options o        ON o.day_id = d.day_id
+    LEFT JOIN option_locations ol  ON ol.option_id = o.option_id
+    LEFT JOIN locations l          ON l.trip_id = d.trip_id
+                                  AND l.location_id = ol.location_id
+    LEFT JOIN place_photos pp      ON pp.google_place_id = l.google_place_id
+    WHERE d.trip_id = p_trip_id
+      AND (p_user_id IS NULL OR EXISTS (
+          SELECT 1 FROM trip_members m
+          WHERE m.trip_id = p_trip_id AND m.user_id = p_user_id
+      ))
     ORDER BY d.sort_order, o.option_index NULLS LAST, ol.sort_order NULLS LAST;
 $$;
 
@@ -407,6 +528,24 @@ END;
 $$;
 
 ALTER FUNCTION public.get_shared_trip_data(p_share_token text) OWNER TO postgres;
+
+CREATE FUNCTION public.list_user_trips(p_user_id uuid) RETURNS TABLE(trip_id uuid, trip_name character varying, start_date date, end_date date, created_at timestamp with time zone, role text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    AS $$
+    SELECT
+        t.trip_id,
+        t.trip_name,
+        t.start_date,
+        t.end_date,
+        t.created_at,
+        m.role
+    FROM trips t
+    JOIN trip_members m ON m.trip_id = t.trip_id
+    WHERE m.user_id = p_user_id
+    ORDER BY t.created_at DESC;
+$$;
+
+ALTER FUNCTION public.list_user_trips(p_user_id uuid) OWNER TO postgres;
 
 CREATE FUNCTION public.move_option_to_day(p_option_id uuid, p_source_day_id uuid, p_target_day_id uuid) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
@@ -788,6 +927,39 @@ $$;
 
 ALTER FUNCTION public.update_route_with_stops(p_route_id uuid, p_option_id uuid, p_transport_mode text, p_label text, p_option_location_ids uuid[]) OWNER TO postgres;
 
+CREATE FUNCTION public.verify_member_access(p_trip_id uuid, p_user_id uuid, p_min_role text DEFAULT 'editor'::text, p_day_id uuid DEFAULT NULL::uuid, p_option_id uuid DEFAULT NULL::uuid) RETURNS text
+    LANGUAGE sql STABLE SECURITY DEFINER
+    AS $$
+    SELECT m.role
+    FROM trip_members m
+    WHERE m.trip_id = p_trip_id
+      AND m.user_id = p_user_id
+      AND CASE p_min_role
+            WHEN 'editor' THEN m.role IN ('owner', 'editor')
+            WHEN 'owner'  THEN m.role = 'owner'
+            ELSE FALSE
+          END
+      AND (
+          p_day_id IS NULL
+          OR EXISTS (
+              SELECT 1 FROM trip_days d
+              WHERE d.day_id = p_day_id
+                AND d.trip_id = p_trip_id
+          )
+      )
+      AND (
+          p_option_id IS NULL
+          OR EXISTS (
+              SELECT 1 FROM day_options o
+              WHERE o.option_id = p_option_id
+                AND o.day_id = p_day_id
+          )
+      )
+    LIMIT 1;
+$$;
+
+ALTER FUNCTION public.verify_member_access(p_trip_id uuid, p_user_id uuid, p_min_role text, p_day_id uuid, p_option_id uuid) OWNER TO postgres;
+
 CREATE FUNCTION public.verify_resource_chain(p_trip_id uuid, p_user_id uuid, p_day_id uuid DEFAULT NULL::uuid, p_option_id uuid DEFAULT NULL::uuid) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER
     AS $$
@@ -957,6 +1129,34 @@ CREATE TABLE public.route_stops (
 
 ALTER TABLE public.route_stops OWNER TO postgres;
 
+CREATE TABLE public.trip_invitations (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    trip_id uuid NOT NULL,
+    token_hash text NOT NULL,
+    role text DEFAULT 'editor'::text NOT NULL,
+    invited_by uuid NOT NULL,
+    expires_at timestamp with time zone DEFAULT (now() + '7 days'::interval) NOT NULL,
+    revoked_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    token text,
+    CONSTRAINT trip_invitations_role_check CHECK ((role = 'editor'::text))
+);
+
+ALTER TABLE public.trip_invitations OWNER TO postgres;
+
+CREATE TABLE public.trip_members (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    trip_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    email text,
+    role text DEFAULT 'editor'::text NOT NULL,
+    invited_by uuid NOT NULL,
+    joined_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT trip_members_role_check CHECK ((role = ANY (ARRAY['owner'::text, 'editor'::text])))
+);
+
+ALTER TABLE public.trip_members OWNER TO postgres;
+
 CREATE TABLE public.trip_shares (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     trip_id uuid NOT NULL,
@@ -1023,6 +1223,18 @@ ALTER TABLE ONLY public.segment_cache
 ALTER TABLE ONLY public.trip_days
     ADD CONSTRAINT trip_days_pkey PRIMARY KEY (day_id);
 
+ALTER TABLE ONLY public.trip_invitations
+    ADD CONSTRAINT trip_invitations_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY public.trip_invitations
+    ADD CONSTRAINT trip_invitations_token_hash_key UNIQUE (token_hash);
+
+ALTER TABLE ONLY public.trip_members
+    ADD CONSTRAINT trip_members_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY public.trip_members
+    ADD CONSTRAINT trip_members_trip_id_user_id_key UNIQUE (trip_id, user_id);
+
 ALTER TABLE ONLY public.trip_shares
     ADD CONSTRAINT trip_shares_pkey PRIMARY KEY (id);
 
@@ -1055,6 +1267,14 @@ CREATE INDEX idx_route_stops_option_location_id ON public.route_stops USING btre
 CREATE INDEX idx_route_stops_route_id ON public.route_stops USING btree (route_id);
 
 CREATE INDEX idx_trip_days_trip_id ON public.trip_days USING btree (trip_id);
+
+CREATE INDEX idx_trip_invitations_active ON public.trip_invitations USING btree (token_hash) WHERE (revoked_at IS NULL);
+
+CREATE INDEX idx_trip_invitations_trip_id ON public.trip_invitations USING btree (trip_id);
+
+CREATE INDEX idx_trip_members_trip_id ON public.trip_members USING btree (trip_id);
+
+CREATE INDEX idx_trip_members_user_id ON public.trip_members USING btree (user_id);
 
 CREATE INDEX idx_trip_shares_token ON public.trip_shares USING btree (share_token) WHERE (is_active = true);
 
@@ -1108,6 +1328,12 @@ ALTER TABLE ONLY public.trip_days
 
 ALTER TABLE ONLY public.trip_days
     ADD CONSTRAINT trip_days_trip_id_fkey FOREIGN KEY (trip_id) REFERENCES public.trips(trip_id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.trip_invitations
+    ADD CONSTRAINT trip_invitations_trip_id_fkey FOREIGN KEY (trip_id) REFERENCES public.trips(trip_id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.trip_members
+    ADD CONSTRAINT trip_members_trip_id_fkey FOREIGN KEY (trip_id) REFERENCES public.trips(trip_id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.trip_shares
     ADD CONSTRAINT trip_shares_trip_id_fkey FOREIGN KEY (trip_id) REFERENCES public.trips(trip_id) ON DELETE CASCADE;
@@ -1268,6 +1494,10 @@ CREATE POLICY trip_days_update_own_trip ON public.trip_days FOR UPDATE USING ((E
    FROM public.trips t
   WHERE ((t.trip_id = trip_days.trip_id) AND (t.user_id = ( SELECT auth.uid() AS uid))))));
 
+ALTER TABLE public.trip_invitations ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE public.trip_members ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public.trip_shares ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE public.trips ENABLE ROW LEVEL SECURITY;
@@ -1276,6 +1506,8 @@ GRANT USAGE ON SCHEMA public TO postgres;
 GRANT USAGE ON SCHEMA public TO anon;
 GRANT USAGE ON SCHEMA public TO authenticated;
 GRANT USAGE ON SCHEMA public TO service_role;
+
+GRANT ALL ON FUNCTION public.accept_invitation(p_token_hash text, p_user_id uuid, p_user_email text) TO service_role;
 
 GRANT ALL ON TABLE public.option_locations TO authenticated;
 GRANT ALL ON TABLE public.option_locations TO service_role;
@@ -1297,6 +1529,8 @@ GRANT ALL ON FUNCTION public.bump_google_usage(p_user_id uuid, p_endpoint text, 
 GRANT ALL ON FUNCTION public.create_route_with_stops(p_option_id uuid, p_transport_mode character varying, p_label character varying, p_option_location_ids uuid[]) TO authenticated;
 GRANT ALL ON FUNCTION public.create_route_with_stops(p_option_id uuid, p_transport_mode character varying, p_label character varying, p_option_location_ids uuid[]) TO service_role;
 
+GRANT ALL ON FUNCTION public.create_trip_with_owner(p_trip_name character varying, p_start_date date, p_end_date date, p_user_id uuid, p_user_email text) TO service_role;
+
 GRANT ALL ON FUNCTION public.delete_days_batch(p_trip_id uuid, p_day_ids uuid[]) TO authenticated;
 GRANT ALL ON FUNCTION public.delete_days_batch(p_trip_id uuid, p_day_ids uuid[]) TO service_role;
 
@@ -1306,6 +1540,8 @@ GRANT ALL ON FUNCTION public.delete_empty_dateless_days(p_trip_id uuid) TO servi
 GRANT ALL ON FUNCTION public.delete_location_cascade(p_trip_id uuid, p_location_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.delete_location_cascade(p_trip_id uuid, p_location_id uuid) TO service_role;
 
+GRANT ALL ON FUNCTION public.get_invite_preview(p_token_hash text) TO service_role;
+
 GRANT ALL ON FUNCTION public.get_itinerary_routes(p_option_ids uuid[]) TO authenticated;
 GRANT ALL ON FUNCTION public.get_itinerary_routes(p_option_ids uuid[]) TO service_role;
 
@@ -1313,8 +1549,6 @@ GRANT ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid) TO anon;
 GRANT ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid) TO service_role;
 
-GRANT ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid, p_user_id uuid) TO anon;
-GRANT ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid, p_user_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.get_itinerary_tree(p_trip_id uuid, p_user_id uuid) TO service_role;
 
 GRANT ALL ON FUNCTION public.get_option_routes(p_option_id uuid) TO authenticated;
@@ -1324,6 +1558,8 @@ REVOKE ALL ON FUNCTION public.get_shared_trip_data(p_share_token text) FROM PUBL
 GRANT ALL ON FUNCTION public.get_shared_trip_data(p_share_token text) TO anon;
 GRANT ALL ON FUNCTION public.get_shared_trip_data(p_share_token text) TO authenticated;
 GRANT ALL ON FUNCTION public.get_shared_trip_data(p_share_token text) TO service_role;
+
+GRANT ALL ON FUNCTION public.list_user_trips(p_user_id uuid) TO service_role;
 
 GRANT ALL ON FUNCTION public.move_option_to_day(p_option_id uuid, p_source_day_id uuid, p_target_day_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.move_option_to_day(p_option_id uuid, p_source_day_id uuid, p_target_day_id uuid) TO service_role;
@@ -1373,6 +1609,8 @@ GRANT ALL ON FUNCTION public.update_option_with_conflict_check(p_option_id uuid,
 GRANT ALL ON FUNCTION public.update_route_with_stops(p_route_id uuid, p_option_id uuid, p_transport_mode text, p_label text, p_option_location_ids uuid[]) TO authenticated;
 GRANT ALL ON FUNCTION public.update_route_with_stops(p_route_id uuid, p_option_id uuid, p_transport_mode text, p_label text, p_option_location_ids uuid[]) TO service_role;
 
+GRANT ALL ON FUNCTION public.verify_member_access(p_trip_id uuid, p_user_id uuid, p_min_role text, p_day_id uuid, p_option_id uuid) TO service_role;
+
 GRANT ALL ON FUNCTION public.verify_resource_chain(p_trip_id uuid, p_user_id uuid, p_day_id uuid, p_option_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.verify_resource_chain(p_trip_id uuid, p_user_id uuid, p_day_id uuid, p_option_id uuid) TO service_role;
 
@@ -1394,6 +1632,12 @@ GRANT ALL ON TABLE public.route_segments TO service_role;
 
 GRANT ALL ON TABLE public.route_stops TO authenticated;
 GRANT ALL ON TABLE public.route_stops TO service_role;
+
+GRANT ALL ON TABLE public.trip_invitations TO authenticated;
+GRANT ALL ON TABLE public.trip_invitations TO service_role;
+
+GRANT ALL ON TABLE public.trip_members TO authenticated;
+GRANT ALL ON TABLE public.trip_members TO service_role;
 
 GRANT ALL ON TABLE public.trip_shares TO authenticated;
 GRANT ALL ON TABLE public.trip_shares TO service_role;
